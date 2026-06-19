@@ -17,6 +17,7 @@ import {
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { HookOverlayPanel } from "./components/HookOverlayPanel";
 import type { FormState } from "./components/JobForm";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
@@ -43,7 +44,6 @@ export default function App() {
   const [jobStatus, setJobStatus] = useState<JobSummary["status"] | null>(null);
   const [jobArtifacts, setJobArtifacts] = useState<string[]>([]);
   const [hasOutput, setHasOutput] = useState(false);
-  const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [ffmpegOk, setFfmpegOk] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +90,6 @@ export default function App() {
   useEffect(() => {
     loadHealth();
     fetchStages().then(setStages).catch(() => undefined);
-    fetchJobs().then(setJobs).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -131,10 +130,6 @@ export default function App() {
     }
     return null;
   })();
-
-  const refreshJobs = () => {
-    fetchJobs().then(setJobs).catch(() => undefined);
-  };
 
   const loadScope = (jobId: string) => {
     fetchWaveform(jobId)
@@ -208,7 +203,6 @@ export default function App() {
         },
         () => {
           setAnalyzing(false);
-          refreshJobs();
           fetchJobs()
             .then((list) => {
               const job = list.find((j) => j.id === id);
@@ -225,7 +219,6 @@ export default function App() {
           setAnalyzing(false);
           setError(streamError.message);
           setJobStatus("failed");
-          refreshJobs();
         },
       );
     } catch (err) {
@@ -433,7 +426,6 @@ export default function App() {
         <section className="space-y-5">
           <JobForm
             form={form}
-            onPatch={patchForm}
             onAudioSelected={handleAudioSelected}
             onTargetDurationChange={(targetDurationS) =>
               requestTargetChange(targetDurationS, false)
@@ -459,16 +451,19 @@ export default function App() {
           />
 
           {storyboard && activeJobId && (
-            <StoryboardPanel
-              jobId={activeJobId}
-              storyboard={storyboard}
-              selectedSlotId={selectedSlotId}
-              onSelectSlot={setSelectedSlotId}
-              onAssignClip={handleAssignClip}
-              onClearClip={handleClearClip}
-              onPatchStoryboard={handlePatchStoryboard}
-              saving={storyboardSaving}
-            />
+            <>
+              <StoryboardPanel
+                jobId={activeJobId}
+                storyboard={storyboard}
+                selectedSlotId={selectedSlotId}
+                onSelectSlot={setSelectedSlotId}
+                onAssignClip={handleAssignClip}
+                onClearClip={handleClearClip}
+                onPatchStoryboard={handlePatchStoryboard}
+                saving={storyboardSaving}
+              />
+              <HookOverlayPanel form={form} onPatch={patchForm} />
+            </>
           )}
 
           {apiOnline === false && (
@@ -541,25 +536,6 @@ export default function App() {
               </button>
             )}
           </div>
-
-          {jobs.length > 0 && (
-            <div className="panel p-4">
-              <h2 className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-                Recent runs
-              </h2>
-              <ul className="space-y-2 text-sm">
-                {jobs.slice(0, 5).map((job) => (
-                  <li
-                    key={job.id}
-                    className="flex items-center justify-between rounded border border-monitor-border bg-monitor-bg px-3 py-2"
-                  >
-                    <span className="truncate pr-2">{job.hook_text}</span>
-                    <span className="font-mono text-xs text-monitor-muted">{job.status}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </aside>
       </main>
 

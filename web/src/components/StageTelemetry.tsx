@@ -36,6 +36,75 @@ const stateLabels: Record<string, string> = {
   error: "error",
 };
 
+function formatElapsedMs(ms: number): string {
+  const safe = Math.max(0, ms);
+  if (safe < 1000) {
+    return `${Math.round(safe)}ms`;
+  }
+  if (safe < 60_000) {
+    return `${(safe / 1000).toFixed(2)}s`;
+  }
+  const minutes = Math.floor(safe / 60_000);
+  const seconds = (safe % 60_000) / 1000;
+  return `${minutes}m ${seconds.toFixed(1)}s`;
+}
+
+function formatLogOffsetMs(ms: number): string {
+  const safe = Math.max(0, ms);
+  if (safe < 60_000) {
+    return `+${(safe / 1000).toFixed(2)}s`;
+  }
+  const minutes = Math.floor(safe / 60_000);
+  const seconds = ((safe % 60_000) / 1000).toFixed(1);
+  return `+${minutes}m ${seconds}s`;
+}
+
+interface EnrichedEvent {
+  event: PipelineEvent;
+  offsetMs: number;
+  stageDurationMs: number | null;
+}
+
+function enrichEvents(events: PipelineEvent[]): EnrichedEvent[] {
+  const jobStart = events.find((event) => event.timestamp > 0)?.timestamp ?? 0;
+  const stageStarts = new Map<string, number>();
+
+  return events.map((event) => {
+    const offsetMs = jobStart > 0 ? (event.timestamp - jobStart) * 1000 : 0;
+    let stageDurationMs: number | null = null;
+
+    if (event.action === "start") {
+      stageStarts.set(event.stage, event.timestamp);
+    } else if (
+      event.action === "complete" ||
+      event.action === "error" ||
+      event.action === "skip"
+    ) {
+      const stageStart = stageStarts.get(event.stage);
+      if (stageStart != null && event.timestamp >= stageStart) {
+        stageDurationMs = (event.timestamp - stageStart) * 1000;
+      }
+    }
+
+    return { event, offsetMs, stageDurationMs };
+  });
+}
+
+function stageDurationMs(stageId: string, events: PipelineEvent[]): number | null {
+  const stageEvents = events.filter((event) => event.stage === stageId);
+  const start = stageEvents.find((event) => event.action === "start");
+  const end = [...stageEvents]
+    .reverse()
+    .find(
+      (event) =>
+        event.action === "complete" || event.action === "error" || event.action === "skip",
+    );
+  if (!start || !end || end.timestamp < start.timestamp) {
+    return null;
+  }
+  return (end.timestamp - start.timestamp) * 1000;
+}
+
 export function StageTelemetry({ stages, events, status, hasOutput = false }: StageTelemetryProps) {
   const statusLabel =
     status === "completed" && !hasOutput ? "analysis done" : status ?? "";
@@ -46,6 +115,8 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
       setLogsOpen(true);
     }
   }, [status]);
+
+  const enrichedEvents = enrichEvents(events);
 
   return (
     <div className="space-y-3">
@@ -65,9 +136,12 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
           {stages.map((stage, index) => {
             const state = stageState(stage.id, events);
             const last = [...events].reverse().find((e) => e.stage === stage.id);
+            const duration = stageDurationMs(stage.id, events);
+            const durationHint =
+              duration != null && state !== "active" ? ` · ${formatElapsedMs(duration)}` : "";
             const tooltip = last?.message
-              ? `${stage.label}: ${stateLabels[state]} — ${last.message}`
-              : `${stage.label}: ${stateLabels[state]}`;
+              ? `${stage.label}: ${stateLabels[state]}${durationHint} — ${last.message}`
+              : `${stage.label}: ${stateLabels[state]}${durationHint}`;
 
             return (
               <div key={stage.id} className="flex shrink-0 items-center gap-1">
@@ -114,12 +188,23 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
           </button>
           {logsOpen && (
             <div className="max-h-48 overflow-y-auto border-t border-monitor-border p-2 font-mono text-[10px] leading-relaxed text-monitor-muted">
-              {events.map((event, index) => (
-                <p key={`${event.timestamp}-${index}`}>
-                  <span className="text-scope-trace">{event.stage}</span>
-                  {" · "}
-                  {event.action}
-                  {event.message ? ` — ${event.message}` : ""}
+              {enrichedEvents.map(({ event, offsetMs, stageDurationMs: durationMs }, index) => (
+                <p key={`${event.timestamp}-${index}`} className="flex gap-2">
+                  <span className="w-[4.5rem] shrink-0 tabular-nums text-monitor-muted/70">
+                    {event.timestamp > 0 ? formatLogOffsetMs(offsetMs) : "—"}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="text-scope-trace">{event.stage}</span>
+                    {" · "}
+                    {event.action}
+                    {durationMs != null && (
+                      <>
+                        {" · "}
+                        <span className="text-scope-dim">{formatElapsedMs(durationMs)}</span>
+                      </>
+                    )}
+                    {event.message ? ` — ${event.message}` : ""}
+                  </span>
                 </p>
               ))}
             </div>
