@@ -5,7 +5,8 @@ from __future__ import annotations
 import numpy as np
 
 from viral_editor.audio.block_planner import DEFAULT_HOP_LENGTH, DEFAULT_SR
-from viral_editor.models import AudioTimeline, MusicBlockPlan, WaveformPayload, WaveformPoint
+from viral_editor.audio.features import BeatSyncFeatures
+from viral_editor.models import AudioTimeline, MusicBlockPlan, MusicStructurePlan, WaveformPayload, WaveformPoint
 
 
 def downsample_envelope(
@@ -51,10 +52,24 @@ def build_waveform_payload(
     *,
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
+    structure: MusicStructurePlan | None = None,
+    features: BeatSyncFeatures | None = None,
 ) -> WaveformPayload:
+    blocks = sorted(block_plan.blocks, key=lambda block: block.loop_quality, reverse=True)
+    downbeats: list[float] = []
+    if features is not None:
+        downbeats = [round(float(t), 4) for t in features.downbeat_times_s.tolist()]
+    sections = structure.sections if structure is not None else []
+    key = structure.key if structure is not None else (features.meta.key if features else None)
+    beat_engine = structure.beat_engine if structure is not None else (
+        features.meta.engine if features else None
+    )
+
     return WaveformPayload(
         duration_s=timeline.audio_duration_seconds,
         global_bpm=timeline.global_bpm,
+        key=key,
+        beat_engine=beat_engine,
         points=downsample_envelope(
             onset_envelope,
             duration_s=timeline.audio_duration_seconds,
@@ -62,6 +77,8 @@ def build_waveform_payload(
             sr=sr,
         ),
         transients=timeline.transients,
-        blocks=block_plan.blocks,
+        downbeats=downbeats,
+        sections=sections,
+        blocks=blocks,
         selected_block_id=block_plan.selected_block_id,
     )

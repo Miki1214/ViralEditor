@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./input:/app/input
+      - ./output:/app/output
+      - ./temp:/app/temp
+      - model-cache:/models
+    environment:
+      BEAT_THIS_MODEL_DIR: /models
+      TORCH_HOME: /models
+
+volumes:
+  model-cache:

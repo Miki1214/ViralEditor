@@ -9,21 +9,36 @@ function formatRange(startS: number, endS: number): string {
   return `${fmt(startS)}–${fmt(endS)}`;
 }
 
+function loopQualityLabel(quality: number): string {
+  if (quality >= 0.78) return "Seamless";
+  if (quality >= 0.62) return "Smooth";
+  if (quality >= 0.4) return "Aligned";
+  return "Fair";
+}
+
+export type PreviewMode = "audition" | "loop";
+
 interface MusicBlockCardProps {
   block: MusicBlock;
   selected: boolean;
-  playing: boolean;
+  playingMode: PreviewMode | null;
   onSelect: () => void;
-  onListen: () => void;
+  onAudition: () => void;
+  onLoopPreview: () => void;
 }
 
 export function MusicBlockCard({
   block,
   selected,
-  playing,
+  playingMode,
   onSelect,
-  onListen,
+  onAudition,
+  onLoopPreview,
 }: MusicBlockCardProps) {
+  const qualityPct = Math.round(block.loop_quality * 100);
+  const auditionPlaying = playingMode === "audition";
+  const loopPlaying = playingMode === "loop";
+
   return (
     <div
       className={`rounded border px-3 py-2 transition ${
@@ -44,17 +59,44 @@ export function MusicBlockCard({
           <p className="mt-0.5 text-sm text-monitor-text">
             {block.drop_count} drop{block.drop_count === 1 ? "" : "s"} ·{" "}
             {block.transient_count} hits
+            {block.phrase_bars > 0 ? ` · ${block.phrase_bars}-bar phrase` : ""}
+            {block.section_label ? ` · ${block.section_label}` : ""}
+            {block.key ? ` · ${block.key}` : ""}
           </p>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
+              Loop
+            </span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded bg-monitor-border">
+              <div
+                className="h-full rounded bg-scope-trace transition-all"
+                style={{ width: `${qualityPct}%` }}
+              />
+            </div>
+            <span className="font-mono text-[10px] text-monitor-muted">
+              {loopQualityLabel(block.loop_quality)} {qualityPct}%
+            </span>
+          </div>
           <p className="mt-1 text-xs text-monitor-muted">{block.reason}</p>
         </button>
-        <button
-          type="button"
-          className="btn-ghost shrink-0 font-mono text-xs"
-          onClick={onListen}
-          aria-pressed={playing}
-        >
-          {playing ? "■ Stop" : "▶ Audition"}
-        </button>
+        <div className="flex shrink-0 flex-col items-stretch gap-1">
+          <button
+            type="button"
+            className="btn-ghost font-mono text-xs"
+            onClick={onAudition}
+            aria-pressed={auditionPlaying}
+          >
+            {auditionPlaying ? "■ Stop" : "▶ Audition"}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost font-mono text-[10px] text-monitor-muted"
+            onClick={onLoopPreview}
+            aria-pressed={loopPlaying}
+          >
+            {loopPlaying ? "■ Stop loop" : "↻ Loop preview"}
+          </button>
+        </div>
       </div>
     </div>
   );

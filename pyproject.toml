@@ -16,6 +16,7 @@ dependencies = [
     "pydantic>=2.5",
     "typer>=0.12",
     "rich>=13.7",
+    "scikit-learn>=1.4",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +25,13 @@ ui = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
     "python-multipart>=0.0.12",
+]
+audio-nn = [
+    "torch",
+    "beat-this",
+    "einops",
+    "soxr",
+    "rotary-embedding-torch",
 ]
 
 [project.scripts]

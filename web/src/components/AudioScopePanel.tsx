@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { previewAudioUrl } from "../api/client";
+import { loopSeamPreviewUrl, previewAudioUrl } from "../api/client";
 import type { MusicBlock, WaveformPayload } from "../types";
-import { MusicBlockCard } from "./MusicBlockCard";
+import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
 import { ScopeCanvas } from "./ScopeCanvas";
 
 const TARGET_PRESETS = [
@@ -32,6 +32,7 @@ export function AudioScopePanel({
 }: AudioScopePanelProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingBlockId, setPlayingBlockId] = useState<string | null>(null);
+  const [playingMode, setPlayingMode] = useState<PreviewMode | null>(null);
 
   useEffect(() => {
     return () => {
@@ -39,10 +40,15 @@ export function AudioScopePanel({
     };
   }, []);
 
-  const handleListen = (block: MusicBlock) => {
-    if (playingBlockId === block.id) {
-      audioRef.current?.pause();
-      setPlayingBlockId(null);
+  const stopPreview = () => {
+    audioRef.current?.pause();
+    setPlayingBlockId(null);
+    setPlayingMode(null);
+  };
+
+  const handlePreview = (block: MusicBlock, mode: PreviewMode) => {
+    if (playingBlockId === block.id && playingMode === mode) {
+      stopPreview();
       return;
     }
 
@@ -51,12 +57,16 @@ export function AudioScopePanel({
     }
 
     const audio = audioRef.current;
-    audio.loop = false;
     audio.pause();
-    audio.src = previewAudioUrl(jobId, block.start_s, block.end_s);
+    audio.loop = mode === "loop";
+    audio.src =
+      mode === "loop"
+        ? loopSeamPreviewUrl(jobId, block.start_s, block.end_s)
+        : previewAudioUrl(jobId, block.start_s, block.end_s);
     audio.currentTime = 0;
     void audio.play();
     setPlayingBlockId(block.id);
+    setPlayingMode(mode);
   };
 
   const showBlockPicker = !waveform.blocks.some((block) => block.id === "block_full");
@@ -70,6 +80,8 @@ export function AudioScopePanel({
           </h2>
           <p className="mt-1 font-mono text-sm text-scope-trace">
             {waveform.global_bpm.toFixed(1)} BPM · {waveform.duration_s.toFixed(1)}s track
+            {waveform.key ? ` · ${waveform.key}` : ""}
+            {waveform.beat_engine ? ` · ${waveform.beat_engine}` : ""}
           </p>
         </div>
         {showBlockPicker && (
@@ -111,6 +123,8 @@ export function AudioScopePanel({
           durationS={waveform.duration_s}
           points={waveform.points}
           transients={waveform.transients}
+          sections={waveform.sections}
+          downbeats={waveform.downbeats}
           blocks={waveform.blocks}
           selectedBlockId={selectedBlockId}
           playingBlockId={playingBlockId}
@@ -127,9 +141,10 @@ export function AudioScopePanel({
               key={block.id}
               block={block}
               selected={block.id === selectedBlockId}
-              playing={block.id === playingBlockId}
+              playingMode={playingBlockId === block.id ? playingMode : null}
               onSelect={() => onSelectBlock(block)}
-              onListen={() => handleListen(block)}
+              onAudition={() => handlePreview(block, "audition")}
+              onLoopPreview={() => handlePreview(block, "loop")}
             />
           ))}
         </div>

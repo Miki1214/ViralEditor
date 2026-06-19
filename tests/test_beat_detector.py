@@ -118,6 +118,29 @@ def test_analyze_audio_with_envelope_writes_npy(tmp_path: Path) -> None:
     assert result.chroma.shape[0] == 12
     assert result.timeline.sample_rate == 22050
     assert result.timeline.audio_duration_seconds == pytest.approx(2.0, abs=0.1)
+    assert result.beat_features.meta.engine in {"librosa", "beat-this"}
+    assert result.beat_features.chroma_sync.ndim == 2
+    assert result.beat_features.chroma_sync.shape[1] == result.beat_features.meta.n_beats
+
+
+def test_downbeats_are_subset_of_beats(tmp_path: Path) -> None:
+    y = _click_track(duration_s=4.0)
+    wav = _write_wav(tmp_path / "downbeats.wav", y)
+    result = analyze_audio_with_envelope(wav)
+    beats = set(round(float(t), 4) for t in result.beat_features.beat_times_s)
+    for downbeat in result.beat_features.downbeat_times_s:
+        assert round(float(downbeat), 4) in beats
+
+
+def test_beat_sync_feature_shapes(tmp_path: Path) -> None:
+    y = _click_track(duration_s=3.0)
+    wav = _write_wav(tmp_path / "features.wav", y)
+    result = analyze_audio_with_envelope(wav)
+    n_beats = result.beat_features.meta.n_beats
+    assert result.beat_features.mfcc_sync.shape == (13, n_beats)
+    assert result.beat_features.rms_sync.shape[1] == n_beats
+    assert result.beat_features.contrast_sync.shape[1] == n_beats
+    assert result.beat_features.tonnetz_sync.shape[1] == n_beats
 
 
 def test_timeline_schema_fields(tmp_path: Path) -> None:

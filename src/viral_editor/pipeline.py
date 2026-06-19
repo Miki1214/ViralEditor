@@ -9,17 +9,16 @@ from pathlib import Path
 from viral_editor.audio.beat_detector import (
     AudioAnalysisError,
     analyze_audio_with_envelope,
+    save_beat_features,
     save_chroma,
     save_onset_envelope,
 )
-from viral_editor.audio.block_planner import (
-    selected_block,
-    suggest_music_blocks,
-    trim_timeline_to_window,
-)
+from viral_editor.audio.block_planner import selected_block, trim_timeline_to_window
+from viral_editor.audio.loop_planner import suggest_music_blocks_advanced
+from viral_editor.audio.structure import analyze_structure
 from viral_editor.config import ConfigError, JobConfig
 from viral_editor.ingest.loader import IngestError, validate_job
-from viral_editor.models import write_artifact
+from viral_editor.models import MusicStructurePlan, write_artifact
 from viral_editor.pipeline_events import PipelineEvent, StageAction
 from viral_editor.utils.logging import get_logger, log_stage
 
@@ -131,13 +130,32 @@ def run_pipeline(
             work_temp / "chroma.npy",
         )
         artifacts.append(chroma_path.name)
+        features_path = save_beat_features(
+            analysis.beat_features,
+            work_temp / "features.npz",
+        )
+        artifacts.append(features_path.name)
+
+        sections = analyze_structure(
+            analysis.beat_features,
+            transients=analysis.timeline.transients,
+            duration_s=analysis.timeline.audio_duration_seconds,
+        )
+        structure_plan = MusicStructurePlan(
+            sections=sections,
+            key=analysis.beat_features.meta.key,
+            beat_engine=analysis.beat_features.meta.engine,
+        )
+        structure_path = write_artifact(structure_plan, "music_structure", work_temp)
+        artifacts.append(structure_path.name)
+
         logger.info("Wrote %s", timeline_path.resolve())
         drop_count = sum(1 for t in analysis.timeline.transients if t.type == "drop")
 
-        block_plan = suggest_music_blocks(
+        block_plan = suggest_music_blocks_advanced(
             analysis.timeline,
-            analysis.onset_envelope,
-            chroma=analysis.chroma,
+            analysis.beat_features,
+            sections,
             target_duration_s=loaded.music.target_duration_s,
             selected_block_id=loaded.music.selected_block_id,
         )
@@ -177,6 +195,8 @@ def run_pipeline(
             "complete",
             message=(
                 f"bpm={analysis.timeline.global_bpm:.1f}, "
+                f"engine={analysis.beat_features.meta.engine}, "
+                f"key={analysis.beat_features.meta.key}, "
                 f"transients={len(analysis.timeline.transients)}, drops={drop_count}, "
                 f"blocks={len(block_plan.blocks)}"
             ),

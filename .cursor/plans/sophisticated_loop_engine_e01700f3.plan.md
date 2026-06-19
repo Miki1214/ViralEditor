@@ -4,25 +4,25 @@ overview: Upgrade the Audio Scope to a beat-synchronous MIR pipeline (beat-this 
 todos:
   - id: analysis-beatsync
     content: "Phase A: beat-this neural beat/downbeat tracking (librosa beat_track + autocorrelation fallback) + beat-synchronous chroma/MFCC/contrast/RMS/tonnetz + key estimation; persist features.npz and extend AudioAnalysisResult in beat_detector.py"
-    status: in_progress
+    status: completed
   - id: structure-module
     content: "Phase B: new structure.py - self-similarity (chroma+timbre), Laplacian/Foote segmentation snapped to downbeats, repetition clustering; MusicSection model; add scikit-learn dep"
-    status: pending
+    status: completed
   - id: planner-rewrite
     content: "Phase C: rewrite block_planner.py for downbeat-anchored, whole-phrase, section-aware windows with multi-feature beat-sync seam + harmonic + retention scoring; extend MusicBlock fields and reason copy"
-    status: pending
+    status: completed
   - id: render-seam
     content: "Phase D: shared seamless-loop helper in preview.py - downbeat cut, zero-crossing snap, equal-power crossfade; audition matches render seam"
-    status: pending
+    status: completed
   - id: scope-ui
     content: "Phase E: surface sections (bands), downbeats, key, and loop-quality meter in waveform payload + ScopeCanvas/MusicBlockCard/AudioScopePanel; sort blocks by loop quality"
-    status: pending
+    status: completed
   - id: containerize
     content: "Phase F: full containerization - multi-stage Dockerfile (node build UI + python+ffmpeg+torch CPU), serve built UI statically from FastAPI, docker-compose.yml with input/output/temp + model-cache volumes"
-    status: pending
+    status: completed
   - id: tests
     content: Add test_structure.py and extend block planner/beat detector/API tests (downbeat alignment, phrase durations, repetition detection, fallback path, determinism)
-    status: pending
+    status: completed
 isProject: false
 ---
 

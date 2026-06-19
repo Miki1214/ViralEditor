@@ -12,10 +12,12 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from viral_editor.api.music import (
     load_audio_timeline,
-    load_chroma,
+    load_beat_features,
     load_music_blocks,
+    load_music_structure,
     load_onset_envelope,
     refresh_music_selection,
+    suggest_blocks_from_artifacts,
 )
 from viral_editor.api.runner import build_job_config, start_job
 from viral_editor.api.schemas import (
@@ -27,11 +29,11 @@ from viral_editor.api.schemas import (
     StageInfo,
 )
 from viral_editor.api.store import JobStore, job_workspace, save_upload, write_job_config
-from viral_editor.audio.block_planner import suggest_music_blocks
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
 from viral_editor.config import ConfigError
 from viral_editor.models import WaveformPayload
+from viral_editor.pipeline import PIPELINE_STAGES
 from viral_editor.utils.ffmpeg import FFmpegError
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -225,15 +227,21 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
     try:
         block_plan = load_music_blocks(temp_dir)
     except FileNotFoundError:
-        block_plan = suggest_music_blocks(
+        block_plan = suggest_blocks_from_artifacts(
+            temp_dir,
             timeline,
             envelope,
-            chroma=load_chroma(temp_dir),
             target_duration_s=job.config.music.target_duration_s,
             selected_block_id=job.config.music.selected_block_id,
         )
 
-    return build_waveform_payload(timeline, envelope, block_plan)
+    return build_waveform_payload(
+        timeline,
+        envelope,
+        block_plan,
+        structure=load_music_structure(temp_dir),
+        features=load_beat_features(temp_dir),
+    )
 
 
 @router.get("/{job_id}/audio/preview")
@@ -242,6 +250,7 @@ def get_audio_preview(
     request: Request,
     start_s: float = Query(..., ge=0),
     end_s: float = Query(..., gt=0),
+    loop_only: bool = Query(False, description="Preview only the loop seam crossfade"),
 ) -> FileResponse:
     job = _store(request).get(job_id)
     if job is None:
@@ -254,6 +263,7 @@ def get_audio_preview(
             start_s=start_s,
             end_s=end_s,
             temp_dir=job.workspace / "temp",
+            loop_only=loop_only,
         )
     except (ValueError, FFmpegError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

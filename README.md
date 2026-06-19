@@ -63,6 +63,33 @@ python -m viral_editor serve
 
 Open http://127.0.0.1:8765 — serves the built UI from `web/dist/`.
 
+### Docker (recommended for beat-this neural tracking)
+
+The container includes FFmpeg, PyTorch (CPU), and the `beat-this` downbeat tracker. Model weights cache in a named volume after first run.
+
+```powershell
+docker compose up --build
+```
+
+Open http://127.0.0.1:8765. Bind-mounts:
+
+- `./input` — drop source files
+- `./output` — rendered results
+- `./temp` — job workspaces (optional inspection)
+
+Native dev without torch still works via the librosa fallback:
+
+```powershell
+pip install -e ".[ui,dev]"
+python -m viral_editor serve
+```
+
+For neural beat tracking locally (optional):
+
+```powershell
+pip install -e ".[ui,dev,audio-nn]" --extra-index-url https://download.pytorch.org/whl/cpu
+```
+
 ## Usage (CLI)
 
 ```powershell
@@ -74,7 +101,7 @@ The pipeline is a stub in Phase 0; full end-to-end wiring lands in Phase 7.
 
 **Phase 1:** loads and validates the job JSON, probes video/audio with ffprobe, writes `temp/media_info.json`, and derives `output_duration_s` from the music track.
 
-**Phase 2 (current):** runs librosa beat/transient analysis, writes `temp/audio_timeline.json` and `temp/onset_envelope.npy` (BPM, classified transients for speed-ramp and FX).
+**Phase 2 (current):** runs beat/downbeat tracking (beat-this when installed, else librosa), beat-synchronous MIR features, structural segmentation, and loop-aware block suggestions. Writes `temp/audio_timeline.json`, `temp/onset_envelope.npy`, `temp/features.npz`, `temp/music_structure.json`, and `temp/music_blocks.json`.
 
 ## Project layout
 

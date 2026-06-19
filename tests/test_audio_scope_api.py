@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from viral_editor.api.main import create_app
 from viral_editor.api.store import job_workspace
-from viral_editor.models import AudioTimeline, MusicBlock, MusicBlockPlan, Transient, write_artifact
+from viral_editor.models import AudioTimeline, MusicBlock, MusicBlockPlan, MusicSection, MusicStructurePlan, Transient, write_artifact
 
 
 @pytest.fixture
@@ -52,6 +52,24 @@ def _seed_analysis_artifacts(job_id: str) -> None:
         ],
     )
     write_artifact(plan, "music_blocks", temp_dir)
+    structure = MusicStructurePlan(
+        sections=[
+            MusicSection(
+                id="section_a",
+                start_s=0.0,
+                end_s=20.0,
+                start_beat=0,
+                end_beat=40,
+                label="Hook 1",
+                repetition_count=2,
+                energy=0.7,
+                is_repeated=True,
+            )
+        ],
+        key="C",
+        beat_engine="librosa",
+    )
+    write_artifact(structure, "music_structure", temp_dir)
 
 
 def test_waveform_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -76,6 +94,9 @@ def test_waveform_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch, 
     assert body["global_bpm"] == 128.0
     assert len(body["points"]) > 0
     assert body["blocks"][0]["id"] == "block_a"
+    assert body["key"] == "C"
+    assert body["beat_engine"] == "librosa"
+    assert len(body["sections"]) == 1
 
 
 def test_music_selection_patch(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

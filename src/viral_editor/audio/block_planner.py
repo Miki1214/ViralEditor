@@ -1,4 +1,8 @@
-"""Suggest retention-friendly music windows from audio analysis."""
+"""Suggest retention-friendly music windows from audio analysis.
+
+Legacy envelope/chroma planner — production pipeline uses ``loop_planner`` when
+``features.npz`` is available (see ``api.music.suggest_blocks_from_artifacts``).
+"""
 
 from __future__ import annotations
 

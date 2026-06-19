@@ -8,6 +8,8 @@ from pathlib import Path
 import librosa
 import numpy as np
 
+from viral_editor.audio.beat_tracker import infer_beats
+from viral_editor.audio.features import BeatSyncFeatures, compute_beat_sync_features, save_features
 from viral_editor.models import AudioTimeline, DomainModel, Transient, TransientType
 from viral_editor.utils.logging import get_logger
 
@@ -41,6 +43,7 @@ class AudioAnalysisResult:
     timeline: AudioTimeline
     onset_envelope: np.ndarray
     chroma: np.ndarray
+    beat_features: BeatSyncFeatures
 
 
 def _estimate_tempo(
@@ -258,13 +261,15 @@ def analyze_audio_with_envelope(
     )
 
     raw_bpm = _estimate_tempo(onset_env, sr=sr, hop_length=cfg.hop_length)
-    global_bpm = fold_tempo(
-        raw_bpm,
-        min_bpm=cfg.tempo_min_bpm,
-        max_bpm=cfg.tempo_max_bpm,
+
+    beat_track = infer_beats(resolved, y, sr, onset_env, hop_length=cfg.hop_length)
+    global_bpm = beat_track.global_bpm
+    if abs(global_bpm - raw_bpm) > 5.0:
+        logger.info("Beat engine BPM %.1f (tempo estimate %.1f)", global_bpm, raw_bpm)
+
+    beat_features = compute_beat_sync_features(
+        y, sr, beat_track, hop_length=cfg.hop_length, n_fft=cfg.n_fft
     )
-    if abs(global_bpm - raw_bpm) > 1.0:
-        logger.info("Folded tempo %.1f -> %.1f BPM", raw_bpm, global_bpm)
 
     onsets_s = librosa.onset.onset_detect(
         onset_envelope=onset_env,
@@ -314,16 +319,19 @@ def analyze_audio_with_envelope(
     )
 
     logger.info(
-        "Audio analysis complete — %.1f BPM, %d transients (%d drops)",
+        "Audio analysis complete — %.1f BPM (%s), %d transients (%d drops), key=%s",
         timeline.global_bpm,
+        beat_features.meta.engine,
         len(timeline.transients),
         sum(1 for t in timeline.transients if t.type == "drop"),
+        beat_features.meta.key,
     )
 
     return AudioAnalysisResult(
         timeline=timeline,
         onset_envelope=onset_env,
         chroma=chroma,
+        beat_features=beat_features,
     )
 
 
@@ -332,6 +340,10 @@ def save_onset_envelope(envelope: np.ndarray, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     np.save(path, envelope)
     return path
+
+
+def save_beat_features(features: BeatSyncFeatures, path: Path) -> Path:
+    return save_features(features, path)
 
 
 def save_chroma(chroma: np.ndarray, path: Path) -> Path:

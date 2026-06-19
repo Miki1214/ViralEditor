@@ -145,6 +145,15 @@ export function previewAudioUrl(jobId: string, startS: number, endS: number): st
   return `/api/jobs/${jobId}/audio/preview?${params.toString()}`;
 }
 
+export function loopSeamPreviewUrl(jobId: string, startS: number, endS: number): string {
+  const params = new URLSearchParams({
+    start_s: String(startS),
+    end_s: String(endS),
+    loop_only: "true",
+  });
+  return `/api/jobs/${jobId}/audio/preview?${params.toString()}`;
+}
+
 export function outputUrl(jobId: string): string {
   return `/api/jobs/${jobId}/output`;
 }

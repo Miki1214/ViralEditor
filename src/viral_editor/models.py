@@ -66,6 +66,34 @@ class MusicBlock(DomainModel):
     transient_count: int = Field(ge=0)
     label: str
     reason: str
+    loop_quality: float = Field(default=0.0, ge=0, le=1)
+    phrase_bars: int = Field(default=0, ge=0)
+    section_label: str | None = None
+    key: str | None = None
+    is_repeated_section: bool = False
+
+
+class MusicSection(DomainModel):
+    """Structural section from beat-synchronous segmentation."""
+
+    id: str
+    start_s: float = Field(ge=0)
+    end_s: float = Field(ge=0)
+    start_beat: int = Field(ge=0)
+    end_beat: int = Field(ge=0)
+    label: str
+    repetition_count: int = Field(ge=1)
+    energy: float = Field(ge=0, le=1)
+    drop_count: int = Field(default=0, ge=0)
+    is_repeated: bool = False
+
+
+class MusicStructurePlan(DomainModel):
+    """Structural analysis artifact."""
+
+    sections: list[MusicSection] = Field(default_factory=list)
+    key: str = "C"
+    beat_engine: str = "librosa"
 
 
 class MusicBlockPlan(DomainModel):
@@ -90,8 +118,12 @@ class WaveformPayload(DomainModel):
 
     duration_s: float = Field(ge=0)
     global_bpm: float = Field(gt=0)
+    key: str | None = None
+    beat_engine: str | None = None
     points: list[WaveformPoint] = Field(default_factory=list)
     transients: list[Transient] = Field(default_factory=list)
+    downbeats: list[float] = Field(default_factory=list)
+    sections: list[MusicSection] = Field(default_factory=list)
     blocks: list[MusicBlock] = Field(default_factory=list)
     selected_block_id: str | None = None
 

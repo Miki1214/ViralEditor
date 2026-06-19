@@ -60,6 +60,24 @@ export interface MusicBlock {
   transient_count: number;
   label: string;
   reason: string;
+  loop_quality: number;
+  phrase_bars: number;
+  section_label: string | null;
+  key: string | null;
+  is_repeated_section: boolean;
+}
+
+export interface MusicSection {
+  id: string;
+  start_s: number;
+  end_s: number;
+  start_beat: number;
+  end_beat: number;
+  label: string;
+  repetition_count: number;
+  energy: number;
+  drop_count: number;
+  is_repeated: boolean;
 }
 
 export interface MusicBlockPlan {
@@ -78,8 +96,12 @@ export interface WaveformPoint {
 export interface WaveformPayload {
   duration_s: number;
   global_bpm: number;
+  key: string | null;
+  beat_engine: string | null;
   points: WaveformPoint[];
   transients: Transient[];
+  downbeats: number[];
+  sections: MusicSection[];
   blocks: MusicBlock[];
   selected_block_id: string | null;
 }

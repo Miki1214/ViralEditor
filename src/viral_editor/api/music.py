@@ -7,8 +7,11 @@ from pathlib import Path
 import numpy as np
 
 from viral_editor.audio.block_planner import apply_block_selection, selected_block, suggest_music_blocks
+from viral_editor.audio.features import BeatSyncFeatures, load_features
+from viral_editor.audio.loop_planner import suggest_music_blocks_advanced
+from viral_editor.audio.structure import analyze_structure
 from viral_editor.config import JobConfig
-from viral_editor.models import AudioTimeline, MusicBlockPlan, write_artifact
+from viral_editor.models import AudioTimeline, MusicBlockPlan, MusicStructurePlan, write_artifact
 
 
 def load_audio_timeline(temp_dir: Path) -> AudioTimeline:
@@ -32,11 +35,63 @@ def load_chroma(temp_dir: Path) -> np.ndarray | None:
     return np.load(path)
 
 
+def load_beat_features(temp_dir: Path) -> BeatSyncFeatures | None:
+    path = temp_dir / "features.npz"
+    if not path.is_file():
+        return None
+    return load_features(path)
+
+
+def load_music_structure(temp_dir: Path) -> MusicStructurePlan | None:
+    path = temp_dir / "music_structure.json"
+    if not path.is_file():
+        return None
+    return MusicStructurePlan.model_validate_json(path.read_text(encoding="utf-8"))
+
+
 def load_music_blocks(temp_dir: Path) -> MusicBlockPlan:
     path = temp_dir / "music_blocks.json"
     if not path.is_file():
         raise FileNotFoundError("music_blocks.json not found — run audio analysis first")
     return MusicBlockPlan.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def suggest_blocks_from_artifacts(
+    temp_dir: Path,
+    timeline: AudioTimeline,
+    envelope: np.ndarray,
+    *,
+    target_duration_s: float,
+    selected_block_id: str | None = None,
+) -> MusicBlockPlan:
+    """Use beat-sync planner when ``features.npz`` exists, else legacy planner."""
+    features = load_beat_features(temp_dir)
+    if features is not None:
+        structure = load_music_structure(temp_dir)
+        sections = (
+            structure.sections
+            if structure is not None
+            else analyze_structure(
+                features,
+                transients=timeline.transients,
+                duration_s=timeline.audio_duration_seconds,
+            )
+        )
+        return suggest_music_blocks_advanced(
+            timeline,
+            features,
+            sections,
+            target_duration_s=target_duration_s,
+            selected_block_id=selected_block_id,
+        )
+
+    return suggest_music_blocks(
+        timeline,
+        envelope,
+        chroma=load_chroma(temp_dir),
+        target_duration_s=target_duration_s,
+        selected_block_id=selected_block_id,
+    )
 
 
 def refresh_music_selection(
@@ -50,7 +105,6 @@ def refresh_music_selection(
     """Re-suggest blocks and sync ``JobConfig.music`` with the chosen window."""
     timeline = load_audio_timeline(temp_dir)
     envelope = load_onset_envelope(temp_dir)
-    chroma = load_chroma(temp_dir)
 
     music = config.music.model_copy(deep=True)
     if target_duration_s is not None:
@@ -68,10 +122,10 @@ def refresh_music_selection(
     )
 
     if target_changed or full_track_changed:
-        plan = suggest_music_blocks(
+        plan = suggest_blocks_from_artifacts(
+            temp_dir,
             timeline,
             envelope,
-            chroma=chroma,
             target_duration_s=music.target_duration_s,
             selected_block_id=music.selected_block_id,
         )
@@ -79,10 +133,10 @@ def refresh_music_selection(
         try:
             plan = load_music_blocks(temp_dir)
         except FileNotFoundError:
-            plan = suggest_music_blocks(
+            plan = suggest_blocks_from_artifacts(
+                temp_dir,
                 timeline,
                 envelope,
-                chroma=chroma,
                 target_duration_s=music.target_duration_s,
                 selected_block_id=music.selected_block_id,
             )
