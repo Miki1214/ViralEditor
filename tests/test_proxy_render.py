@@ -114,9 +114,79 @@ def test_build_composite_filtergraph_xfade_and_drawtext() -> None:
     assert "nullsrc" in graph
 
 
+def test_render_composite_uses_looped_seam_audio(tmp_path, monkeypatch) -> None:
+    from viral_editor.video.proxy_render import render_composite
+
+    loop_calls: list[tuple[float, float]] = []
+
+    def _fake_loop(
+        audio_path,
+        *,
+        start_s,
+        end_s,
+        temp_dir,
+    ):
+        loop_calls.append((start_s, end_s))
+        loop_wav = temp_dir / "previews" / "loop.wav"
+        loop_wav.parent.mkdir(parents=True, exist_ok=True)
+        loop_wav.write_bytes(b"RIFF")
+        return loop_wav
+
+    captured: list[list[str]] = []
+
+    def _fake_ffmpeg(command):
+        captured.append(command)
+
+    monkeypatch.setattr(
+        "viral_editor.video.proxy_render.ensure_loop_seam_audio",
+        _fake_loop,
+    )
+    monkeypatch.setattr("viral_editor.video.proxy_render.run_ffmpeg", _fake_ffmpeg)
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=4.0,
+            speed_factor=2.0,
+            source_id="clip_a",
+        ),
+    ]
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"mp4")
+    audio = tmp_path / "audio.mp3"
+    audio.write_bytes(b"mp3")
+    out = tmp_path / "out.mp4"
+
+    render_composite(
+        audio,
+        segments,
+        ["cut"],
+        clip_paths={"clip_a": clip},
+        clip_durations={"clip_a": 10.0},
+        music_start_s=1.0,
+        music_end_s=9.0,
+        out_path=out,
+        temp_dir=tmp_path,
+    )
+
+    assert loop_calls == [(1.0, 9.0)]
+    assert captured
+    assert "-stream_loop" in captured[0]
+    assert "-1" in captured[0]
+
+
 @pytest.mark.skipif(not ffmpeg_available(), reason="ffmpeg not available")
 def test_render_speed_proxy_raises_without_real_media(tmp_path, monkeypatch) -> None:
     from viral_editor.utils.ffmpeg import FFmpegError
+
+    loop_wav = tmp_path / "loop.wav"
+    loop_wav.write_bytes(b"wav")
+    monkeypatch.setattr(
+        "viral_editor.video.proxy_render.ensure_loop_seam_audio",
+        lambda *args, **kwargs: loop_wav,
+    )
 
     def _fail(_command):
         raise FFmpegError("missing input", command=["ffmpeg"], stderr="No such file")

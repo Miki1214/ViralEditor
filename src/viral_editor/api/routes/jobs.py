@@ -608,6 +608,7 @@ def get_speed_ramp_preview(
                 music_start_s=job.config.music.start_s,
                 music_end_s=job.config.music.end_s,
                 out_path=preview_path,
+                temp_dir=temp_dir,
             )
         except (RuntimeError, FFmpegError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -942,6 +943,7 @@ def get_composite_preview(
                 music_end_s=job.config.music.end_s,
                 out_path=preview_path,
                 hook_text=job.config.hook.text,
+                temp_dir=temp_dir,
             )
         except (RuntimeError, FFmpegError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

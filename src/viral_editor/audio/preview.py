@@ -20,6 +20,26 @@ def preview_cache_path(
     return temp_dir / "previews" / f"preview_{key}.wav"
 
 
+def ensure_loop_seam_audio(
+    audio_path: Path,
+    *,
+    start_s: float,
+    end_s: float,
+    temp_dir: Path,
+) -> Path:
+    """Render-grade seamless loop WAV — equal-power crossfade at the wrap.
+
+    Shared by audition previews, storyboard block player, and video mux.
+    """
+    return ensure_audio_preview(
+        audio_path,
+        start_s=start_s,
+        end_s=end_s,
+        temp_dir=temp_dir,
+        loop_only=False,
+    )
+
+
 def ensure_audio_preview(
     audio_path: Path,
     *,

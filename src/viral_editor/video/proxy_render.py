@@ -4,8 +4,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from viral_editor.audio.preview import ensure_loop_seam_audio
 from viral_editor.models import SpeedRampPlan, SpeedSegment
 from viral_editor.utils.ffmpeg import FFmpegError, run_ffmpeg
+
+
+def _append_looped_music_input(
+    command: list[str],
+    *,
+    audio_path: Path,
+    music_start_s: float,
+    music_end_s: float,
+    temp_dir: Path,
+) -> None:
+    """Append a seamlessly looped music input (index = inputs already in command)."""
+    loop_wav = ensure_loop_seam_audio(
+        audio_path,
+        start_s=music_start_s,
+        end_s=music_end_s,
+        temp_dir=temp_dir,
+    )
+    command.extend(["-stream_loop", "-1", "-i", str(loop_wav)])
 
 
 def _source_trim_spans(
@@ -229,9 +248,11 @@ def render_composite(
     out_path: Path,
     hook_text: str | None = None,
     scale: tuple[int, int] = (360, 640),
+    temp_dir: Path | None = None,
 ) -> Path:
     """Render a storyboard composite preview with trimmed music mux."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    work_temp = temp_dir or out_path.parent
 
     clip_input_index: dict[str, int] = {}
     video_inputs: list[Path] = []
@@ -248,24 +269,36 @@ def render_composite(
         hook_text=hook_text,
     )
 
-    audio_args: list[str] = []
-    if music_start_s is not None and music_end_s is not None and music_end_s > music_start_s:
-        audio_args = ["-ss", f"{music_start_s:.6f}", "-to", f"{music_end_s:.6f}"]
-
     command: list[str] = ["-y"]
     for path in video_inputs:
         command.extend(["-i", str(path)])
+
+    has_music_window = (
+        music_start_s is not None
+        and music_end_s is not None
+        and music_end_s > music_start_s
+    )
+    if has_music_window:
+        audio_input_index = len(video_inputs)
+        _append_looped_music_input(
+            command,
+            audio_path=audio_path,
+            music_start_s=music_start_s,
+            music_end_s=music_end_s,
+            temp_dir=work_temp,
+        )
+    else:
+        audio_input_index = len(video_inputs)
+        command.extend(["-i", str(audio_path)])
+
     command.extend(
         [
-            *audio_args,
-            "-i",
-            str(audio_path),
             "-filter_complex",
             filtergraph,
             "-map",
             "[outv]",
             "-map",
-            f"{len(video_inputs)}:a:0",
+            f"{audio_input_index}:a:0",
             "-c:v",
             "libx264",
             "-preset",
@@ -298,9 +331,11 @@ def render_speed_proxy(
     music_end_s: float | None,
     out_path: Path,
     scale: tuple[int, int] = (360, 640),
+    temp_dir: Path | None = None,
 ) -> Path:
     """Render a cached low-res proxy clip with trimmed music mux."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    work_temp = temp_dir or out_path.parent
 
     clip_input_index: dict[str, int] = {}
     video_inputs: list[Path] = []
@@ -320,29 +355,36 @@ def render_speed_proxy(
         clip_durations=clip_durations,
     )
 
-    audio_args: list[str] = []
-    if music_start_s is not None and music_end_s is not None and music_end_s > music_start_s:
-        audio_args = [
-            "-ss",
-            f"{music_start_s:.6f}",
-            "-to",
-            f"{music_end_s:.6f}",
-        ]
-
     command: list[str] = ["-y"]
     for path in video_inputs:
         command.extend(["-i", str(path)])
+
+    has_music_window = (
+        music_start_s is not None
+        and music_end_s is not None
+        and music_end_s > music_start_s
+    )
+    if has_music_window:
+        audio_input_index = len(video_inputs)
+        _append_looped_music_input(
+            command,
+            audio_path=audio_path,
+            music_start_s=music_start_s,
+            music_end_s=music_end_s,
+            temp_dir=work_temp,
+        )
+    else:
+        audio_input_index = len(video_inputs)
+        command.extend(["-i", str(audio_path)])
+
     command.extend(
         [
-            *audio_args,
-            "-i",
-            str(audio_path),
             "-filter_complex",
             filtergraph,
             "-map",
             "[outv]",
             "-map",
-            f"{len(video_inputs)}:a:0",
+            f"{audio_input_index}:a:0",
             "-c:v",
             "libx264",
             "-preset",
