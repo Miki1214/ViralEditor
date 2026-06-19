@@ -3,7 +3,7 @@ import { previewAudioUrl } from "../api/client";
 import type { StoryboardPayload, StorySlot } from "../types";
 import { slotColorForIndex } from "../utils/slotColors";
 
-type LoopMode = "slot" | "block";
+export type StoryboardLoopMode = "slot" | "block";
 
 interface StoryboardBlockPlayerProps {
   jobId: string;
@@ -18,6 +18,11 @@ interface StoryboardBlockPlayerProps {
   onToggleCompositePreview?: () => void;
   onSeekCompositePreview?: (blockPlayheadS: number) => void;
   onPlayCompositePreview?: () => void;
+  onLoopModeChange?: (mode: StoryboardLoopMode) => void;
+  registerBlockSeek?: (handler: ((blockPlayheadS: number) => void) | null) => void;
+  registerBlockPause?: (handler: (() => void) | null) => void;
+  registerBlockPlaySlot?: (handler: ((slotId: string) => void) | null) => void;
+  registerBlockSetLoopMode?: (handler: ((mode: StoryboardLoopMode) => void) | null) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -36,15 +41,20 @@ export function StoryboardBlockPlayer({
   onToggleCompositePreview,
   onSeekCompositePreview,
   onPlayCompositePreview,
+  onLoopModeChange,
+  registerBlockSeek,
+  registerBlockPause,
+  registerBlockPlaySlot,
+  registerBlockSetLoopMode,
 }: StoryboardBlockPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const prevAudioTimeRef = useRef(0);
-  const loopModeRef = useRef<LoopMode>("slot");
+  const loopModeRef = useRef<StoryboardLoopMode>("block");
   const selectedSlotRef = useRef<StorySlot | null>(null);
   const onPlayheadChangeRef = useRef(onPlayheadChange);
   const blockDurationRef = useRef(0);
   const [playing, setPlaying] = useState(false);
-  const [loopMode, setLoopMode] = useState<LoopMode>("slot");
+  const [loopMode, setLoopMode] = useState<StoryboardLoopMode>("block");
   const [ready, setReady] = useState(false);
 
   const blockDurationS = storyboard.total_duration_s;
@@ -79,6 +89,15 @@ export function StoryboardBlockPlayer({
   selectedSlotRef.current = selectedSlot;
   onPlayheadChangeRef.current = onPlayheadChange;
   blockDurationRef.current = blockDurationS;
+
+  const setLoopModeAndNotify = useCallback(
+    (mode: StoryboardLoopMode) => {
+      loopModeRef.current = mode;
+      setLoopMode(mode);
+      onLoopModeChange?.(mode);
+    },
+    [onLoopModeChange],
+  );
 
   const syncPlayheadFromAudio = useCallback((audio: HTMLAudioElement) => {
     const t = audio.currentTime;
@@ -117,12 +136,6 @@ export function StoryboardBlockPlayer({
   }, [compositePreviewActive, audioUrl]);
 
   useEffect(() => {
-    if (loopMode === "slot" && !selectedSlot) {
-      setLoopMode("block");
-    }
-  }, [loopMode, selectedSlot]);
-
-  useEffect(() => {
     setPlaying(false);
     setReady(false);
     prevAudioTimeRef.current = 0;
@@ -134,14 +147,6 @@ export function StoryboardBlockPlayer({
     if (!audio) return;
     audio.loop = false;
   }, [loopMode, audioUrl]);
-
-  useEffect(() => {
-    if (loopMode !== "slot" || !selectedSlot) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = selectedSlot.out_start_s;
-    onPlayheadChange(selectedSlot.out_start_s);
-  }, [selectedSlot?.id, loopMode, selectedSlot, onPlayheadChange]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -186,64 +191,141 @@ export function StoryboardBlockPlayer({
   const transportReady = compositePreviewActive || ready;
   const transportPlaying = compositePreviewActive ? compositePreviewPlaying : playing;
 
-  const togglePlay = () => {
+  const pause = useCallback(() => {
     if (compositePreviewActive) {
-      onToggleCompositePreview?.();
+      if (compositePreviewPlaying) {
+        onToggleCompositePreview?.();
+      }
+      return;
+    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    syncPlayheadFromAudio(audio);
+    setPlaying(false);
+  }, [compositePreviewActive, compositePreviewPlaying, onToggleCompositePreview, syncPlayheadFromAudio]);
+
+  const playSlot = useCallback(
+    (slot: StorySlot, options?: { toggleIfPlaying?: boolean }) => {
+      const toggleIfPlaying = options?.toggleIfPlaying ?? false;
+      if (
+        toggleIfPlaying &&
+        transportPlaying &&
+        loopMode === "slot" &&
+        selectedSlot?.id === slot.id
+      ) {
+        pause();
+        return;
+      }
+      setLoopModeAndNotify("slot");
+      if (compositePreviewActive) {
+        onSeekCompositePreview?.(slot.out_start_s);
+        onPlayheadChange(slot.out_start_s);
+        onPlayCompositePreview?.();
+        return;
+      }
+      const audio = audioRef.current;
+      if (!audio || !ready) return;
+      audio.currentTime = slot.out_start_s;
+      onPlayheadChange(slot.out_start_s);
+      void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    },
+    [
+      transportPlaying,
+      loopMode,
+      selectedSlot?.id,
+      pause,
+      setLoopModeAndNotify,
+      compositePreviewActive,
+      onSeekCompositePreview,
+      onPlayheadChange,
+      onPlayCompositePreview,
+      ready,
+    ],
+  );
+
+  const playTrack = () => {
+    if (transportPlaying && loopMode === "block") {
+      pause();
+      return;
+    }
+    setLoopModeAndNotify("block");
+    if (compositePreviewActive) {
+      onSeekCompositePreview?.(0);
+      onPlayheadChange(0);
+      onPlayCompositePreview?.();
       return;
     }
     const audio = audioRef.current;
     if (!audio || !ready) return;
-    if (playing) {
-      audio.pause();
-      syncPlayheadFromAudio(audio);
-      setPlaying(false);
-      return;
-    }
-    if (loopMode === "slot" && selectedSlot && playheadS >= selectedSlot.out_end_s - 0.05) {
-      audio.currentTime = selectedSlot.out_start_s;
-      onPlayheadChange(selectedSlot.out_start_s);
-    } else if (loopMode === "block" && playheadS >= blockDurationS - 0.05) {
-      audio.currentTime = 0;
-      onPlayheadChange(0);
-    }
+    audio.currentTime = 0;
+    onPlayheadChange(0);
     void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   };
 
-  const seek = (timeS: number) => {
-    const clamped = Math.max(0, Math.min(timeS, blockDurationS));
-    if (compositePreviewActive) {
-      onSeekCompositePreview?.(clamped);
+  const playSelectedSlot = () => {
+    if (!selectedSlot) return;
+    playSlot(selectedSlot, { toggleIfPlaying: true });
+  };
+
+  const seek = useCallback(
+    (timeS: number) => {
+      const clamped = Math.max(0, Math.min(timeS, blockDurationS));
+      if (compositePreviewActive) {
+        onSeekCompositePreview?.(clamped);
+        onPlayheadChange(clamped);
+        prevAudioTimeRef.current = clamped;
+        const hit = slotAtTime(clamped);
+        if (hit && hit.id !== selectedSlotId) {
+          onSelectSlot?.(hit.id);
+        }
+        return;
+      }
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = clamped;
       onPlayheadChange(clamped);
       prevAudioTimeRef.current = clamped;
       const hit = slotAtTime(clamped);
       if (hit && hit.id !== selectedSlotId) {
         onSelectSlot?.(hit.id);
       }
-      return;
-    }
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.currentTime = clamped;
-    onPlayheadChange(clamped);
-    prevAudioTimeRef.current = clamped;
-    const hit = slotAtTime(clamped);
-    if (hit && hit.id !== selectedSlotId) {
-      onSelectSlot?.(hit.id);
-    }
-  };
+    },
+    [
+      blockDurationS,
+      compositePreviewActive,
+      onSeekCompositePreview,
+      onPlayheadChange,
+      slotAtTime,
+      selectedSlotId,
+      onSelectSlot,
+    ],
+  );
 
-  const playSelectedSlot = () => {
-    if (!selectedSlot) return;
-    seek(selectedSlot.out_start_s);
-    setLoopMode("slot");
-    if (compositePreviewActive) {
-      onPlayCompositePreview?.();
-      return;
-    }
-    const audio = audioRef.current;
-    if (!audio || !ready) return;
-    void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-  };
+  useEffect(() => {
+    registerBlockSeek?.((timeS) => seek(timeS));
+    return () => registerBlockSeek?.(null);
+  }, [registerBlockSeek, seek]);
+
+  useEffect(() => {
+    registerBlockPause?.(() => pause());
+    return () => registerBlockPause?.(null);
+  }, [registerBlockPause, pause]);
+
+  useEffect(() => {
+    registerBlockPlaySlot?.((slotId) => {
+      const slot = orderedSlots.find((item) => item.id === slotId);
+      if (slot) {
+        playSlot(slot, { toggleIfPlaying: false });
+      }
+    });
+    return () => registerBlockPlaySlot?.(null);
+  }, [registerBlockPlaySlot, orderedSlots, playSlot]);
+
+  useEffect(() => {
+    registerBlockSetLoopMode?.((mode) => setLoopModeAndNotify(mode));
+    return () => registerBlockSetLoopMode?.(null);
+  }, [registerBlockSetLoopMode, setLoopModeAndNotify]);
 
   const playheadPct =
     blockDurationS > 0 ? Math.max(0, Math.min(100, (playheadS / blockDurationS) * 100)) : 0;
@@ -297,10 +379,12 @@ export function StoryboardBlockPlayer({
           type="button"
           className="btn-ghost px-2.5 py-1.5 font-mono text-xs"
           disabled={!transportReady}
-          onClick={togglePlay}
-          aria-label={transportPlaying ? "Pause preview" : "Play preview"}
+          onClick={playTrack}
+          aria-label={
+            transportPlaying && loopMode === "block" ? "Pause track" : "Play whole track"
+          }
         >
-          {transportPlaying ? "Pause" : "Play"}
+          {transportPlaying && loopMode === "block" ? "Pause" : "Play track"}
         </button>
         {selectedSlot && (
           <button
@@ -308,34 +392,13 @@ export function StoryboardBlockPlayer({
             className="btn-ghost px-2.5 py-1.5 font-mono text-xs"
             disabled={!transportReady}
             onClick={playSelectedSlot}
+            aria-label={
+              transportPlaying && loopMode === "slot" ? "Pause slot" : "Play selected slot"
+            }
           >
-            Play slot
+            {transportPlaying && loopMode === "slot" ? "Pause" : "Play slot"}
           </button>
         )}
-        <fieldset className="ml-auto flex items-center gap-3 border-0 p-0">
-          <legend className="sr-only">Loop mode</legend>
-          <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-monitor-muted">
-            <input
-              type="radio"
-              name="storyboard-loop-mode"
-              className="accent-scope-trace"
-              checked={loopMode === "slot"}
-              disabled={!selectedSlot}
-              onChange={() => setLoopMode("slot")}
-            />
-            Loop slot
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-monitor-muted">
-            <input
-              type="radio"
-              name="storyboard-loop-mode"
-              className="accent-scope-trace"
-              checked={loopMode === "block"}
-              onChange={() => setLoopMode("block")}
-            />
-            Loop track
-          </label>
-        </fieldset>
       </div>
 
       <p className="font-mono text-[10px] text-monitor-muted">
@@ -354,11 +417,11 @@ export function StoryboardBlockPlayer({
         ) : (
           <span>No slot</span>
         )}
-        {loopMode === "slot" && selectedSlot ? (
+        {transportPlaying && loopMode === "slot" && selectedSlot ? (
           <span className="text-scope-dim">
             looping {selectedSlot.label.toLowerCase()}
           </span>
-        ) : loopMode === "block" ? (
+        ) : transportPlaying && loopMode === "block" ? (
           <span className="text-scope-dim">looping whole track</span>
         ) : null}
       </div>

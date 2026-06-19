@@ -24,7 +24,8 @@ import { HookOverlayPanel } from "./components/HookOverlayPanel";
 import type { FormState } from "./components/JobForm";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
-import { PhonePreview } from "./components/PhonePreview";
+import { PhonePreview, type PreviewTransportRestore } from "./components/PhonePreview";
+import type { StoryboardLoopMode } from "./components/StoryboardBlockPlayer";
 import { StageTelemetry } from "./components/StageTelemetry";
 import { StoryboardPanel } from "./components/StoryboardPanel";
 
@@ -63,9 +64,66 @@ export default function App() {
   const [previewReady, setPreviewReady] = useState(false);
   const [blockPlayheadS, setBlockPlayheadS] = useState(0);
   const [compositePreviewPlaying, setCompositePreviewPlaying] = useState(false);
+  const [previewLoopMode, setPreviewLoopMode] = useState<StoryboardLoopMode>("block");
+  const blockSeekRef = useRef<((timeS: number) => void) | null>(null);
+  const blockPauseRef = useRef<(() => void) | null>(null);
+  const blockPlaySlotRef = useRef<((slotId: string) => void) | null>(null);
+  const blockSetLoopModeRef = useRef<((mode: StoryboardLoopMode) => void) | null>(null);
+  const registerBlockSeek = useCallback((handler: ((timeS: number) => void) | null) => {
+    blockSeekRef.current = handler;
+  }, []);
+  const registerBlockPause = useCallback((handler: (() => void) | null) => {
+    blockPauseRef.current = handler;
+  }, []);
+  const registerBlockPlaySlot = useCallback((handler: ((slotId: string) => void) | null) => {
+    blockPlaySlotRef.current = handler;
+  }, []);
+  const seekBlockPlayhead = useCallback((timeS: number) => {
+    blockSeekRef.current?.(timeS);
+  }, []);
+  const pauseBlockPlayback = useCallback(() => {
+    blockPauseRef.current?.();
+  }, []);
+  const playBlockSlot = useCallback((slotId: string) => {
+    blockPlaySlotRef.current?.(slotId);
+  }, []);
+  const registerBlockSetLoopMode = useCallback((handler: ((mode: StoryboardLoopMode) => void) | null) => {
+    blockSetLoopModeRef.current = handler;
+  }, []);
   const togglePreviewRef = useRef<(() => void) | null>(null);
   const seekPreviewRef = useRef<((videoTimeS: number) => void) | null>(null);
   const playPreviewRef = useRef<(() => void) | null>(null);
+  const previewRestoreRef = useRef<PreviewTransportRestore | null>(null);
+
+  const capturePreviewTransport = useCallback(
+    (overrides: Partial<PreviewTransportRestore> = {}) => {
+      previewRestoreRef.current = {
+        playheadS: blockPlayheadS,
+        playing: compositePreviewPlaying,
+        loopMode: previewLoopMode,
+        selectedSlotId,
+        ...overrides,
+      };
+    },
+    [blockPlayheadS, compositePreviewPlaying, previewLoopMode, selectedSlotId],
+  );
+
+  const refreshPreview = useCallback(
+    (overrides: Partial<PreviewTransportRestore> = {}) => {
+      capturePreviewTransport(overrides);
+      setPreviewVersion((v) => v + 1);
+    },
+    [capturePreviewTransport],
+  );
+
+  const applyPreviewRestore = useCallback((restore: PreviewTransportRestore) => {
+    setPreviewLoopMode(restore.loopMode);
+    blockSetLoopModeRef.current?.(restore.loopMode);
+    if (restore.selectedSlotId) {
+      setSelectedSlotId(restore.selectedSlotId);
+    }
+    blockSeekRef.current?.(restore.playheadS);
+  }, []);
 
   const registerPreviewToggle = useCallback((handler: (() => void) | null) => {
     togglePreviewRef.current = handler;
@@ -366,7 +424,13 @@ export default function App() {
       );
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      setPreviewVersion((v) => v + 1);
+      const slot = payload.slots.find((item) => item.id === slotId);
+      refreshPreview({
+        playheadS: slot?.out_start_s ?? blockPlayheadS,
+        playing: true,
+        loopMode: "slot",
+        selectedSlotId: slotId,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not assign clip");
     } finally {
@@ -385,7 +449,7 @@ export default function App() {
       const payload = await updateSlotCrop(activeJobId, slotId, cropStartS, cropEndS);
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      setPreviewVersion((v) => v + 1);
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update crop");
     } finally {
@@ -407,7 +471,7 @@ export default function App() {
       const updated = await updateSlotTransform(activeJobId, slotId, payload);
       setStoryboard(updated);
       setPreviewReady(updated.preview_ready);
-      setPreviewVersion((v) => v + 1);
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update clip transform");
     } finally {
@@ -422,7 +486,7 @@ export default function App() {
       const payload = await clearSlotClip(activeJobId, slotId);
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      setPreviewVersion((v) => v + 1);
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not clear clip");
     } finally {
@@ -558,6 +622,14 @@ export default function App() {
                 onToggleCompositePreview={toggleCompositePreview}
                 onSeekCompositePreview={seekCompositeFromBlock}
                 onPlayCompositePreview={playCompositePreview}
+                onLoopModeChange={setPreviewLoopMode}
+                onSeekBlockPlayhead={seekBlockPlayhead}
+                onPauseBlockPlayback={pauseBlockPlayback}
+                onPlayBlockSlot={playBlockSlot}
+                registerBlockSeek={registerBlockSeek}
+                registerBlockPause={registerBlockPause}
+                registerBlockPlaySlot={registerBlockPlaySlot}
+                registerBlockSetLoopMode={registerBlockSetLoopMode}
               />
               <HookOverlayPanel form={form} onPatch={patchForm} />
             </>
@@ -609,8 +681,12 @@ export default function App() {
               videoPreviewUrl={compositeUrl}
               compositeMode={previewReady}
               storyboard={storyboard}
+              loopMode={previewLoopMode}
+              selectedSlotId={selectedSlotId}
               onBlockPlayheadChange={setBlockPlayheadS}
               onPreviewPlayingChange={setCompositePreviewPlaying}
+              previewRestoreRef={previewRestoreRef}
+              onApplyPreviewRestore={applyPreviewRestore}
               registerPreviewToggle={registerPreviewToggle}
               registerPreviewSeek={registerPreviewSeek}
               registerPreviewPlay={registerPreviewPlay}
@@ -633,7 +709,7 @@ export default function App() {
               <button
                 type="button"
                 className="btn-ghost mt-4 text-xs"
-                onClick={() => setPreviewVersion((v) => v + 1)}
+                onClick={() => refreshPreview()}
               >
                 Refresh preview
               </button>

@@ -1,6 +1,17 @@
-import { useEffect, useRef, useState } from "react";
-import type { StoryboardPayload } from "../types";
-import { compositeVideoTimeToBlockPlayhead } from "../utils/compositePlayhead";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { StoryboardPayload, StorySlot } from "../types";
+import {
+  blockPlayheadToCompositeVideoTime,
+  compositeVideoTimeToBlockPlayhead,
+} from "../utils/compositePlayhead";
+import type { StoryboardLoopMode } from "./StoryboardBlockPlayer";
+
+export interface PreviewTransportRestore {
+  playheadS: number;
+  playing: boolean;
+  loopMode: StoryboardLoopMode;
+  selectedSlotId: string | null;
+}
 
 interface PhonePreviewProps {
   hookText: string;
@@ -13,8 +24,12 @@ interface PhonePreviewProps {
   /** When true, hook title overlay is baked into the composite video */
   compositeMode?: boolean;
   storyboard?: StoryboardPayload | null;
+  loopMode?: StoryboardLoopMode;
+  selectedSlotId?: string | null;
   onBlockPlayheadChange?: (seconds: number) => void;
   onPreviewPlayingChange?: (playing: boolean) => void;
+  previewRestoreRef?: React.MutableRefObject<PreviewTransportRestore | null>;
+  onApplyPreviewRestore?: (restore: PreviewTransportRestore) => void;
   registerPreviewToggle?: (handler: (() => void) | null) => void;
   registerPreviewSeek?: (handler: ((videoTimeS: number) => void) | null) => void;
   registerPreviewPlay?: (handler: (() => void) | null) => void;
@@ -55,23 +70,79 @@ export function PhonePreview({
   videoPreviewUrl,
   compositeMode = false,
   storyboard = null,
+  loopMode = "block",
+  selectedSlotId = null,
   onBlockPlayheadChange,
   onPreviewPlayingChange,
+  previewRestoreRef,
+  onApplyPreviewRestore,
   registerPreviewToggle,
   registerPreviewSeek,
   registerPreviewPlay,
 }: PhonePreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const storyboardRef = useRef(storyboard);
+  const loopModeRef = useRef(loopMode);
+  const loopSlotRef = useRef<StorySlot | null>(null);
   const onPlayheadRef = useRef(onBlockPlayheadChange);
+  const ignorePauseRef = useRef(false);
+  const transportReadyRef = useRef(false);
   const [loadFailed, setLoadFailed] = useState(false);
 
+  const selectedSlot = useMemo(() => {
+    if (!storyboard || !selectedSlotId) return null;
+    return storyboard.slots.find((slot) => slot.id === selectedSlotId) ?? null;
+  }, [storyboard, selectedSlotId]);
+
   storyboardRef.current = storyboard;
+  loopModeRef.current = loopMode;
+  loopSlotRef.current = selectedSlot;
   onPlayheadRef.current = onBlockPlayheadChange;
 
   useEffect(() => {
     setLoadFailed(false);
-  }, [videoPreviewUrl]);
+    transportReadyRef.current = false;
+    ignorePauseRef.current = previewRestoreRef?.current != null;
+  }, [videoPreviewUrl, previewRestoreRef]);
+
+  useEffect(() => {
+    if (!compositeMode || !videoPreviewUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const restorePosition = () => {
+      const sb = storyboardRef.current;
+      if (!sb) return;
+
+      const restore = previewRestoreRef?.current;
+      if (restore) {
+        onApplyPreviewRestore?.(restore);
+        video.currentTime = blockPlayheadToCompositeVideoTime(restore.playheadS, sb);
+        previewRestoreRef.current = null;
+        ignorePauseRef.current = false;
+        transportReadyRef.current = true;
+        if (restore.playing) {
+          void video.play().catch(() => undefined);
+        } else {
+          onPreviewPlayingChange?.(false);
+        }
+      }
+    };
+
+    const onLoaded = () => restorePosition();
+
+    video.addEventListener("loadedmetadata", onLoaded);
+    if (video.readyState >= 1) {
+      restorePosition();
+    }
+    return () => video.removeEventListener("loadedmetadata", onLoaded);
+  }, [
+    compositeMode,
+    videoPreviewUrl,
+    previewRestoreRef,
+    onApplyPreviewRestore,
+    onPreviewPlayingChange,
+  ]);
 
   useEffect(() => {
     registerPreviewToggle?.(() => {
@@ -110,10 +181,23 @@ export function PhonePreview({
     if (!video) return;
 
     const emitPlayhead = () => {
+      if (!transportReadyRef.current) return;
       const sb = storyboardRef.current;
       const onChange = onPlayheadRef.current;
       if (!sb || !onChange) return;
-      onChange(compositeVideoTimeToBlockPlayhead(video.currentTime, sb));
+
+      const mode = loopModeRef.current;
+      const slot = loopSlotRef.current;
+      let blockPlayhead = compositeVideoTimeToBlockPlayhead(video.currentTime, sb);
+
+      if (mode === "slot" && slot && blockPlayhead >= slot.out_end_s - 0.04) {
+        const seekTo = blockPlayheadToCompositeVideoTime(slot.out_start_s, sb);
+        video.currentTime = seekTo;
+        onChange(slot.out_start_s);
+        return;
+      }
+
+      onChange(blockPlayhead);
     };
 
     let frameId = 0;
@@ -130,7 +214,9 @@ export function PhonePreview({
       cancelAnimationFrame(frameId);
       video.removeEventListener("seeked", emitPlayhead);
     };
-  }, [compositeMode, videoPreviewUrl]);
+  }, [compositeMode, videoPreviewUrl, loopMode, selectedSlotId]);
+
+  const videoLoop = compositeMode && loopMode === "block";
 
   return (
     <div className="relative w-[min(100%,280px)]">
@@ -146,11 +232,13 @@ export function PhonePreview({
               src={videoPreviewUrl}
               className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
               playsInline
-              autoPlay
-              loop
+              loop={videoLoop}
               controls={compositeMode}
               onPlay={() => onPreviewPlayingChange?.(true)}
-              onPause={() => onPreviewPlayingChange?.(false)}
+              onPause={() => {
+                if (ignorePauseRef.current) return;
+                onPreviewPlayingChange?.(false);
+              }}
               onError={() => setLoadFailed(true)}
             />
             {loadFailed && (

@@ -3,7 +3,7 @@ import type { SlotFitMode, SlotTransition, SpatialCrop, StoryboardPayload, Story
 import { slotColorForIndex } from "../utils/slotColors";
 import { ClipCropTimeline } from "./ClipCropTimeline";
 import { SpatialCropModal } from "./SpatialCropModal";
-import { StoryboardBlockPlayer } from "./StoryboardBlockPlayer";
+import { StoryboardBlockPlayer, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
 
 interface StoryboardPanelProps {
@@ -49,6 +49,14 @@ interface StoryboardPanelProps {
   onToggleCompositePreview?: () => void;
   onSeekCompositePreview?: (blockPlayheadS: number) => void;
   onPlayCompositePreview?: () => void;
+  onLoopModeChange?: (mode: StoryboardLoopMode) => void;
+  onSeekBlockPlayhead?: (blockPlayheadS: number) => void;
+  onPauseBlockPlayback?: () => void;
+  onPlayBlockSlot?: (slotId: string) => void;
+  registerBlockSeek?: (handler: ((blockPlayheadS: number) => void) | null) => void;
+  registerBlockPause?: (handler: (() => void) | null) => void;
+  registerBlockPlaySlot?: (handler: ((slotId: string) => void) | null) => void;
+  registerBlockSetLoopMode?: (handler: ((mode: StoryboardLoopMode) => void) | null) => void;
 }
 
 interface SlotTransformDraft {
@@ -97,10 +105,33 @@ export function StoryboardPanel({
   onToggleCompositePreview,
   onSeekCompositePreview,
   onPlayCompositePreview,
+  onLoopModeChange,
+  onSeekBlockPlayhead,
+  onPauseBlockPlayback,
+  onPlayBlockSlot,
+  registerBlockSeek,
+  registerBlockPause,
+  registerBlockPlaySlot,
+  registerBlockSetLoopMode,
 }: StoryboardPanelProps) {
   const ordered = [...storyboard.slots].sort((a, b) => a.order - b.order);
   const active =
     ordered.find((slot) => slot.id === selectedSlotId) ?? ordered[0] ?? null;
+
+  const selectSlotAndSeek = useCallback(
+    (slotId: string) => {
+      const slot = ordered.find((item) => item.id === slotId);
+      if (!slot) return;
+      onSelectSlot(slotId);
+      if (slot.assigned_clip_id) {
+        onPlayBlockSlot?.(slotId);
+        return;
+      }
+      onPauseBlockPlayback?.();
+      onSeekBlockPlayhead?.(slot.out_start_s);
+    },
+    [ordered, onSelectSlot, onPlayBlockSlot, onPauseBlockPlayback, onSeekBlockPlayhead],
+  );
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [durationS, setDurationS] = useState<number | null>(null);
@@ -286,7 +317,7 @@ export function StoryboardPanel({
             storyboard={storyboard}
             selectedSlotId={selectedSlotId}
             playheadS={blockPlayheadS}
-            onSelectSlot={onSelectSlot}
+            onSelectSlot={selectSlotAndSeek}
           />
           <StoryboardBlockPlayer
             jobId={jobId}
@@ -300,6 +331,11 @@ export function StoryboardPanel({
             onToggleCompositePreview={onToggleCompositePreview}
             onSeekCompositePreview={onSeekCompositePreview}
             onPlayCompositePreview={onPlayCompositePreview}
+            onLoopModeChange={onLoopModeChange}
+            registerBlockSeek={registerBlockSeek}
+            registerBlockPause={registerBlockPause}
+            registerBlockPlaySlot={registerBlockPlaySlot}
+            registerBlockSetLoopMode={registerBlockSetLoopMode}
           />
         </div>
       )}
@@ -323,7 +359,7 @@ export function StoryboardPanel({
               )}
               <button
                 type="button"
-                onClick={() => onSelectSlot(slot.id)}
+                onClick={() => selectSlotAndSeek(slot.id)}
                 className={`min-w-[120px] rounded border p-3 text-left transition ${
                   !slot.assigned_clip_id ? "opacity-80" : ""
                 }`}
