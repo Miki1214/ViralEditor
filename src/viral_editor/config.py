@@ -131,7 +131,7 @@ class TeaserConfig(DomainModel):
 class MusicSelectionConfig(DomainModel):
     """Target short length and selected music window for the render."""
 
-    target_duration_s: float = Field(default=30.0, gt=0)
+    target_duration_s: float = Field(default=10.0, gt=0)
     use_full_track: bool = False
     selected_block_id: str | None = None
     start_s: float | None = Field(default=None, ge=0)
@@ -158,13 +158,6 @@ class JobConfig(DomainModel):
     speed_ramp: SpeedRampConfig = Field(default_factory=SpeedRampConfig)
     teaser: TeaserConfig = Field(default_factory=TeaserConfig)
     music: MusicSelectionConfig = Field(default_factory=MusicSelectionConfig)
-
-    @model_validator(mode="after")
-    def video_or_clips_required(self) -> JobConfig:
-        included = [clip for clip in self.clips if clip.included]
-        if not included and self.video_path is None:
-            raise ValueError("Provide video_path or at least one included clip")
-        return self
 
     def effective_clips(self) -> list[ClipInput]:
         """Return configured clips, or wrap a lone video_path as a single clip."""

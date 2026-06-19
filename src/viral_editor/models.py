@@ -15,6 +15,8 @@ BudgetPolicy = Literal["scale", "loop", "trim"]
 FxKind = Literal["zoom", "rotate"]
 TeaserMask = Literal["vignette", "dir_blur"]
 ClipRole = Literal["clip", "hook", "filler"]
+SlotRole = Literal["hook", "clip", "punch"]
+SlotTransition = Literal["cut", "xfade"]
 
 
 class DomainModel(BaseModel):
@@ -105,6 +107,8 @@ class MusicBlockPlan(DomainModel):
     track_duration_s: float = Field(ge=0)
     selected_block_id: str | None = None
     use_full_track: bool = False
+    target_match_failed: bool = False
+    suggested_target_duration_s: float | None = Field(default=None, gt=0)
     blocks: list[MusicBlock] = Field(default_factory=list)
 
 
@@ -113,6 +117,13 @@ class WaveformPoint(DomainModel):
 
     t: float = Field(ge=0)
     v: float = Field(ge=0)
+
+
+class TargetLoopQuality(DomainModel):
+    """Best seamless loop score for a preset target short length."""
+
+    target_duration_s: float = Field(gt=0)
+    loop_quality_pct: int = Field(ge=0, le=100)
 
 
 class WaveformPayload(DomainModel):
@@ -128,6 +139,11 @@ class WaveformPayload(DomainModel):
     sections: list[MusicSection] = Field(default_factory=list)
     blocks: list[MusicBlock] = Field(default_factory=list)
     selected_block_id: str | None = None
+    target_match_failed: bool = False
+    suggested_target_duration_s: float | None = Field(default=None, gt=0)
+    matchable_target_durations_s: list[float] = Field(default_factory=list)
+    target_loop_qualities: list[TargetLoopQuality] = Field(default_factory=list)
+    best_loop_target_durations_s: list[float] = Field(default_factory=list)
 
 
 class ClipInput(DomainModel):
@@ -165,6 +181,34 @@ class ClipReel(DomainModel):
         if len(self.entries) <= 1:
             return []
         return [entry.reel_start_s for entry in self.entries[1:]]
+
+
+class StorySlot(DomainModel):
+    """One timed slot on the storyboard timeline awaiting a clip assignment."""
+
+    id: str
+    order: int = Field(ge=0)
+    label: str
+    role: SlotRole = "clip"
+    out_start_s: float = Field(ge=0)
+    out_end_s: float = Field(ge=0)
+    target_duration_s: float = Field(gt=0)
+    transition_in: SlotTransition = "cut"
+    assigned_clip_id: str | None = None
+    crop_start_s: float | None = Field(default=None, ge=0)
+    crop_end_s: float | None = Field(default=None, ge=0)
+    clip_filename: str | None = None
+
+
+class Storyboard(DomainModel):
+    """Ordered slot timeline derived from the selected music block."""
+
+    music_block_id: str | None = None
+    music_start_s: float = Field(ge=0)
+    music_end_s: float = Field(ge=0)
+    total_duration_s: float = Field(gt=0)
+    loop_to_hook: bool = True
+    slots: list[StorySlot] = Field(default_factory=list)
 
 
 class SpeedSegment(DomainModel):

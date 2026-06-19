@@ -1,16 +1,13 @@
 import type {
-  ClipInfo,
-  ClipReelResponse,
-  ClipRole,
   HealthResponse,
   JobSummary,
-  MediaInfoArtifact,
-  MusicBlock,
   PipelineEvent,
-  SpeedRampOptionSet,
+  SlotTransition,
   StageInfo,
+  StoryboardPayload,
   WaveformPayload,
 } from "../types";
+import { DEFAULT_TARGET_DURATION_S } from "../constants/durations";
 
 async function parseError(response: Response): Promise<string> {
   try {
@@ -41,16 +38,7 @@ export async function fetchJobs(): Promise<JobSummary[]> {
   return res.json();
 }
 
-export interface CreateJobInput {
-  clips: Array<{
-    id: string;
-    file: File;
-    order: number;
-    included: boolean;
-    role: ClipRole;
-    crop_start_s: number | null;
-    crop_end_s: number | null;
-  }>;
+export interface CreateDraftJobInput {
   audio: File;
   hookText: string;
   emphasisWords: string;
@@ -60,29 +48,10 @@ export interface CreateJobInput {
   safePaddingPct: number;
   targetDurationS?: number;
   useFullTrack?: boolean;
-  selectedBlockId?: string | null;
-  musicStartS?: number | null;
-  musicEndS?: number | null;
 }
 
-export async function createJob(input: CreateJobInput): Promise<{ id: string }> {
+export async function createDraftJob(input: CreateDraftJobInput): Promise<{ id: string }> {
   const form = new FormData();
-  for (const clip of input.clips) {
-    form.append("video", clip.file);
-  }
-  form.append(
-    "clips",
-    JSON.stringify(
-      input.clips.map((clip) => ({
-        id: clip.id,
-        order: clip.order,
-        included: clip.included,
-        role: clip.role,
-        crop_start_s: clip.crop_start_s,
-        crop_end_s: clip.crop_end_s,
-      })),
-    ),
-  );
   form.append("audio", input.audio);
   form.append("hook_text", input.hookText);
   form.append("emphasis_words", input.emphasisWords);
@@ -90,17 +59,8 @@ export async function createJob(input: CreateJobInput): Promise<{ id: string }> 
   form.append("emphasis_color", input.emphasisColor);
   form.append("font_family", input.fontFamily);
   form.append("safe_padding_pct", String(input.safePaddingPct));
-  form.append("target_duration_s", String(input.targetDurationS ?? 30));
+  form.append("target_duration_s", String(input.targetDurationS ?? DEFAULT_TARGET_DURATION_S));
   form.append("use_full_track", String(input.useFullTrack ?? false));
-  if (input.selectedBlockId) {
-    form.append("selected_block_id", input.selectedBlockId);
-  }
-  if (input.musicStartS != null) {
-    form.append("music_start_s", String(input.musicStartS));
-  }
-  if (input.musicEndS != null) {
-    form.append("music_end_s", String(input.musicEndS));
-  }
 
   const res = await fetch("/api/jobs", { method: "POST", body: form });
   if (!res.ok) throw new Error(await parseError(res));
@@ -134,12 +94,6 @@ export function subscribeJobEvents(
   };
 
   return () => source.close();
-}
-
-export async function fetchArtifact(jobId: string, name: string): Promise<MediaInfoArtifact> {
-  const res = await fetch(`/api/jobs/${jobId}/artifacts/${name}`);
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
 }
 
 export async function fetchWaveform(jobId: string): Promise<WaveformPayload> {
@@ -185,24 +139,29 @@ export function outputUrl(jobId: string): string {
   return `/api/jobs/${jobId}/output`;
 }
 
-export async function fetchSpeedRamp(jobId: string): Promise<SpeedRampOptionSet> {
-  const res = await fetch(`/api/jobs/${jobId}/speed-ramp`);
+export async function fetchStoryboard(jobId: string): Promise<StoryboardPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/storyboard`);
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }
 
-export async function updateSpeedSelection(
+export async function patchStoryboard(
   jobId: string,
   payload: {
-    style?: string;
-    alpha?: number;
-    s_min?: number;
-    s_max?: number;
-    drop_window_ms?: number;
-    bass_accent?: number;
+    slots?: Array<{
+      id: string;
+      order: number;
+      label?: string;
+      role?: string;
+      out_start_s?: number;
+      out_end_s?: number;
+      target_duration_s?: number;
+      transition_in?: SlotTransition;
+    }>;
+    loop_to_hook?: boolean;
   },
-): Promise<SpeedRampOptionSet> {
-  const res = await fetch(`/api/jobs/${jobId}/speed-selection`, {
+): Promise<StoryboardPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/storyboard`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -211,38 +170,39 @@ export async function updateSpeedSelection(
   return res.json();
 }
 
-export function speedProxyPreviewUrl(jobId: string, style: string, force = false): string {
-  const params = new URLSearchParams({ style });
-  if (force) params.set("force", "1");
-  return `/api/jobs/${jobId}/speed-ramp/preview?${params.toString()}`;
-}
-
-export function clipSourceUrl(jobId: string, clipId: string): string {
-  return `/api/jobs/${jobId}/clips/${clipId}/source`;
-}
-
-export async function fetchClips(jobId: string): Promise<ClipReelResponse> {
-  const res = await fetch(`/api/jobs/${jobId}/clips`);
-  if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
-}
-
-export async function updateClips(
+export async function assignSlotClip(
   jobId: string,
-  clips: Array<{
-    id: string;
-    order: number;
-    included: boolean;
-    role: ClipRole;
-    crop_start_s: number | null;
-    crop_end_s: number | null;
-  }>,
-): Promise<ClipReelResponse> {
-  const res = await fetch(`/api/jobs/${jobId}/clips`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clips }),
+  slotId: string,
+  file: File,
+  cropStartS: number,
+  cropEndS: number,
+): Promise<StoryboardPayload> {
+  const form = new FormData();
+  form.append("video", file);
+  form.append("crop_start_s", String(cropStartS));
+  form.append("crop_end_s", String(cropEndS));
+  const res = await fetch(`/api/jobs/${jobId}/slots/${slotId}/clip`, {
+    method: "PUT",
+    body: form,
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
+}
+
+export async function clearSlotClip(
+  jobId: string,
+  slotId: string,
+): Promise<StoryboardPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/slots/${slotId}/clip`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export function compositePreviewUrl(jobId: string, force = false): string {
+  const params = new URLSearchParams();
+  if (force) params.set("force", "1");
+  const query = params.toString();
+  return `/api/jobs/${jobId}/preview${query ? `?${query}` : ""}`;
 }

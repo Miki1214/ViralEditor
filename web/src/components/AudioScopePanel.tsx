@@ -1,15 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loopSeamPreviewUrl, previewAudioUrl } from "../api/client";
+import { TARGET_DURATION_PRESETS } from "../constants/durations";
 import type { MusicBlock, WaveformPayload } from "../types";
 import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
 import { ScopeCanvas } from "./ScopeCanvas";
-
-const TARGET_PRESETS = [
-  { label: "15s", value: 15 },
-  { label: "30s", value: 30 },
-  { label: "45s", value: 45 },
-  { label: "60s", value: 60 },
-] as const;
 
 interface AudioScopePanelProps {
   jobId: string;
@@ -38,6 +32,29 @@ function fallbackFullTrackBlock(waveform: WaveformPayload): MusicBlock {
     key: waveform.key,
     is_repeated_section: false,
   };
+}
+
+function durationChipClass(
+  active: boolean,
+  unavailable: boolean,
+  isBestLoop: boolean,
+): string {
+  if (unavailable) {
+    return "cursor-not-allowed rounded border border-monitor-border/50 px-2.5 py-1 font-mono text-xs text-monitor-muted/40";
+  }
+  if (active) {
+    return "rounded border border-hook-gold bg-hook-gold/15 px-2.5 py-1 font-mono text-xs text-hook-gold transition";
+  }
+  if (isBestLoop) {
+    return "duration-chip-best-loop rounded border px-2.5 py-1 font-mono text-xs transition hover:border-hook-gold/30";
+  }
+  return "rounded border border-monitor-border px-2.5 py-1 font-mono text-xs text-monitor-muted transition hover:border-scope-dim";
+}
+
+function loopQualityLabel(pct: number): string {
+  if (pct >= 78) return "seamless";
+  if (pct >= 62) return "smooth";
+  return "aligned";
 }
 
 export function AudioScopePanel({
@@ -93,6 +110,46 @@ export function AudioScopePanel({
   const trackShorterThanTarget = waveform.duration_s <= targetDurationS;
   const onlyFullTrack =
     blocks.length === 1 && blocks[0]?.id === "block_full";
+  const targetMismatch =
+    waveform.target_match_failed === true && !trackShorterThanTarget;
+  const suggestedTarget =
+    waveform.suggested_target_duration_s != null
+      ? Math.round(waveform.suggested_target_duration_s)
+      : null;
+
+  const isPresetMatchable = (value: number): boolean => {
+    if (waveform.duration_s <= value) {
+      return false;
+    }
+    const matchable = waveform.matchable_target_durations_s;
+    if (!matchable?.length) {
+      return true;
+    }
+    return matchable.some((duration) => Math.round(duration) === value);
+  };
+
+  const loopQualityByPreset = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const entry of waveform.target_loop_qualities ?? []) {
+      map.set(Math.round(entry.target_duration_s), entry.loop_quality_pct);
+    }
+    return map;
+  }, [waveform.target_loop_qualities]);
+
+  const bestLoopPresets = useMemo(() => {
+    const qualities = waveform.target_loop_qualities ?? [];
+    if (qualities.length === 0) {
+      return new Set<number>();
+    }
+    const maxPct = Math.max(...qualities.map((entry) => entry.loop_quality_pct));
+    return new Set(
+      qualities
+        .filter((entry) => entry.loop_quality_pct === maxPct)
+        .map((entry) => Math.round(entry.target_duration_s)),
+    );
+  }, [waveform.target_loop_qualities]);
+
+  const tiedBestLoop = bestLoopPresets.size > 1;
 
   return (
     <section className="panel space-y-4 p-5">
@@ -111,23 +168,51 @@ export function AudioScopePanel({
           <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
             Target short length
           </span>
-          {TARGET_PRESETS.map((preset) => (
+          {TARGET_DURATION_PRESETS.map((preset) => {
+            const matchable = isPresetMatchable(preset.value);
+            const active = !useFullTrack && targetDurationS === preset.value;
+            const unavailable = !matchable && !active;
+            const loopQualityPct = loopQualityByPreset.get(preset.value);
+            const isBestLoop =
+              bestLoopPresets.has(preset.value) && !active && matchable;
+            const qualityTitle =
+              loopQualityPct != null
+                ? isBestLoop
+                  ? tiedBestLoop
+                    ? `Tied best loop — ${loopQualityPct}% ${loopQualityLabel(loopQualityPct)}`
+                    : `Best seamless loop — ${loopQualityPct}% ${loopQualityLabel(loopQualityPct)}`
+                  : active
+                    ? `Selected · ${loopQualityPct}% ${loopQualityLabel(loopQualityPct)} loop`
+                    : `${loopQualityPct}% ${loopQualityLabel(loopQualityPct)} loop`
+                : unavailable
+                  ? "No phrase-aligned loop at this length for this track"
+                  : undefined;
+            return (
             <button
               key={preset.value}
               type="button"
-              disabled={waveform.duration_s <= preset.value}
-              className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
-                !useFullTrack && targetDurationS === preset.value
-                  ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
-                  : waveform.duration_s <= preset.value
-                    ? "cursor-not-allowed border-monitor-border/50 text-monitor-muted/40"
-                    : "border-monitor-border text-monitor-muted hover:border-scope-dim"
-              }`}
+              disabled={unavailable}
+              title={qualityTitle}
+              className={durationChipClass(active, unavailable, isBestLoop)}
               onClick={() => onTargetChange(preset.value, false)}
             >
-              {preset.label}
+              <span>{preset.label}</span>
+              {loopQualityPct != null && (
+                <span
+                  className={`ml-1 text-[10px] ${
+                    active
+                      ? "text-hook-gold/75"
+                      : isBestLoop
+                        ? "text-monitor-muted/45"
+                        : "text-monitor-muted/55"
+                  }`}
+                >
+                  {loopQualityPct}%
+                </span>
+              )}
             </button>
-          ))}
+            );
+          })}
           <button
             type="button"
             className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
@@ -156,11 +241,13 @@ export function AudioScopePanel({
       </div>
 
       <div className="space-y-2">
-        {(trackShorterThanTarget || onlyFullTrack) && (
+        {(trackShorterThanTarget || targetMismatch) && (
           <p className="text-sm text-monitor-muted">
             {trackShorterThanTarget
               ? "Track is shorter than the target — the full track will drive the render."
-              : "No shorter phrase-aligned window matched this target — preview the full track below."}
+              : suggestedTarget != null
+                ? `No phrase-aligned loop for ${targetDurationS}s — ${suggestedTarget}s is the closest match. Preview the full track below or switch length.`
+                : "No phrase-aligned window matched this target — preview the full track below."}
           </p>
         )}
         <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">

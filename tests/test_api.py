@@ -103,17 +103,32 @@ def test_create_job_runs_pipeline(
     assert detail.json()["output_duration_s"] == 10.0
 
 
-def test_create_job_rejects_empty_video(client: TestClient, tmp_path, monkeypatch) -> None:
+def test_create_job_rejects_empty_audio(client: TestClient, tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     response = client.post(
         "/api/jobs",
         data={"hook_text": "Hook"},
         files={
-            "video": ("clip.mp4", io.BytesIO(b""), "video/mp4"),
-            "audio": ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg"),
+            "audio": ("track.mp3", io.BytesIO(b""), "audio/mpeg"),
         },
     )
     assert response.status_code == 400
+
+
+def test_create_audio_only_draft_job(client: TestClient, tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", lambda *args, **kwargs: None)
+
+    response = client.post(
+        "/api/jobs",
+        data={"hook_text": "Audio first"},
+        files=[("audio", ("track.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg"))],
+    )
+    assert response.status_code == 201
+    job_id = response.json()["id"]
+    detail = client.get(f"/api/jobs/{job_id}").json()
+    assert detail["config"]["clips"] == []
 
 
 def test_create_job_accepts_multiple_videos(client: TestClient, tmp_path, monkeypatch) -> None:

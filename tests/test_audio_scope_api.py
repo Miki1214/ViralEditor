@@ -48,7 +48,29 @@ def _seed_analysis_artifacts(job_id: str) -> None:
                 transient_count=3,
                 label="Drop opener",
                 reason="Starts near a drop",
-            )
+            ),
+            MusicBlock(
+                id="block_b",
+                start_s=20.0,
+                end_s=35.0,
+                duration_s=15.0,
+                score=0.7,
+                drop_count=0,
+                transient_count=2,
+                label="Mid groove",
+                reason="Steady energy",
+            ),
+            MusicBlock(
+                id="block_c",
+                start_s=30.0,
+                end_s=45.0,
+                duration_s=15.0,
+                score=0.6,
+                drop_count=0,
+                transient_count=1,
+                label="Outro lift",
+                reason="Late section",
+            ),
         ],
     )
     write_artifact(plan, "music_blocks", temp_dir)
@@ -126,6 +148,43 @@ def test_music_selection_patch(client: TestClient, monkeypatch: pytest.MonkeyPat
 
     blocks = json.loads((job_workspace(job_id) / "temp" / "music_blocks.json").read_text())
     assert blocks["selected_block_id"] == "block_a"
+
+
+def test_music_selection_target_change_clears_stale_block(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Changing target duration must not fail when the prior block id is absent."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+
+    create = client.post(
+        "/api/jobs",
+        data={"hook_text": "Target change", "target_duration_s": "15"},
+        files={
+            "video": ("clip.mp4", io.BytesIO(b"video"), "video/mp4"),
+            "audio": ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg"),
+        },
+    )
+    job_id = create.json()["id"]
+    _seed_analysis_artifacts(job_id)
+
+    select = client.patch(
+        f"/api/jobs/{job_id}/music-selection",
+        json={"selected_block_id": "block_c"},
+    )
+    assert select.status_code == 200
+    assert select.json()["config"]["music"]["selected_block_id"] == "block_c"
+
+    response = client.patch(
+        f"/api/jobs/{job_id}/music-selection",
+        json={"target_duration_s": 5},
+    )
+    assert response.status_code == 200, response.text
+    config = response.json()["config"]["music"]
+    assert config["target_duration_s"] == 5
+    assert config["selected_block_id"] != "block_c"
 
 
 def _fake_video_probe(path):

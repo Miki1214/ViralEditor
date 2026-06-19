@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from viral_editor.config import JobConfig
 from viral_editor.pipeline_events import PipelineEvent
 
-JobStatus = Literal["queued", "running", "completed", "failed"]
+JobStatus = Literal["queued", "running", "draft", "completed", "failed"]
 
 
 class HealthResponse(BaseModel):
@@ -98,3 +98,45 @@ class ClipReelResponse(BaseModel):
     reel_duration_s: float
     target_body_duration_s: float | None = None
     entries: list[dict] = Field(default_factory=list)
+
+
+class StorySlotResponse(BaseModel):
+    id: str
+    order: int
+    label: str
+    role: Literal["hook", "clip", "punch"]
+    out_start_s: float
+    out_end_s: float
+    target_duration_s: float
+    transition_in: Literal["cut", "xfade"]
+    assigned_clip_id: str | None = None
+    crop_start_s: float | None = None
+    crop_end_s: float | None = None
+    clip_filename: str | None = None
+    clip_source_url: str | None = None
+
+
+class StoryboardResponse(BaseModel):
+    music_block_id: str | None = None
+    music_start_s: float
+    music_end_s: float
+    total_duration_s: float
+    loop_to_hook: bool
+    slots: list[StorySlotResponse]
+    preview_ready: bool = False
+
+
+class StorySlotUpdate(BaseModel):
+    id: str
+    order: int = Field(ge=0)
+    label: str | None = None
+    role: Literal["hook", "clip", "punch"] | None = None
+    out_start_s: float | None = Field(default=None, ge=0)
+    out_end_s: float | None = Field(default=None, ge=0)
+    target_duration_s: float | None = Field(default=None, gt=0)
+    transition_in: Literal["cut", "xfade"] | None = None
+
+
+class StoryboardPatchRequest(BaseModel):
+    slots: list[StorySlotUpdate] | None = None
+    loop_to_hook: bool | None = None

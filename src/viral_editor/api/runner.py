@@ -57,6 +57,7 @@ def start_job(
                 output_duration_s=result.output_duration_s,
                 artifacts=result.artifacts,
                 config=result.config,
+                status=result.status,
             )
         except (ConfigError, IngestError, AudioAnalysisError) as exc:
             logger.error("Job %s failed: %s", job_id, exc)
@@ -86,7 +87,7 @@ def build_job_config(
     font_family: str = "Montserrat Black",
     safe_padding_pct: int = 10,
     seed: int = 42,
-    target_duration_s: float = 30.0,
+    target_duration_s: float = 10.0,
     use_full_track: bool = False,
     selected_block_id: str | None = None,
     music_start_s: float | None = None,
@@ -117,9 +118,9 @@ def build_job_config(
     )
     if clips:
         return JobConfig(clips=clips, **common)
-    if video_filename is None:
-        raise ValueError("Provide video_filename or clips")
-    return JobConfig(
-        video_path=(input_dir / video_filename).resolve(),
-        **common,
-    )
+    if video_filename is not None:
+        return JobConfig(
+            video_path=(input_dir / video_filename).resolve(),
+            **common,
+        )
+    return JobConfig(clips=[], **common)

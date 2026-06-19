@@ -6,7 +6,11 @@ import pytest
 
 from viral_editor.models import SpeedRampPlan, SpeedSegment
 from viral_editor.utils.ffmpeg import ffmpeg_available
-from viral_editor.video.proxy_render import build_proxy_filtergraph, render_speed_proxy
+from viral_editor.video.proxy_render import (
+    build_composite_filtergraph,
+    build_proxy_filtergraph,
+    render_speed_proxy,
+)
 
 
 def _sample_plan() -> SpeedRampPlan:
@@ -75,7 +79,35 @@ def test_build_proxy_filtergraph_multi_input_source_id() -> None:
     assert "[1:v]trim=start=0.000000:end=2.000000" in graph
 
 
-def test_build_proxy_filtergraph_empty_plan() -> None:
+def test_build_composite_filtergraph_xfade_and_drawtext() -> None:
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=4.0,
+            speed_factor=2.0,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=2.0,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=6.0,
+            speed_factor=2.0,
+            source_id="clip_b",
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut", "xfade"],
+        clip_input_index={"clip_a": 0, "clip_b": 1},
+        clip_durations={"clip_a": 10.0, "clip_b": 12.0},
+        hook_text="Hello hook",
+    )
+    assert "drawtext" in graph
+    assert "xfade=transition=fade" in graph
+    assert "[outv]" in graph
     graph = build_proxy_filtergraph(
         SpeedRampPlan(output_duration_s=0.0, src_duration_s=1.0),
     )

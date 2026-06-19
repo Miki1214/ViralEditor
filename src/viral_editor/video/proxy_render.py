@@ -141,6 +141,152 @@ def build_proxy_filtergraph(
     return ";".join(parts)
 
 
+def build_composite_filtergraph(
+    segments: list[SpeedSegment],
+    transitions: list[str],
+    *,
+    scale: tuple[int, int] = (360, 640),
+    clip_input_index: dict[str, int] | None = None,
+    clip_durations: dict[str, float] | None = None,
+    hook_text: str | None = None,
+    xfade_s: float = 0.25,
+) -> str:
+    """Build ffmpeg filtergraph for storyboard slots with optional xfade + hook title."""
+    if not segments:
+        return f"nullsrc=s={scale[0]}x{scale[1]}:d=0.1,format=yuv420p"
+
+    width, height = scale
+    parts: list[str] = []
+    segment_labels: list[str] = []
+
+    for index, segment in enumerate(segments):
+        label = f"slot{index}"
+        input_idx = 0
+        src_dur = segment.src_end_s - segment.src_start_s
+        if segment.source_id and clip_input_index is not None:
+            input_idx = clip_input_index.get(segment.source_id, 0)
+        if segment.source_id and clip_durations is not None:
+            src_dur = clip_durations.get(segment.source_id, src_dur)
+        chains, concat_ref = _segment_filter_chains(
+            segment,
+            input_label=f"{input_idx}:v",
+            src_duration=max(src_dur, 1e-6),
+            width=width,
+            height=height,
+            label_prefix=label,
+            allow_wrap=False,
+        )
+        parts.extend(chains)
+        out_label = label
+        if index == 0 and hook_text:
+            escaped = hook_text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+            titled = f"{label}titled"
+            parts.append(
+                f"{concat_ref}drawtext=text='{escaped}':fontsize=28:fontcolor=white:"
+                f"x=(w-text_w)/2:y=h*0.12:box=1:boxcolor=black@0.55:boxborderw=8[{titled}]"
+            )
+            out_label = titled
+            concat_ref = f"[{titled}]"
+        segment_labels.append(concat_ref)
+
+    if len(segment_labels) == 1:
+        parts.append(f"{segment_labels[0]}copy[outv]")
+    else:
+        current = segment_labels[0]
+        elapsed = segments[0].out_end_s - segments[0].out_start_s
+        for index in range(1, len(segment_labels)):
+            transition = transitions[index] if index < len(transitions) else "cut"
+            nxt = segment_labels[index]
+            seg_len = segments[index].out_end_s - segments[index].out_start_s
+            if transition == "xfade" and xfade_s > 1e-6:
+                merged = f"xf{index}"
+                offset = max(elapsed - xfade_s, 0.0)
+                parts.append(
+                    f"{current}{nxt}xfade=transition=fade:duration={xfade_s:.6f}:"
+                    f"offset={offset:.6f}[{merged}]"
+                )
+                current = f"[{merged}]"
+                elapsed = offset + seg_len
+            else:
+                merged = f"cat{index}"
+                parts.append(f"{current}{nxt}concat=n=2:v=1:a=0[{merged}]")
+                current = f"[{merged}]"
+                elapsed += seg_len
+        parts.append(f"{current}copy[outv]")
+
+    return ";".join(parts)
+
+
+def render_composite(
+    audio_path: Path,
+    segments: list[SpeedSegment],
+    transitions: list[str],
+    *,
+    clip_paths: dict[str, Path],
+    clip_durations: dict[str, float],
+    music_start_s: float | None,
+    music_end_s: float | None,
+    out_path: Path,
+    hook_text: str | None = None,
+    scale: tuple[int, int] = (360, 640),
+) -> Path:
+    """Render a storyboard composite preview with trimmed music mux."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    clip_input_index: dict[str, int] = {}
+    video_inputs: list[Path] = []
+    for clip_id, path in sorted(clip_paths.items(), key=lambda item: item[0]):
+        clip_input_index[clip_id] = len(video_inputs)
+        video_inputs.append(path)
+
+    filtergraph = build_composite_filtergraph(
+        segments,
+        transitions,
+        scale=scale,
+        clip_input_index=clip_input_index,
+        clip_durations=clip_durations,
+        hook_text=hook_text,
+    )
+
+    audio_args: list[str] = []
+    if music_start_s is not None and music_end_s is not None and music_end_s > music_start_s:
+        audio_args = ["-ss", f"{music_start_s:.6f}", "-to", f"{music_end_s:.6f}"]
+
+    command: list[str] = ["-y"]
+    for path in video_inputs:
+        command.extend(["-i", str(path)])
+    command.extend(
+        [
+            *audio_args,
+            "-i",
+            str(audio_path),
+            "-filter_complex",
+            filtergraph,
+            "-map",
+            "[outv]",
+            "-map",
+            f"{len(video_inputs)}:a:0",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-shortest",
+            str(out_path),
+        ]
+    )
+    try:
+        run_ffmpeg(command)
+    except FFmpegError as exc:
+        raise RuntimeError(f"Composite preview render failed: {exc}") from exc
+    return out_path
+
+
 def render_speed_proxy(
     audio_path: Path,
     plan: SpeedRampPlan,

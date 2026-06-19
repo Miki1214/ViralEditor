@@ -6,6 +6,8 @@ interface PhonePreviewProps {
   fontFamily: string;
   safePaddingPct: number;
   videoPreviewUrl: string | null;
+  /** When true, hook title overlay is baked into the composite video */
+  compositeMode?: boolean;
 }
 
 function renderHookLine(
@@ -41,6 +43,7 @@ export function PhonePreview({
   fontFamily,
   safePaddingPct,
   videoPreviewUrl,
+  compositeMode = false,
 }: PhonePreviewProps) {
   return (
     <div className="relative w-[min(100%,280px)]">
@@ -50,49 +53,55 @@ export function PhonePreview({
       >
         {videoPreviewUrl ? (
           <video
+            key={videoPreviewUrl}
             src={videoPreviewUrl}
-            className="absolute inset-0 h-full w-full object-cover opacity-70"
-            muted
+            className={`absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
             playsInline
             autoPlay
             loop
+            controls={compositeMode}
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-b from-monitor-surface to-monitor-bg" />
         )}
 
-        {/* Safe zone grid — signature element */}
-        <div
-          className="pointer-events-none absolute border border-dashed border-scope-trace/35"
-          style={{
-            inset: `${safePaddingPct}%`,
-          }}
-        >
-          <span className="absolute left-1 top-1 font-mono text-[8px] uppercase tracking-widest text-scope-trace/70">
-            safe
-          </span>
-        </div>
+        {!compositeMode && (
+          <>
+            <div
+              className="pointer-events-none absolute border border-dashed border-scope-trace/35"
+              style={{
+                inset: `${safePaddingPct}%`,
+              }}
+            >
+              <span className="absolute left-1 top-1 font-mono text-[8px] uppercase tracking-widest text-scope-trace/70">
+                safe
+              </span>
+            </div>
 
-        <div className="absolute inset-x-0 bottom-[18%] px-6 text-center">
-          <div
-            className="mx-auto inline-block rounded-2xl px-4 py-3"
-            style={{
-              background: "rgba(0,0,0,0.85)",
-              fontFamily,
-              fontWeight: 800,
-              fontSize: "1.05rem",
-              lineHeight: 1.25,
-              maxWidth: `${100 - safePaddingPct * 2}%`,
-            }}
-          >
-            {renderHookLine(hookText, emphasisWords, fillColor, emphasisColor)}
-          </div>
-        </div>
+            <div className="absolute inset-x-0 bottom-[18%] px-6 text-center">
+              <div
+                className="mx-auto inline-block rounded-2xl px-4 py-3"
+                style={{
+                  background: "rgba(0,0,0,0.85)",
+                  fontFamily,
+                  fontWeight: 800,
+                  fontSize: "1.05rem",
+                  lineHeight: 1.25,
+                  maxWidth: `${100 - safePaddingPct * 2}%`,
+                }}
+              >
+                {renderHookLine(hookText, emphasisWords, fillColor, emphasisColor)}
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
       </div>
       <p className="mt-3 text-center font-mono text-[10px] text-monitor-muted">
-        1080 × 1920 · teaser window overlay
+        {compositeMode
+          ? "Composited preview · music + speed ramp + transitions"
+          : "1080 × 1920 · assign slots to preview"}
       </p>
     </div>
   );

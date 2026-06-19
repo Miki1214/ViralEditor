@@ -6,6 +6,10 @@ import numpy as np
 
 from viral_editor.audio.block_planner import DEFAULT_HOP_LENGTH, DEFAULT_SR
 from viral_editor.audio.features import BeatSyncFeatures
+from viral_editor.audio.loop_planner import (
+    CANONICAL_TARGET_DURATIONS_S,
+    list_target_loop_qualities,
+)
 from viral_editor.models import AudioTimeline, MusicBlockPlan, MusicStructurePlan, WaveformPayload, WaveformPoint
 
 
@@ -65,6 +69,25 @@ def build_waveform_payload(
         features.meta.engine if features else None
     )
 
+    if features is not None:
+        sections = structure.sections if structure is not None else []
+        loop_qualities = list_target_loop_qualities(timeline, features, sections)
+        matchable_targets = [entry.target_duration_s for entry in loop_qualities]
+        max_loop_pct = max(entry.loop_quality_pct for entry in loop_qualities)
+        best_loop_targets = [
+            entry.target_duration_s
+            for entry in loop_qualities
+            if entry.loop_quality_pct == max_loop_pct
+        ]
+    else:
+        loop_qualities = []
+        matchable_targets = [
+            float(duration)
+            for duration in CANONICAL_TARGET_DURATIONS_S
+            if duration <= timeline.audio_duration_seconds
+        ]
+        best_loop_targets = []
+
     return WaveformPayload(
         duration_s=timeline.audio_duration_seconds,
         global_bpm=timeline.global_bpm,
@@ -81,4 +104,9 @@ def build_waveform_payload(
         sections=sections,
         blocks=blocks,
         selected_block_id=block_plan.selected_block_id,
+        target_match_failed=block_plan.target_match_failed,
+        suggested_target_duration_s=block_plan.suggested_target_duration_s,
+        matchable_target_durations_s=matchable_targets,
+        target_loop_qualities=loop_qualities,
+        best_loop_target_durations_s=best_loop_targets,
     )

@@ -30,6 +30,16 @@ from viral_editor.api.clips import (
 )
 from viral_editor.video.clip_reel import clip_paths_by_id
 from viral_editor.api.runner import build_job_config, start_job
+from viral_editor.api.storyboard import (
+    apply_storyboard_patch,
+    assign_slot_clip,
+    clear_slot_clip,
+    clip_media_for_storyboard,
+    load_storyboard,
+    persist_storyboard,
+    refresh_storyboard_after_music,
+    sync_config_clips_from_storyboard,
+)
 from viral_editor.api.schemas import (
     ClipReelResponse,
     ClipsPatchRequest,
@@ -40,6 +50,9 @@ from viral_editor.api.schemas import (
     PipelineStagesResponse,
     SpeedSelectionUpdate,
     StageInfo,
+    StoryboardPatchRequest,
+    StoryboardResponse,
+    StorySlotResponse,
 )
 from viral_editor.api.speed import (
     compute_speed_options,
@@ -51,10 +64,11 @@ from viral_editor.api.store import JobStore, job_workspace, save_upload, write_j
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
 from viral_editor.config import ConfigError
-from viral_editor.models import ClipInput, SpeedRampOptionSet, WaveformPayload
+from viral_editor.models import ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
+from viral_editor.audio.storyboard import storyboard_filled_enough, storyboard_to_segments
 from viral_editor.pipeline import PIPELINE_STAGES
 from viral_editor.utils.ffmpeg import FFmpegError
-from viral_editor.video.proxy_render import render_speed_proxy
+from viral_editor.video.proxy_render import render_composite, render_speed_proxy
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -101,7 +115,6 @@ def get_job(job_id: str, request: Request) -> JobDetail:
 @router.post("", response_model=JobCreatedResponse, status_code=201)
 async def create_job(
     request: Request,
-    video: Annotated[list[UploadFile], File()],
     audio: UploadFile = File(...),
     hook_text: str = Form(...),
     emphasis_words: str = Form(""),
@@ -110,18 +123,16 @@ async def create_job(
     font_family: str = Form("Montserrat Black"),
     safe_padding_pct: int = Form(10),
     seed: int = Form(42),
-    target_duration_s: float = Form(30.0),
+    target_duration_s: float = Form(10.0),
     use_full_track: bool = Form(False),
     selected_block_id: str | None = Form(None),
     music_start_s: float | None = Form(None),
     music_end_s: float | None = Form(None),
     clips: str | None = Form(None),
     verbose: bool = Form(False),
+    video: list[UploadFile] = File(default=[]),
 ) -> JobCreatedResponse:
     store = _store(request)
-
-    if not video:
-        raise HTTPException(status_code=400, detail="At least one video file is required")
 
     audio_bytes = await audio.read()
     if not audio_bytes:
@@ -144,7 +155,7 @@ async def create_job(
     input_dir = workspace / "input"
 
     clip_inputs: list[ClipInput] = []
-    for index, upload in enumerate(video):
+    for index, upload in enumerate(video or []):
         video_bytes = await upload.read()
         if not video_bytes:
             raise HTTPException(status_code=400, detail=f"Video file {index} is empty")
@@ -186,13 +197,30 @@ async def create_job(
                 music_start_s=music_start_s,
                 music_end_s=music_end_s,
             )
-        else:
+        elif clip_inputs:
             config = build_job_config(
                 workspace=workspace,
                 hook_text=hook_text,
                 emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
                 audio_filename=audio_name,
                 clips=clip_inputs,
+                fill_color=fill_color,
+                emphasis_color=emphasis_color,
+                font_family=font_family,
+                safe_padding_pct=safe_padding_pct,
+                seed=seed,
+                target_duration_s=target_duration_s,
+                use_full_track=use_full_track,
+                selected_block_id=selected_block_id,
+                music_start_s=music_start_s,
+                music_end_s=music_end_s,
+            )
+        else:
+            config = build_job_config(
+                workspace=workspace,
+                hook_text=hook_text,
+                emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
+                audio_filename=audio_name,
                 fill_color=fill_color,
                 emphasis_color=emphasis_color,
                 font_family=font_family,
@@ -367,6 +395,7 @@ def update_music_selection(
 
     store.update_config(job_id, updated_config)
     write_job_config(updated_config, job.workspace)
+    refresh_storyboard_after_music(updated_config, temp_dir)
     job = store.get(job_id)
     assert job is not None
     return JobDetail(**job.to_summary().model_dump(), config=job.config)
@@ -582,3 +611,287 @@ def get_speed_ramp_preview(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return FileResponse(preview_path, media_type="video/mp4", filename=preview_path.name)
+
+
+def _invalidate_composite_previews(temp_dir: Path) -> None:
+    preview_dir = temp_dir / "previews"
+    if not preview_dir.is_dir():
+        return
+    for path in preview_dir.glob("composite_*.mp4"):
+        path.unlink(missing_ok=True)
+
+
+def _storyboard_response(
+    job_id: str,
+    storyboard,
+    *,
+    preview_ready: bool,
+) -> StoryboardResponse:
+    return StoryboardResponse(
+        music_block_id=storyboard.music_block_id,
+        music_start_s=storyboard.music_start_s,
+        music_end_s=storyboard.music_end_s,
+        total_duration_s=storyboard.total_duration_s,
+        loop_to_hook=storyboard.loop_to_hook,
+        preview_ready=preview_ready,
+        slots=[
+            StorySlotResponse(
+                id=slot.id,
+                order=slot.order,
+                label=slot.label,
+                role=slot.role,
+                out_start_s=slot.out_start_s,
+                out_end_s=slot.out_end_s,
+                target_duration_s=slot.target_duration_s,
+                transition_in=slot.transition_in,
+                assigned_clip_id=slot.assigned_clip_id,
+                crop_start_s=slot.crop_start_s,
+                crop_end_s=slot.crop_end_s,
+                clip_filename=slot.clip_filename,
+                clip_source_url=(
+                    f"/api/jobs/{job_id}/clips/{slot.assigned_clip_id}/source"
+                    if slot.assigned_clip_id
+                    else None
+                ),
+            )
+            for slot in sorted(storyboard.slots, key=lambda item: item.order)
+        ],
+    )
+
+
+@router.get("/{job_id}/storyboard", response_model=StoryboardResponse)
+def get_storyboard(job_id: str, request: Request) -> StoryboardResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        storyboard = refresh_storyboard_after_music(job.config, temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not ready — select a music block")
+    return _storyboard_response(
+        job_id,
+        storyboard,
+        preview_ready=storyboard_filled_enough(storyboard),
+    )
+
+
+@router.patch("/{job_id}/storyboard", response_model=StoryboardResponse)
+def patch_storyboard(
+    job_id: str,
+    payload: StoryboardPatchRequest,
+    request: Request,
+) -> StoryboardResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+
+    slot_updates: list[StorySlot] | None = None
+    if payload.slots is not None:
+        by_id = {slot.id: slot for slot in storyboard.slots}
+        slot_updates = []
+        for item in payload.slots:
+            existing = by_id.get(item.id)
+            if existing is None:
+                raise HTTPException(status_code=400, detail=f"Unknown slot id: {item.id}")
+            slot_updates.append(
+                existing.model_copy(
+                    update={
+                        k: v
+                        for k, v in {
+                            "order": item.order,
+                            "label": item.label,
+                            "role": item.role,
+                            "out_start_s": item.out_start_s,
+                            "out_end_s": item.out_end_s,
+                            "target_duration_s": item.target_duration_s,
+                            "transition_in": item.transition_in,
+                        }.items()
+                        if v is not None
+                    }
+                )
+            )
+
+    updated = apply_storyboard_patch(
+        storyboard,
+        slots=slot_updates,
+        loop_to_hook=payload.loop_to_hook,
+    )
+    persist_storyboard(temp_dir, updated)
+    _invalidate_composite_previews(temp_dir)
+    return _storyboard_response(
+        job_id,
+        updated,
+        preview_ready=storyboard_filled_enough(updated),
+    )
+
+
+@router.put("/{job_id}/slots/{slot_id}/clip", response_model=StoryboardResponse)
+async def assign_slot_video(
+    job_id: str,
+    slot_id: str,
+    request: Request,
+    video: UploadFile = File(...),
+    crop_start_s: float | None = Form(None),
+    crop_end_s: float | None = Form(None),
+) -> StoryboardResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    if not any(slot.id == slot_id for slot in storyboard.slots):
+        raise HTTPException(status_code=404, detail="Slot not found")
+
+    video_bytes = await video.read()
+    if not video_bytes:
+        raise HTTPException(status_code=400, detail="Video file is empty")
+
+    clip_id = f"{slot_id}_clip"
+    video_name = Path(video.filename or f"{clip_id}.mp4").name
+    input_dir = job.workspace / "input"
+    save_upload(video_bytes, input_dir / video_name)
+    clip_path = (input_dir / video_name).resolve()
+    from viral_editor.ingest.loader import probe_media
+
+    media = probe_media(clip_path)
+
+    updated_storyboard = assign_slot_clip(
+        storyboard,
+        slot_id,
+        clip_id=clip_id,
+        filename=video_name,
+        crop_start_s=crop_start_s,
+        crop_end_s=crop_end_s,
+        media=media,
+    )
+
+    existing = {clip.id: clip for clip in job.config.clips}
+    existing[clip_id] = ClipInput(
+        id=clip_id,
+        path=clip_path,
+        order=len(existing),
+        included=True,
+        role="clip",
+        crop_start_s=updated_storyboard.slots[
+            next(i for i, s in enumerate(updated_storyboard.slots) if s.id == slot_id)
+        ].crop_start_s,
+        crop_end_s=updated_storyboard.slots[
+            next(i for i, s in enumerate(updated_storyboard.slots) if s.id == slot_id)
+        ].crop_end_s,
+    )
+    updated_config = job.config.model_copy(update={"clips": list(existing.values())})
+    updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)
+
+    persist_storyboard(temp_dir, updated_storyboard)
+    _invalidate_composite_previews(temp_dir)
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    return _storyboard_response(
+        job_id,
+        updated_storyboard,
+        preview_ready=storyboard_filled_enough(updated_storyboard),
+    )
+
+
+@router.delete("/{job_id}/slots/{slot_id}/clip", response_model=StoryboardResponse)
+def clear_slot_video(job_id: str, slot_id: str, request: Request) -> StoryboardResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+
+    clip_id = f"{slot_id}_clip"
+    updated_storyboard = clear_slot_clip(storyboard, slot_id)
+    remaining_clips = [clip for clip in job.config.clips if clip.id != clip_id]
+    updated_config = job.config.model_copy(update={"clips": remaining_clips})
+
+    persist_storyboard(temp_dir, updated_storyboard)
+    _invalidate_composite_previews(temp_dir)
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    return _storyboard_response(
+        job_id,
+        updated_storyboard,
+        preview_ready=storyboard_filled_enough(updated_storyboard),
+    )
+
+
+@router.get("/{job_id}/preview")
+def get_composite_preview(
+    job_id: str,
+    request: Request,
+    force: bool = Query(default=False),
+) -> FileResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    if not storyboard_filled_enough(storyboard):
+        raise HTTPException(status_code=400, detail="Assign hook and at least one clip slot first")
+
+    clip_media = clip_media_for_storyboard(job.config)
+    segments = storyboard_to_segments(storyboard, clip_media)
+    if not segments:
+        raise HTTPException(status_code=400, detail="No assigned clips to preview")
+
+    clip_paths = {
+        clip_id: clip.path
+        for clip_id, clip in ((c.id, c) for c in job.config.clips)
+        if clip_id in {segment.source_id for segment in segments}
+    }
+    clip_durations = {clip_id: info.duration_s for clip_id, info in clip_media.items()}
+    transitions = [
+        slot.transition_in
+        for slot in sorted(storyboard.slots, key=lambda item: item.order)
+        if slot.assigned_clip_id is not None
+    ]
+
+    import hashlib
+    import json
+
+    cache_payload = {
+        "storyboard": storyboard.model_dump(mode="json"),
+        "hook": job.config.hook.text,
+    }
+    digest = hashlib.sha256(json.dumps(cache_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    preview_path = temp_dir / "previews" / f"composite_{digest}.mp4"
+    if force and preview_path.is_file():
+        preview_path.unlink(missing_ok=True)
+    if not preview_path.is_file():
+        preview_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            render_composite(
+                job.config.audio_path,
+                segments,
+                transitions,
+                clip_paths=clip_paths,
+                clip_durations=clip_durations,
+                music_start_s=job.config.music.start_s,
+                music_end_s=job.config.music.end_s,
+                out_path=preview_path,
+                hook_text=job.config.hook.text,
+            )
+        except (RuntimeError, FFmpegError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FileResponse(preview_path, media_type="video/mp4", filename="preview.mp4")

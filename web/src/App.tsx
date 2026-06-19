@@ -1,30 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ClipInfo, ClipReelResponse, JobSummary, MusicBlock, PipelineEvent, StageInfo, WaveformPayload } from "./types";
+import { useCallback, useEffect, useState } from "react";
+import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, StoryboardPayload, WaveformPayload } from "./types";
 import {
-  createJob,
-  fetchArtifact,
-  fetchClips,
+  assignSlotClip,
+  clearSlotClip,
+  compositePreviewUrl,
+  createDraftJob,
   fetchHealth,
   fetchJobs,
   fetchStages,
+  fetchStoryboard,
   fetchWaveform,
+  patchStoryboard,
   subscribeJobEvents,
-  updateClips,
   updateMusicSelection,
 } from "./api/client";
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
-import { ClipReelPanel, reelResponseToClipInfo } from "./components/ClipReelPanel";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import type { FormState } from "./components/JobForm";
-import { SpeedRampPanel } from "./components/SpeedRampPanel";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { PhonePreview } from "./components/PhonePreview";
 import { StageTelemetry } from "./components/StageTelemetry";
-import {
-  useProbeClipDurations,
-  useUpdateLocalClips,
-} from "./hooks/useLocalClipDrafts";
+import { StoryboardPanel } from "./components/StoryboardPanel";
 
 const initialForm: FormState = {
   hookText: "I built this in 30 days",
@@ -33,10 +31,8 @@ const initialForm: FormState = {
   emphasisColor: "#FFD700",
   fontFamily: DEFAULT_HOOK_FONT,
   safePaddingPct: 10,
-  targetDurationS: 30,
+  targetDurationS: 10,
   useFullTrack: false,
-  audio: null,
-  localClips: [],
 };
 
 export default function App() {
@@ -51,83 +47,32 @@ export default function App() {
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [ffmpegOk, setFfmpegOk] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [mediaInfo, setMediaInfo] = useState<{
-    outputDuration: number | null;
-    videoFps: number | null;
-    videoSize: string | null;
-  }>({ outputDuration: null, videoFps: null, videoSize: null });
+  const [analyzing, setAnalyzing] = useState(false);
+  const [audioName, setAudioName] = useState<string | null>(null);
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [musicStartS, setMusicStartS] = useState<number | null>(null);
   const [musicEndS, setMusicEndS] = useState<number | null>(null);
-  const [speedRampVersion, setSpeedRampVersion] = useState(0);
-  const [remoteReel, setRemoteReel] = useState<ClipReelResponse | null>(null);
-  const [remoteClips, setRemoteClips] = useState<ClipInfo[]>([]);
-  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
-  const [clipsSaving, setClipsSaving] = useState(false);
-
-  const videoPreviewUrl = useMemo(() => {
-    const hook =
-      form.localClips.find((clip) => clip.included && clip.role === "hook") ??
-      form.localClips.find((clip) => clip.included);
-    return hook?.previewUrl ?? null;
-  }, [form.localClips]);
-
-  const clipPreviewUrlsRef = useRef<string[]>([]);
+  const [storyboard, setStoryboard] = useState<StoryboardPayload | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [storyboardSaving, setStoryboardSaving] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [regeneratePrompt, setRegeneratePrompt] = useState<{
+    targetDurationS: number;
+    useFullTrack: boolean;
+  } | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [targetSuggestionPrompt, setTargetSuggestionPrompt] = useState<{
+    requested: number;
+    suggested: number;
+  } | null>(null);
+  const [dismissedTargetSuggestions, setDismissedTargetSuggestions] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const patchForm = useCallback((partial: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...partial }));
-  }, []);
-
-  const resetJobDraft = useCallback(() => {
-    if (!activeJobId || submitting) return;
-    setActiveJobId(null);
-    setJobStatus(null);
-    setJobArtifacts([]);
-    setHasOutput(false);
-    setWaveform(null);
-    setSelectedBlockId(null);
-    setMusicStartS(null);
-    setMusicEndS(null);
-    setEvents([]);
-    setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
-    setRemoteReel(null);
-    setRemoteClips([]);
-  }, [activeJobId, submitting]);
-
-  const updateLocalClips = useUpdateLocalClips(setForm, resetJobDraft);
-  useProbeClipDurations(form.localClips, updateLocalClips);
-
-  useEffect(() => {
-    if (form.localClips.length === 0) {
-      setSelectedClipId(null);
-      return;
-    }
-    setSelectedClipId((current) =>
-      current && form.localClips.some((clip) => clip.id === current)
-        ? current
-        : form.localClips[0]?.id ?? null,
-    );
-  }, [form.localClips]);
-
-  useEffect(() => {
-    const currentUrls = new Set(form.localClips.map((clip) => clip.previewUrl));
-    for (const url of clipPreviewUrlsRef.current) {
-      if (!currentUrls.has(url)) {
-        URL.revokeObjectURL(url);
-      }
-    }
-    clipPreviewUrlsRef.current = form.localClips.map((clip) => clip.previewUrl);
-  }, [form.localClips]);
-
-  useEffect(() => {
-    return () => {
-      for (const url of clipPreviewUrlsRef.current) {
-        URL.revokeObjectURL(url);
-      }
-      clipPreviewUrlsRef.current = [];
-    };
   }, []);
 
   const loadHealth = () => {
@@ -147,6 +92,35 @@ export default function App() {
     fetchStages().then(setStages).catch(() => undefined);
     fetchJobs().then(setJobs).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (
+      !waveform?.target_match_failed ||
+      waveform.suggested_target_duration_s == null ||
+      !activeJobId ||
+      form.useFullTrack
+    ) {
+      return;
+    }
+    const suggested = Math.round(waveform.suggested_target_duration_s);
+    if (suggested === form.targetDurationS) {
+      return;
+    }
+    const key = `${activeJobId}:${form.targetDurationS}:${suggested}`;
+    if (dismissedTargetSuggestions.has(key)) {
+      return;
+    }
+    setTargetSuggestionPrompt({
+      requested: form.targetDurationS,
+      suggested,
+    });
+  }, [
+    waveform,
+    activeJobId,
+    form.targetDurationS,
+    form.useFullTrack,
+    dismissedTargetSuggestions,
+  ]);
 
   const renderBlockedReason = (() => {
     if (apiOnline === false) {
@@ -171,10 +145,6 @@ export default function App() {
         if (selected) {
           setMusicStartS(selected.start_s);
           setMusicEndS(selected.end_s);
-          setMediaInfo((prev) => ({
-            ...prev,
-            outputDuration: selected.end_s - selected.start_s,
-          }));
         }
       })
       .catch(() => {
@@ -189,112 +159,31 @@ export default function App() {
       });
   };
 
-  const loadRemoteClips = (jobId: string) => {
-    fetchClips(jobId)
+  const loadStoryboard = (jobId: string) => {
+    fetchStoryboard(jobId)
       .then((payload) => {
-        setRemoteReel(payload);
-        setRemoteClips(reelResponseToClipInfo(payload));
-        setSelectedClipId(payload.clips[0]?.id ?? null);
+        setStoryboard(payload);
+        setPreviewReady(payload.preview_ready);
+        setSelectedSlotId((current) => current ?? payload.slots[0]?.id ?? null);
       })
-      .catch(() => undefined);
+      .catch(() => setStoryboard(null));
   };
 
-  const persistRemoteClips = async (clips: ClipInfo[]) => {
-    if (!activeJobId) return;
-    setClipsSaving(true);
-    try {
-      const payload = await updateClips(
-        activeJobId,
-        clips.map((clip) => ({
-          id: clip.id,
-          order: clip.order,
-          included: clip.included,
-          role: clip.role,
-          crop_start_s: clip.cropStartS ?? clip.crop_start_s,
-          crop_end_s: clip.cropEndS ?? clip.crop_end_s,
-        })),
-      );
-      setRemoteReel(payload);
-      setRemoteClips(reelResponseToClipInfo(payload));
-      setSpeedRampVersion((value) => value + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update clip reel");
-    } finally {
-      setClipsSaving(false);
-    }
-  };
-
-  const handleTargetChange = async (targetDurationS: number, useFullTrack: boolean) => {
-    if (!activeJobId) return;
-    setForm((prev) => ({ ...prev, targetDurationS, useFullTrack }));
-    try {
-      await updateMusicSelection(activeJobId, {
-        target_duration_s: targetDurationS,
-        use_full_track: useFullTrack,
-      });
-      loadScope(activeJobId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update target length");
-    }
-  };
-
-  const handleSelectBlock = async (block: MusicBlock) => {
-    if (!activeJobId) return;
-    setSelectedBlockId(block.id);
-    setMusicStartS(block.start_s);
-    setMusicEndS(block.end_s);
-    setMediaInfo((prev) => ({
-      ...prev,
-      outputDuration: block.end_s - block.start_s,
-    }));
-    try {
-      await updateMusicSelection(activeJobId, { selected_block_id: block.id });
-      loadScope(activeJobId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not select block");
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (form.localClips.length === 0 || !form.audio) {
-      setError("Add at least one clip and an audio file before rendering.");
-      return;
-    }
+  const handleAudioSelected = async (file: File) => {
     setError(null);
-    setSubmitting(true);
-    setEvents([]);
-    setJobArtifacts([]);
-    setHasOutput(false);
+    setAnalyzing(true);
+    setAudioName(file.name);
     setWaveform(null);
-    setSelectedBlockId(null);
-    setMusicStartS(null);
-    setMusicEndS(null);
-    setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
-    setRemoteReel(null);
-    setRemoteClips([]);
+    setStoryboard(null);
+    setEvents([]);
+    setPreviewReady(false);
+    setPreviewVersion(0);
+    setDismissedTargetSuggestions(new Set());
+    setTargetSuggestionPrompt(null);
 
     try {
-      const orderedClips = [...form.localClips].sort((a, b) => a.order - b.order);
-      const { id } = await createJob({
-        clips: orderedClips.map((clip) => ({
-          id: clip.id,
-          file: clip.file,
-          order: clip.order,
-          included: clip.included,
-          role: clip.role,
-          crop_start_s:
-            clip.cropStartS != null && clip.durationS != null
-              ? Math.max(0, Math.min(clip.cropStartS, clip.durationS))
-              : clip.cropStartS,
-          crop_end_s:
-            clip.cropEndS != null && clip.durationS != null
-              ? Math.max(
-                  (clip.cropStartS ?? 0) + 0.25,
-                  Math.min(clip.cropEndS, clip.durationS),
-                )
-              : clip.cropEndS,
-        })),
-        audio: form.audio,
+      const { id } = await createDraftJob({
+        audio: file,
         hookText: form.hookText,
         emphasisWords: form.emphasisWords,
         fillColor: form.fillColor,
@@ -303,9 +192,6 @@ export default function App() {
         safePaddingPct: form.safePaddingPct,
         targetDurationS: form.targetDurationS,
         useFullTrack: form.useFullTrack,
-        selectedBlockId: selectedBlockId,
-        musicStartS: musicStartS,
-        musicEndS: musicEndS,
       });
 
       setActiveJobId(id);
@@ -315,56 +201,180 @@ export default function App() {
         id,
         (event) => {
           setEvents((prev) => [...prev, event]);
-          if (event.stage === "speed_ramp" && event.action === "complete") {
-            setSpeedRampVersion((value) => value + 1);
-          }
-          if (event.stage === "ingest" && event.action === "complete") {
-            fetchArtifact(id, "media_info")
-              .then((artifact) => {
-                setMediaInfo({
-                  outputDuration: artifact.output_duration_s,
-                  videoFps: artifact.video.fps ?? null,
-                  videoSize:
-                    artifact.video.width && artifact.video.height
-                      ? `${artifact.video.width}×${artifact.video.height}`
-                      : null,
-                });
-              })
-              .catch(() => undefined);
-            loadRemoteClips(id);
-          }
           if (event.stage === "audio" && event.action === "complete") {
             loadScope(id);
+            loadStoryboard(id);
           }
         },
         () => {
-          setSubmitting(false);
-          setJobStatus((prev) => (prev === "running" ? "completed" : prev));
+          setAnalyzing(false);
           refreshJobs();
-          loadScope(id);
           fetchJobs()
             .then((list) => {
               const job = list.find((j) => j.id === id);
               if (job) {
                 setJobStatus(job.status);
                 setJobArtifacts(job.artifacts);
-                setHasOutput(job.has_output);
               }
             })
             .catch(() => undefined);
+          loadScope(id);
+          loadStoryboard(id);
         },
         (streamError) => {
-          setSubmitting(false);
+          setAnalyzing(false);
           setError(streamError.message);
           setJobStatus("failed");
           refreshJobs();
         },
       );
     } catch (err) {
-      setSubmitting(false);
-      setError(err instanceof Error ? err.message : "Render failed");
+      setAnalyzing(false);
+      setError(err instanceof Error ? err.message : "Audio analysis failed");
     }
   };
+
+  const handleTargetChange = async (targetDurationS: number, useFullTrack: boolean) => {
+    if (!activeJobId) return;
+    patchForm({ targetDurationS, useFullTrack });
+    setRegenerating(true);
+    try {
+      await updateMusicSelection(activeJobId, {
+        target_duration_s: targetDurationS,
+        use_full_track: useFullTrack,
+      });
+      setPreviewVersion(0);
+      setPreviewReady(false);
+      loadScope(activeJobId);
+      loadStoryboard(activeJobId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update target length");
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const hasAssignedClip = Boolean(
+    storyboard?.slots.some((slot) => slot.assigned_clip_id),
+  );
+
+  const requestTargetChange = (targetDurationS: number, useFullTrack: boolean) => {
+    if (
+      targetDurationS === form.targetDurationS &&
+      useFullTrack === form.useFullTrack
+    ) {
+      return;
+    }
+    if (!hasAssignedClip) {
+      if (activeJobId) {
+        void handleTargetChange(targetDurationS, useFullTrack);
+      } else {
+        patchForm({ targetDurationS, useFullTrack });
+      }
+      return;
+    }
+    setRegeneratePrompt({ targetDurationS, useFullTrack });
+  };
+
+  const confirmRegenerate = () => {
+    if (!regeneratePrompt) return;
+    const pending = regeneratePrompt;
+    setRegeneratePrompt(null);
+    void handleTargetChange(pending.targetDurationS, pending.useFullTrack);
+  };
+
+  const dismissTargetSuggestion = () => {
+    if (!targetSuggestionPrompt || !activeJobId) return;
+    const { requested, suggested } = targetSuggestionPrompt;
+    setDismissedTargetSuggestions((prev) => {
+      const next = new Set(prev);
+      next.add(`${activeJobId}:${requested}:${suggested}`);
+      return next;
+    });
+    setTargetSuggestionPrompt(null);
+  };
+
+  const confirmTargetSuggestion = () => {
+    if (!targetSuggestionPrompt || !activeJobId) return;
+    const { requested, suggested } = targetSuggestionPrompt;
+    setDismissedTargetSuggestions((prev) => {
+      const next = new Set(prev);
+      next.add(`${activeJobId}:${requested}:${suggested}`);
+      return next;
+    });
+    setTargetSuggestionPrompt(null);
+    void handleTargetChange(suggested, false);
+  };
+
+  const handleSelectBlock = async (block: MusicBlock) => {
+    if (!activeJobId) return;
+    setSelectedBlockId(block.id);
+    setMusicStartS(block.start_s);
+    setMusicEndS(block.end_s);
+    try {
+      await updateMusicSelection(activeJobId, { selected_block_id: block.id });
+      loadScope(activeJobId);
+      loadStoryboard(activeJobId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not select block");
+    }
+  };
+
+  const handleAssignClip = async (
+    slotId: string,
+    file: File,
+    cropStartS: number,
+    cropEndS: number,
+  ) => {
+    if (!activeJobId) return;
+    setStoryboardSaving(true);
+    try {
+      const payload = await assignSlotClip(activeJobId, slotId, file, cropStartS, cropEndS);
+      setStoryboard(payload);
+      setPreviewReady(payload.preview_ready);
+      setPreviewVersion((v) => v + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not assign clip");
+    } finally {
+      setStoryboardSaving(false);
+    }
+  };
+
+  const handleClearClip = async (slotId: string) => {
+    if (!activeJobId) return;
+    setStoryboardSaving(true);
+    try {
+      const payload = await clearSlotClip(activeJobId, slotId);
+      setStoryboard(payload);
+      setPreviewReady(payload.preview_ready);
+      setPreviewVersion((v) => v + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not clear clip");
+    } finally {
+      setStoryboardSaving(false);
+    }
+  };
+
+  const handlePatchStoryboard = async (payload: Parameters<typeof patchStoryboard>[1]) => {
+    if (!activeJobId) return;
+    setStoryboardSaving(true);
+    try {
+      const updated = await patchStoryboard(activeJobId, payload);
+      setStoryboard(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update storyboard");
+    } finally {
+      setStoryboardSaving(false);
+    }
+  };
+
+  const compositeUrl =
+    activeJobId && previewReady
+      ? (() => {
+          const base = compositePreviewUrl(activeJobId, previewVersion > 0);
+          return `${base}${base.includes("?") ? "&" : "?"}v=${previewVersion}`;
+        })()
+      : null;
 
   return (
     <div className="min-h-screen">
@@ -372,7 +382,7 @@ export default function App() {
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-5 py-4">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-scope-trace">
-              Local pipeline
+              Audio-first storyboard
             </p>
             <h1 className="text-lg font-semibold tracking-tight">Control Room</h1>
           </div>
@@ -402,16 +412,8 @@ export default function App() {
                     : "text-monitor-muted"
               }
             >
-              {apiOnline === false
-                ? "FFMPEG UNKNOWN"
-                : ffmpegOk === null
-                  ? "CHECKING FFMPEG…"
-                  : ffmpegOk
-                    ? "FFMPEG ONLINE"
-                    : "FFMPEG OFFLINE"}
+              {ffmpegOk === null ? "CHECKING FFMPEG…" : ffmpegOk ? "FFMPEG OK" : "FFMPEG OFFLINE"}
             </span>
-            <span className="text-monitor-muted">|</span>
-            <span className="text-monitor-muted">9:16 / 60fps</span>
           </div>
         </div>
       </header>
@@ -420,7 +422,7 @@ export default function App() {
         <section className="space-y-5">
           <div className="panel flex flex-col items-center px-6 py-8">
             <p className="mb-4 self-start font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-              Retention frame preview
+              Composed preview
             </p>
             <PhonePreview
               hookText={form.hookText}
@@ -429,94 +431,68 @@ export default function App() {
               emphasisColor={form.emphasisColor}
               fontFamily={form.fontFamily}
               safePaddingPct={form.safePaddingPct}
-              videoPreviewUrl={videoPreviewUrl}
+              videoPreviewUrl={compositeUrl}
+              compositeMode={previewReady}
             />
-            {mediaInfo.outputDuration !== null && (
-              <dl className="mt-6 grid w-full max-w-sm grid-cols-3 gap-3 font-mono text-xs">
+            {musicStartS != null && musicEndS != null && (
+              <dl className="mt-6 grid w-full max-w-sm grid-cols-2 gap-3 font-mono text-xs">
                 <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
-                  <dt className="text-monitor-muted">OUT</dt>
-                  <dd className="text-scope-trace">{mediaInfo.outputDuration.toFixed(1)}s</dd>
+                  <dt className="text-monitor-muted">MUSIC WINDOW</dt>
+                  <dd className="text-scope-trace">
+                    {(musicEndS - musicStartS).toFixed(1)}s
+                  </dd>
                 </div>
                 <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
-                  <dt className="text-monitor-muted">FPS</dt>
-                  <dd>{mediaInfo.videoFps?.toFixed(2) ?? "—"}</dd>
-                </div>
-                <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
-                  <dt className="text-monitor-muted">SRC</dt>
-                  <dd>{mediaInfo.videoSize ?? "—"}</dd>
+                  <dt className="text-monitor-muted">STATUS</dt>
+                  <dd>{jobStatus ?? "idle"}</dd>
                 </div>
               </dl>
+            )}
+            {previewReady && activeJobId && (
+              <button
+                type="button"
+                className="btn-ghost mt-4 text-xs"
+                onClick={() => setPreviewVersion((v) => v + 1)}
+              >
+                Refresh preview
+              </button>
             )}
           </div>
 
           {waveform && activeJobId && (
-            <>
-              <AudioScopePanel
-                jobId={activeJobId}
-                waveform={waveform}
-                targetDurationS={form.targetDurationS}
-                useFullTrack={form.useFullTrack}
-                selectedBlockId={selectedBlockId}
-                onTargetChange={handleTargetChange}
-                onSelectBlock={handleSelectBlock}
-              />
-              <SpeedRampPanel
-                key={`${activeJobId}-${speedRampVersion}`}
-                jobId={activeJobId}
-                waveform={waveform}
-                outputDurationS={mediaInfo.outputDuration ?? waveform.duration_s}
-              />
-            </>
-          )}
-
-          {form.localClips.length > 0 && (
-            <ClipReelPanel
-              mode="local"
-              clips={form.localClips}
-              onLocalChange={updateLocalClips}
-              selectedClipId={selectedClipId}
-              onSelectClip={setSelectedClipId}
+            <AudioScopePanel
+              jobId={activeJobId}
+              waveform={waveform}
+              targetDurationS={form.targetDurationS}
+              useFullTrack={form.useFullTrack}
+              selectedBlockId={selectedBlockId}
+              onTargetChange={requestTargetChange}
+              onSelectBlock={handleSelectBlock}
             />
           )}
 
-          {activeJobId && remoteClips.length > 0 && (
-            <ClipReelPanel
-              mode="remote"
+          {storyboard && activeJobId && (
+            <StoryboardPanel
               jobId={activeJobId}
-              clips={remoteClips}
-              reelDurationS={remoteReel?.reel_duration_s}
-              targetBodyDurationS={remoteReel?.target_body_duration_s}
-              selectedClipId={selectedClipId}
-              onSelectClip={setSelectedClipId}
-              saving={clipsSaving}
-              onPatchClip={(id, patch) => {
-                const next = remoteClips.map((clip) =>
-                  clip.id === id
-                    ? {
-                        ...clip,
-                        ...patch,
-                        crop_start_s: patch.cropStartS ?? patch.crop_start_s ?? clip.crop_start_s,
-                        crop_end_s: patch.cropEndS ?? patch.crop_end_s ?? clip.crop_end_s,
-                      }
-                    : clip,
-                );
-                setRemoteClips(next);
-                void persistRemoteClips(next);
-              }}
-              onReorder={(clips) => {
-                const next = clips as ClipInfo[];
-                setRemoteClips(next);
-                void persistRemoteClips(next);
-              }}
+              storyboard={storyboard}
+              selectedSlotId={selectedSlotId}
+              onSelectSlot={setSelectedSlotId}
+              onAssignClip={handleAssignClip}
+              onClearClip={handleClearClip}
+              onPatchStoryboard={handlePatchStoryboard}
+              saving={storyboardSaving}
             />
           )}
 
           <JobForm
             form={form}
             onPatch={patchForm}
-            onLocalClipsChange={updateLocalClips}
-            onSubmit={handleSubmit}
-            submitting={submitting}
+            onAudioSelected={handleAudioSelected}
+            onTargetDurationChange={(targetDurationS) =>
+              requestTargetChange(targetDurationS, false)
+            }
+            audioName={audioName}
+            analyzing={analyzing}
             disabled={apiOnline === false || ffmpegOk === false}
             disabledReason={renderBlockedReason}
           />
@@ -526,16 +502,10 @@ export default function App() {
               role="alert"
               className="rounded-md border border-hook-gold/40 bg-hook-gold/10 px-4 py-3 text-sm text-hook-gold"
             >
-              Control Room API is not reachable. In a terminal, from the project folder with
-              your venv activated, run:{" "}
-              <code className="font-mono text-xs">python -m viral_editor serve</code>
-              {" "}— then refresh this page.
-              <button
-                type="button"
-                className="btn-ghost ml-3 mt-2 inline-flex text-xs"
-                onClick={loadHealth}
-              >
-                Retry connection
+              Control Room API is not reachable. Run{" "}
+              <code className="font-mono text-xs">python -m viral_editor serve</code> and refresh.
+              <button type="button" className="btn-ghost ml-3 mt-2 inline-flex text-xs" onClick={loadHealth}>
+                Retry
               </button>
             </div>
           )}
@@ -578,9 +548,7 @@ export default function App() {
                     className="flex items-center justify-between rounded border border-monitor-border bg-monitor-bg px-3 py-2"
                   >
                     <span className="truncate pr-2">{job.hook_text}</span>
-                    <span className="font-mono text-xs text-monitor-muted">
-                      {job.status}
-                    </span>
+                    <span className="font-mono text-xs text-monitor-muted">{job.status}</span>
                   </li>
                 ))}
               </ul>
@@ -588,6 +556,37 @@ export default function App() {
           )}
         </aside>
       </main>
+
+      <ConfirmDialog
+        open={targetSuggestionPrompt !== null}
+        title="No loop at this length"
+        message={
+          targetSuggestionPrompt
+            ? `We couldn't find a phrase-aligned ${targetSuggestionPrompt.requested}s loop in this track. Switch to ${targetSuggestionPrompt.suggested}s for the closest matching short?`
+            : ""
+        }
+        confirmLabel={`Switch to ${targetSuggestionPrompt?.suggested ?? ""}s`}
+        cancelLabel={`Keep ${targetSuggestionPrompt?.requested ?? ""}s`}
+        onConfirm={confirmTargetSuggestion}
+        onCancel={dismissTargetSuggestion}
+      />
+
+      <ConfirmDialog
+        open={regeneratePrompt !== null}
+        title="Regenerate short?"
+        message={
+          regeneratePrompt
+            ? regeneratePrompt.useFullTrack
+              ? "Switch to the full track? Music blocks and the storyboard will rebuild — your clip crops may no longer fit."
+              : `Change target length to ${regeneratePrompt.targetDurationS}s? Music blocks and the storyboard will rebuild — your clip crops may no longer fit.`
+            : ""
+        }
+        confirmLabel={regenerating ? "Regenerating…" : "Regenerate"}
+        cancelLabel="Keep current"
+        confirmDisabled={regenerating}
+        onConfirm={confirmRegenerate}
+        onCancel={() => setRegeneratePrompt(null)}
+      />
     </div>
   );
 }

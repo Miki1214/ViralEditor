@@ -1,4 +1,4 @@
-export type JobStatus = "queued" | "running" | "completed" | "failed";
+export type JobStatus = "queued" | "running" | "draft" | "completed" | "failed";
 
 export type StageAction = "start" | "complete" | "skip" | "info" | "error";
 
@@ -85,12 +85,19 @@ export interface MusicBlockPlan {
   track_duration_s: number;
   selected_block_id: string | null;
   use_full_track: boolean;
+  target_match_failed?: boolean;
+  suggested_target_duration_s?: number | null;
   blocks: MusicBlock[];
 }
 
 export interface WaveformPoint {
   t: number;
   v: number;
+}
+
+export interface TargetLoopQuality {
+  target_duration_s: number;
+  loop_quality_pct: number;
 }
 
 export interface WaveformPayload {
@@ -104,6 +111,11 @@ export interface WaveformPayload {
   sections: MusicSection[];
   blocks: MusicBlock[];
   selected_block_id: string | null;
+  target_match_failed?: boolean;
+  suggested_target_duration_s?: number | null;
+  matchable_target_durations_s?: number[];
+  target_loop_qualities?: TargetLoopQuality[];
+  best_loop_target_durations_s?: number[];
 }
 
 export interface SpeedCurvePoint {
@@ -123,6 +135,34 @@ export interface SpeedSegment {
 }
 
 export type ClipRole = "clip" | "hook" | "filler";
+export type SlotRole = "hook" | "clip" | "punch";
+export type SlotTransition = "cut" | "xfade";
+
+export interface StorySlot {
+  id: string;
+  order: number;
+  label: string;
+  role: SlotRole;
+  out_start_s: number;
+  out_end_s: number;
+  target_duration_s: number;
+  transition_in: SlotTransition;
+  assigned_clip_id: string | null;
+  crop_start_s: number | null;
+  crop_end_s: number | null;
+  clip_filename: string | null;
+  clip_source_url: string | null;
+}
+
+export interface StoryboardPayload {
+  music_block_id: string | null;
+  music_start_s: number;
+  music_end_s: number;
+  total_duration_s: number;
+  loop_to_hook: boolean;
+  preview_ready: boolean;
+  slots: StorySlot[];
+}
 
 export interface ClipInfo {
   id: string;

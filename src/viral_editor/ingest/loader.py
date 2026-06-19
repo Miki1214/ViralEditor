@@ -231,16 +231,30 @@ def validate_job(cfg: JobConfig) -> IngestResult:
             )
         clip_media[clip.id] = info
 
-    effective = cfg.effective_clips()
-    if not effective:
-        raise IngestError("No included video clips found")
-
-    video = clip_media[effective[0].id]
     audio = probe_media(cfg.audio_path)
     if not audio.has_audio:
         raise IngestError(f"No audio stream found in {cfg.audio_path}")
 
     output_duration_s = audio.duration_s
+    effective = cfg.effective_clips()
+
+    if not effective:
+        logger.info(
+            "Ingest complete — audio-only draft, output duration %.2fs",
+            output_duration_s,
+        )
+        return IngestResult(
+            video=MediaInfo(
+                path=cfg.audio_path,
+                duration_s=0.0,
+                has_video=False,
+            ),
+            audio=audio,
+            output_duration_s=output_duration_s,
+            clip_media=clip_media,
+        )
+
+    video = clip_media[effective[0].id]
     reel_duration = sum(
         (clip_media[c.id].duration_s if c.crop_end_s is None else c.crop_end_s)
         - (c.crop_start_s or 0.0)

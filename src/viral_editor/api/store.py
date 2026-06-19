@@ -144,12 +144,13 @@ class JobStore:
         output_duration_s: float | None,
         artifacts: list[str],
         config: JobConfig | None = None,
+        status: JobStatus = "completed",
     ) -> None:
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return
-            job.status = "completed"
+            job.status = status
             job.output_duration_s = output_duration_s
             job.artifacts = artifacts
             if config is not None:

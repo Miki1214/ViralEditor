@@ -7,11 +7,19 @@ from dataclasses import dataclass
 import numpy as np
 
 from viral_editor.audio.features import BeatSyncFeatures
-from viral_editor.models import AudioTimeline, MusicBlock, MusicBlockPlan, MusicSection, Transient
+from viral_editor.models import (
+    AudioTimeline,
+    MusicBlock,
+    MusicBlockPlan,
+    MusicSection,
+    TargetLoopQuality,
+    Transient,
+)
 
 BEATS_PER_BAR = 4
 LOOP_MAX_DRIFT_RATIO = 0.28
 PHRASE_BAR_OPTIONS = (4, 8, 16)
+CANONICAL_TARGET_DURATIONS_S = (5, 10, 15, 20, 25, 30, 45, 60)
 
 
 @dataclass(frozen=True)
@@ -154,35 +162,21 @@ def _make_full_track_block(
     )
 
 
-def suggest_music_blocks_advanced(
+def _enumerate_phrase_candidates(
     timeline: AudioTimeline,
     features: BeatSyncFeatures,
     sections: list[MusicSection],
     *,
-    target_duration_s: float = 30.0,
-    max_blocks: int = 5,
-    selected_block_id: str | None = None,
-) -> MusicBlockPlan:
-    """Suggest blocks using downbeats, phrase lengths, sections, and beat-sync loop quality."""
+    target_duration_s: float,
+) -> list[_Candidate]:
+    """Return phrase-aligned loop windows within drift tolerance of ``target_duration_s``."""
     track_duration = timeline.audio_duration_seconds
     if track_duration <= target_duration_s:
-        block = _make_full_track_block(
-            timeline,
-            features,
-            reason="Track is already shorter than the target short length",
-        )
-        return MusicBlockPlan(
-            target_duration_s=target_duration_s,
-            track_duration_s=track_duration,
-            selected_block_id=block.id,
-            use_full_track=True,
-            blocks=[block],
-        )
+        return []
 
     beat_times = features.beat_times_s
     downbeats = features.downbeat_times_s
     bpm = features.meta.global_bpm
-    bar_period = (60.0 / bpm) * BEATS_PER_BAR
     min_dur = target_duration_s * (1.0 - LOOP_MAX_DRIFT_RATIO)
     max_dur = target_duration_s * (1.0 + LOOP_MAX_DRIFT_RATIO)
 
@@ -245,8 +239,112 @@ def suggest_music_blocks_advanced(
                         )
                     )
                 end_idx += phrase_beats
+    return candidates
+
+
+def list_target_loop_qualities(
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    sections: list[MusicSection],
+) -> list[TargetLoopQuality]:
+    """Score each preset length by its best phrase-aligned seamless loop quality."""
+    track_duration = timeline.audio_duration_seconds
+    profiles: list[TargetLoopQuality] = []
+    for duration in CANONICAL_TARGET_DURATIONS_S:
+        if duration > track_duration:
+            continue
+        candidates = _enumerate_phrase_candidates(
+            timeline,
+            features,
+            sections,
+            target_duration_s=float(duration),
+        )
+        if not candidates:
+            continue
+        best = max(c.loop_quality for c in candidates)
+        profiles.append(
+            TargetLoopQuality(
+                target_duration_s=float(duration),
+                loop_quality_pct=round(min(100.0, best * 100.0)),
+            )
+        )
+    return profiles
+
+
+def list_matchable_target_durations(
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    sections: list[MusicSection],
+) -> list[float]:
+    """Preset short lengths that have at least one phrase-aligned loop window."""
+    return [
+        profile.target_duration_s
+        for profile in list_target_loop_qualities(timeline, features, sections)
+    ]
+
+
+def find_nearest_matchable_target(
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    sections: list[MusicSection],
+    *,
+    requested_target_s: float,
+) -> float | None:
+    """Pick the preset duration closest to ``requested_target_s`` that has phrase-aligned loops."""
+    track_duration = timeline.audio_duration_seconds
+    if track_duration <= requested_target_s:
+        return None
+
+    matchable = list_matchable_target_durations(timeline, features, sections)
+    if not matchable:
+        return None
+
+    return min(matchable, key=lambda candidate: abs(candidate - requested_target_s))
+
+
+def suggest_music_blocks_advanced(
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    sections: list[MusicSection],
+    *,
+    target_duration_s: float = 30.0,
+    max_blocks: int = 5,
+    selected_block_id: str | None = None,
+) -> MusicBlockPlan:
+    """Suggest blocks using downbeats, phrase lengths, sections, and beat-sync loop quality."""
+    track_duration = timeline.audio_duration_seconds
+    if track_duration <= target_duration_s:
+        block = _make_full_track_block(
+            timeline,
+            features,
+            reason="Track is already shorter than the target short length",
+        )
+        return MusicBlockPlan(
+            target_duration_s=target_duration_s,
+            track_duration_s=track_duration,
+            selected_block_id=block.id,
+            use_full_track=True,
+            blocks=[block],
+        )
+
+    beat_times = features.beat_times_s
+    bpm = features.meta.global_bpm
+    bar_period = (60.0 / bpm) * BEATS_PER_BAR
+
+    candidates = _enumerate_phrase_candidates(
+        timeline,
+        features,
+        sections,
+        target_duration_s=target_duration_s,
+    )
 
     if not candidates:
+        suggested_target = find_nearest_matchable_target(
+            timeline,
+            features,
+            sections,
+            requested_target_s=target_duration_s,
+        )
         block = _make_full_track_block(
             timeline,
             features,
@@ -257,6 +355,8 @@ def suggest_music_blocks_advanced(
             track_duration_s=track_duration,
             selected_block_id=block.id,
             use_full_track=True,
+            target_match_failed=True,
+            suggested_target_duration_s=suggested_target,
             blocks=[block],
         )
 
@@ -306,5 +406,7 @@ def suggest_music_blocks_advanced(
         track_duration_s=track_duration,
         selected_block_id=auto_selected,
         use_full_track=False,
+        target_match_failed=False,
+        suggested_target_duration_s=None,
         blocks=blocks,
     )

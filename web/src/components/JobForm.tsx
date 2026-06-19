@@ -1,8 +1,14 @@
-import { useId, useRef } from "react";
-import { DEFAULT_HOOK_FONT, HOOK_FONT_OPTIONS } from "../constants/fonts";
-import type { LocalClipDraft } from "./ClipReelPanel";
+import { useEffect, useId, useState } from "react";
+import {
+  CUSTOM_DURATION_MAX_S,
+  CUSTOM_DURATION_MIN_S,
+  DEFAULT_TARGET_DURATION_S,
+  isPresetTargetDuration,
+  TARGET_DURATION_PRESETS,
+} from "../constants/durations";
+import { HOOK_FONT_OPTIONS } from "../constants/fonts";
 
-type FormState = {
+export type FormState = {
   hookText: string;
   emphasisWords: string;
   fillColor: string;
@@ -11,229 +17,202 @@ type FormState = {
   safePaddingPct: number;
   targetDurationS: number;
   useFullTrack: boolean;
-  audio: File | null;
-  localClips: LocalClipDraft[];
 };
 
 interface JobFormProps {
   form: FormState;
   onPatch: (partial: Partial<FormState>) => void;
-  onLocalClipsChange: (update: ClipsUpdater) => void;
-  onSubmit: () => void;
-  submitting: boolean;
+  onAudioSelected: (file: File) => void;
+  onTargetDurationChange?: (targetDurationS: number) => void;
+  audioName: string | null;
+  analyzing: boolean;
   disabled?: boolean;
   disabledReason?: string | null;
 }
 
-type ClipsUpdater = import("../hooks/useLocalClipDrafts").LocalClipsUpdater;
-
-function isVideoFile(file: File): boolean {
-  if (file.type.startsWith("video/")) return true;
-  return /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name);
+function durationChipClass(active: boolean): string {
+  return `rounded border px-2.5 py-1 font-mono text-xs transition ${
+    active
+      ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+      : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+  }`;
 }
-
-function MultiVideoField({
-  clips,
-  onClips,
-}: {
-  clips: LocalClipDraft[];
-  onClips: (update: ClipsUpdater) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const inputId = useId();
-
-  const addFiles = (files: FileList | File[] | null) => {
-    if (!files?.length) return;
-    const picked = Array.from(files).filter(isVideoFile);
-    if (picked.length === 0) return;
-
-    onClips((current) => {
-      const startOrder = current.length;
-      const added: LocalClipDraft[] = picked.map((file, offset) => ({
-        id: `clip_${startOrder + offset}`,
-        file,
-        order: startOrder + offset,
-        included: true,
-        role: startOrder + offset === 0 && current.length === 0 ? "hook" : "clip",
-        cropStartS: null,
-        cropEndS: null,
-        durationS: null,
-        previewUrl: URL.createObjectURL(file),
-      }));
-      return [...current, ...added];
-    });
-  };
-
-  return (
-    <div className="block sm:col-span-2">
-      <span className="field-label">Timelapse clips (multi-drop)</span>
-      <label
-        htmlFor={inputId}
-        className="mt-1 flex min-h-[88px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border bg-monitor-bg/50 px-4 py-5 text-center transition hover:border-scope-dim"
-        onDragEnter={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.dataTransfer.dropEffect = "copy";
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          addFiles(e.dataTransfer.files);
-        }}
-      >
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="file"
-          accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v"
-          multiple
-          className="sr-only"
-          onChange={(e) => {
-            addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        <span className="pointer-events-none text-xs text-monitor-muted">
-          Drop clips here or click to browse
-        </span>
-        {clips.length > 0 && (
-          <p className="pointer-events-none mt-2 font-mono text-[11px] text-scope-trace">
-            {clips.length} clip{clips.length === 1 ? "" : "s"} queued
-          </p>
-        )}
-      </label>
-      {clips.length > 0 && (
-        <ul className="mt-2 space-y-1">
-          {clips.map((clip) => (
-            <li
-              key={clip.id}
-              className="truncate rounded border border-monitor-border bg-monitor-bg px-2 py-1 font-mono text-[11px] text-monitor-muted"
-            >
-              {clip.file.name}
-              {clip.role === "hook" ? " · hook" : ""}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function AudioField({
-  file,
-  onFile,
-}: {
-  file: File | null;
-  onFile: (file: File | null) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="field-label">Music track</span>
-      <input
-        type="file"
-        accept="audio/*"
-        className="field-input cursor-pointer file:mr-3 file:rounded file:border-0 file:bg-monitor-border file:px-2 file:py-1 file:text-xs file:text-monitor-text"
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-      />
-      {file && (
-        <p className="mt-1 truncate font-mono text-[11px] text-monitor-muted">{file.name}</p>
-      )}
-    </label>
-  );
-}
-
-const TARGET_PRESETS = [15, 30, 45, 60] as const;
 
 export function JobForm({
   form,
   onPatch,
-  onLocalClipsChange,
-  onSubmit,
-  submitting,
-  disabled,
-  disabledReason,
+  onAudioSelected,
+  onTargetDurationChange,
+  audioName,
+  analyzing,
+  disabled = false,
+  disabledReason = null,
 }: JobFormProps) {
-  const missingAssets = form.localClips.length === 0 || !form.audio;
+  const audioInputId = useId();
+  const [customDuration, setCustomDuration] = useState(false);
+  const [customDraft, setCustomDraft] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isPresetTargetDuration(form.targetDurationS)) {
+      setCustomDuration(false);
+    }
+  }, [form.targetDurationS]);
+
+  const clampDuration = (seconds: number) =>
+    Math.max(
+      CUSTOM_DURATION_MIN_S,
+      Math.min(CUSTOM_DURATION_MAX_S, seconds),
+    );
+
+  const requestTargetDuration = (seconds: number) => {
+    const clamped = clampDuration(seconds);
+    if (clamped === form.targetDurationS && !customDuration) return;
+    onTargetDurationChange?.(clamped);
+  };
+
+  const commitCustomDuration = () => {
+    const parsed = Number(customDraft ?? form.targetDurationS);
+    setCustomDraft(null);
+    requestTargetDuration(Number.isFinite(parsed) ? parsed : DEFAULT_TARGET_DURATION_S);
+  };
+
+  const isCustom =
+    customDuration || !isPresetTargetDuration(form.targetDurationS);
 
   return (
     <form
-      className="panel space-y-5 p-5"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit();
-      }}
+      className="panel space-y-6 p-5"
+      onSubmit={(e) => e.preventDefault()}
     >
-      <div>
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-          Assets
-        </h2>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <MultiVideoField clips={form.localClips} onClips={onLocalClipsChange} />
-          <AudioField file={form.audio} onFile={(audio) => onPatch({ audio })} />
+      <section className="space-y-3">
+        <div>
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+            Step 1 — Target length
+          </h2>
+          <p className="mt-1 text-xs text-monitor-muted">
+            Pick how long the short should be before analyzing your track.
+          </p>
         </div>
-      </div>
-
-      <div>
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-          Hook
-        </h2>
-        <div className="mt-3 grid gap-4">
-          <label className="block">
-            <span className="field-label">Headline</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {TARGET_DURATION_PRESETS.map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              disabled={disabled}
+              className={durationChipClass(
+                !isCustom && form.targetDurationS === preset.value,
+              )}
+              onClick={() => {
+                setCustomDuration(false);
+                setCustomDraft(null);
+                requestTargetDuration(preset.value);
+              }}
+            >
+              {preset.label}
+              {preset.value === DEFAULT_TARGET_DURATION_S && (
+                <span className="ml-1 text-[10px] font-normal opacity-60">
+                  default
+                </span>
+              )}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={disabled}
+            className={durationChipClass(isCustom)}
+            onClick={() => setCustomDuration(true)}
+          >
+            Custom
+          </button>
+        </div>
+        {isCustom && (
+          <label className="block max-w-[140px]">
+            <span className="field-label">Seconds</span>
             <input
-              className="field-input"
+              type="number"
+              min={CUSTOM_DURATION_MIN_S}
+              max={CUSTOM_DURATION_MAX_S}
+              className="field-input mt-1"
+              disabled={disabled}
+              value={customDraft ?? String(form.targetDurationS)}
+              onChange={(e) => setCustomDraft(e.target.value)}
+              onBlur={commitCustomDuration}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitCustomDuration();
+                }
+              }}
+            />
+          </label>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+            Step 2 — Music
+          </h2>
+          <p className="mt-1 text-xs text-monitor-muted">
+            Drop your track — we analyze beats and suggest the best window for{" "}
+            {form.targetDurationS}s.
+          </p>
+        </div>
+        <label htmlFor={audioInputId} className="block">
+          <div className="flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border bg-monitor-bg/50 px-4 py-4 text-center transition hover:border-scope-dim">
+            <input
+              id={audioInputId}
+              type="file"
+              accept="audio/*"
+              className="sr-only"
+              disabled={disabled || analyzing}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onAudioSelected(file);
+                e.target.value = "";
+              }}
+            />
+            <span className="text-xs text-monitor-muted">
+              {audioName ?? "Drop music here or click to browse"}
+            </span>
+            {analyzing && (
+              <span className="mt-2 font-mono text-[11px] text-scope-trace">
+                Analyzing audio…
+              </span>
+            )}
+          </div>
+        </label>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+            Step 3 — Hook & overlay
+          </h2>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className="field-label">Hook text</span>
+            <input
+              className="field-input mt-1"
               value={form.hookText}
               onChange={(e) => onPatch({ hookText: e.target.value })}
-              required
             />
           </label>
           <label className="block">
-            <span className="field-label">Emphasis words (comma-separated)</span>
+            <span className="field-label">Emphasis words</span>
             <input
-              className="field-input font-mono text-xs"
+              className="field-input mt-1"
               value={form.emphasisWords}
               onChange={(e) => onPatch({ emphasisWords: e.target.value })}
-            />
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-          Style
-        </h2>
-        <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="field-label">Fill color</span>
-            <input
-              type="color"
-              className="h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
-              value={form.fillColor}
-              onChange={(e) => onPatch({ fillColor: e.target.value })}
+              placeholder="30, days"
             />
           </label>
           <label className="block">
-            <span className="field-label">Emphasis color</span>
-            <input
-              type="color"
-              className="h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
-              value={form.emphasisColor}
-              onChange={(e) => onPatch({ emphasisColor: e.target.value })}
-            />
-          </label>
-          <label className="block sm:col-span-2">
             <span className="field-label">Font</span>
             <select
-              className="field-select"
-              value={
-                HOOK_FONT_OPTIONS.some((f) => f.value === form.fontFamily)
-                  ? form.fontFamily
-                  : DEFAULT_HOOK_FONT
-              }
+              className="field-select mt-1"
+              value={form.fontFamily}
               onChange={(e) => onPatch({ fontFamily: e.target.value })}
             >
               {HOOK_FONT_OPTIONS.map((font) => (
@@ -243,72 +222,43 @@ export function JobForm({
               ))}
             </select>
           </label>
-          <label className="block sm:col-span-2">
-            <span className="field-label">Safe padding ({form.safePaddingPct}%)</span>
+          <label className="block">
+            <span className="field-label">Fill color</span>
             <input
-              type="range"
-              min={5}
-              max={20}
+              type="color"
+              className="mt-1 h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
+              value={form.fillColor}
+              onChange={(e) => onPatch({ fillColor: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">Emphasis color</span>
+            <input
+              type="color"
+              className="mt-1 h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
+              value={form.emphasisColor}
+              onChange={(e) => onPatch({ emphasisColor: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <span className="field-label">Safe padding %</span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              className="field-input mt-1"
               value={form.safePaddingPct}
-              onChange={(e) => onPatch({ safePaddingPct: Number(e.target.value) })}
-              className="w-full accent-scope-trace"
+              onChange={(e) =>
+                onPatch({ safePaddingPct: Number(e.target.value) || 10 })
+              }
             />
           </label>
         </div>
-      </div>
+      </section>
 
-      <div>
-        <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-          Music window
-        </h2>
-        <p className="mt-1 text-xs text-monitor-muted">
-          Target short length for long tracks — analysis will suggest the best blocks.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {TARGET_PRESETS.map((seconds) => (
-            <button
-              key={seconds}
-              type="button"
-              className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
-                !form.useFullTrack && form.targetDurationS === seconds
-                  ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
-                  : "border-monitor-border text-monitor-muted hover:border-scope-dim"
-              }`}
-              onClick={() => onPatch({ targetDurationS: seconds, useFullTrack: false })}
-            >
-              {seconds}s
-            </button>
-          ))}
-          <button
-            type="button"
-            className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
-              form.useFullTrack
-                ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
-                : "border-monitor-border text-monitor-muted hover:border-scope-dim"
-            }`}
-            onClick={() => onPatch({ useFullTrack: true })}
-          >
-            Full track
-          </button>
-        </div>
-      </div>
-
-      <button
-        type="submit"
-        className="btn-primary w-full"
-        disabled={submitting || disabled || missingAssets}
-      >
-        {submitting ? "Running pipeline…" : "Render"}
-      </button>
-      {(disabledReason || missingAssets) && !submitting && (
-        <p className="text-center text-xs text-hook-gold" role="status">
-          {missingAssets
-            ? "Add at least one clip and a music track to enable Render."
-            : disabledReason}
-        </p>
+      {disabledReason && (
+        <p className="text-xs text-hook-gold">{disabledReason}</p>
       )}
     </form>
   );
 }
-
-export type { FormState };

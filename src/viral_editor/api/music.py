@@ -122,12 +122,14 @@ def refresh_music_selection(
     )
 
     if target_changed or full_track_changed:
+        # Prior block ids (e.g. block_c or block_full) may not exist in the new plan.
+        music.selected_block_id = None
         plan = suggest_blocks_from_artifacts(
             temp_dir,
             timeline,
             envelope,
             target_duration_s=music.target_duration_s,
-            selected_block_id=music.selected_block_id,
+            selected_block_id=None,
         )
     else:
         try:
@@ -148,12 +150,21 @@ def refresh_music_selection(
         music.selected_block_id = plan.selected_block_id
         plan = plan.model_copy(update={"use_full_track": True, "selected_block_id": music.selected_block_id})
     elif music.selected_block_id:
-        plan = apply_block_selection(plan, music.selected_block_id)
-        block = selected_block(plan)
-        if block is not None:
-            music.start_s = block.start_s
-            music.end_s = block.end_s
-            music.selected_block_id = block.id
+        if any(block.id == music.selected_block_id for block in plan.blocks):
+            plan = apply_block_selection(plan, music.selected_block_id)
+            block = selected_block(plan)
+            if block is not None:
+                music.start_s = block.start_s
+                music.end_s = block.end_s
+                music.selected_block_id = block.id
+        else:
+            music.selected_block_id = None
+            block = selected_block(plan)
+            if block is not None:
+                music.start_s = block.start_s
+                music.end_s = block.end_s
+                music.selected_block_id = block.id
+                plan = plan.model_copy(update={"selected_block_id": block.id})
     elif selected_block_id is None and not target_changed and not full_track_changed:
         block = selected_block(plan)
         if block is not None:

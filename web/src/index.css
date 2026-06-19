@@ -55,4 +55,21 @@
   .btn-ghost {
     @apply inline-flex items-center justify-center rounded-md border border-monitor-border px-3 py-2 text-sm text-monitor-text transition hover:border-scope-dim hover:text-scope-trace;
   }
+
+  .duration-chip-best-loop {
+    @apply border-hook-gold/20 bg-hook-gold/[0.03] text-monitor-muted;
+    animation: loop-hint-pulse 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes loop-hint-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(244 196 48 / 0.06);
+    border-color: rgb(244 196 48 / 0.2);
+  }
+  50% {
+    box-shadow: 0 0 10px 1px rgb(244 196 48 / 0.16);
+    border-color: rgb(244 196 48 / 0.55);
+  }
 }

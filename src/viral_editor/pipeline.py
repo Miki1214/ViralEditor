@@ -54,6 +54,7 @@ class PipelineResult:
     output_duration_s: float | None = None
     artifacts: list[str] = field(default_factory=list)
     output_path: Path | None = None
+    status: str = "completed"
 
 
 def _emit(
@@ -102,8 +103,8 @@ def run_pipeline(
         else:
             loaded = cfg
             logger.info(
-                "Job loaded — video=%s, audio=%s, output=%s",
-                loaded.video_path,
+                "Job loaded — clips=%d, audio=%s, output=%s",
+                len(loaded.effective_clips()),
                 loaded.audio_path,
                 loaded.output_path,
             )
@@ -210,6 +211,28 @@ def run_pipeline(
                 f"blocks={len(block_plan.blocks)}"
             ),
         )
+
+        is_draft = not loaded.effective_clips()
+        if is_draft:
+            from viral_editor.api.storyboard import persist_storyboard_for_job
+
+            persist_storyboard_for_job(loaded, work_temp, sections=sections)
+            for stage in PIPELINE_STAGES[3:]:
+                _emit(
+                    on_event,
+                    stage,
+                    "skip",
+                    message="Awaiting slot clip assignment",
+                )
+            result = PipelineResult(
+                config=loaded,
+                output_duration_s=output_duration_s,
+                artifacts=artifacts,
+                output_path=None,
+                status="draft",
+            )
+            _emit(on_event, "pipeline", "complete")
+            return result
 
         if loaded.music.start_s is not None and loaded.music.end_s is not None:
             ramp_timeline = trim_timeline_to_window(
