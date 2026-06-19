@@ -22,6 +22,37 @@ PHRASE_BAR_OPTIONS = (4, 8, 16)
 CANONICAL_TARGET_DURATIONS_S = (5, 10, 15, 20, 25, 30, 45, 60)
 
 
+def target_duration_bounds(target_duration_s: float) -> tuple[float, float]:
+    """Return the half-open duration window ``[min_s, max_s)`` for a preset target.
+
+    Each chip length owns a non-overlapping bucket so adjacent presets (e.g. 20s
+    vs 25s) cannot pick the same phrase loop.
+    """
+    target = float(target_duration_s)
+    presets = CANONICAL_TARGET_DURATIONS_S
+
+    for index, preset in enumerate(presets):
+        if abs(preset - target) < 1e-6:
+            max_s = float(presets[index + 1]) if index + 1 < len(presets) else float("inf")
+            return float(preset), max_s
+
+    for index in range(len(presets) - 1, -1, -1):
+        if target >= presets[index] - 1e-6:
+            max_s = float(presets[index + 1]) if index + 1 < len(presets) else float("inf")
+            return float(presets[index]), max_s
+
+    return float(presets[0]), float(presets[1])
+
+
+def _duration_in_target_window(duration_s: float, target_duration_s: float) -> bool:
+    min_dur, max_dur = target_duration_bounds(target_duration_s)
+    if duration_s + 1e-6 < min_dur:
+        return False
+    if max_dur == float("inf"):
+        return True
+    return duration_s < max_dur - 1e-6
+
+
 @dataclass(frozen=True)
 class _Candidate:
     start_s: float
@@ -177,8 +208,7 @@ def _enumerate_phrase_candidates(
     beat_times = features.beat_times_s
     downbeats = features.downbeat_times_s
     bpm = features.meta.global_bpm
-    min_dur = target_duration_s * (1.0 - LOOP_MAX_DRIFT_RATIO)
-    max_dur = target_duration_s * (1.0 + LOOP_MAX_DRIFT_RATIO)
+    min_dur, max_dur = target_duration_bounds(target_duration_s)
 
     downbeat_indices = [_beat_index(beat_times, t) for t in downbeats]
     if not downbeat_indices:
@@ -195,9 +225,9 @@ def _enumerate_phrase_candidates(
             while end_idx < len(beat_times):
                 end_s = float(beat_times[min(end_idx, len(beat_times) - 1)])
                 duration = end_s - start_s
-                if duration > max_dur + 1e-6:
+                if max_dur != float("inf") and duration >= max_dur - 1e-6:
                     break
-                if duration >= min_dur - 1e-6:
+                if duration >= min_dur - 1e-6 and _duration_in_target_window(duration, target_duration_s):
                     loop_q = _loop_quality(start_idx, end_idx, features)
                     window_trans = _transients_in_window(timeline.transients, start_s, end_s)
                     drops = [t for t in window_trans if t.type == "drop"]

@@ -8,10 +8,11 @@ from viral_editor.audio.block_planner import selected_block
 from viral_editor.audio.features import BeatSyncFeatures
 from viral_editor.audio.storyboard import (
     apply_hook_inversion_layout,
+    hook_payoff_downbeats_s,
     merge_storyboard_updates,
     plan_storyboard,
 )
-from viral_editor.config import JobConfig
+from viral_editor.config import JobConfig, TeaserConfig
 from viral_editor.ingest.loader import probe_media
 from viral_editor.models import ClipInput, MediaInfo, SpatialCrop, Storyboard, StorySlot, write_artifact
 from viral_editor.video.clip_reel import normalize_crop_range
@@ -93,6 +94,38 @@ def hook_output_budget_s(storyboard: Storyboard) -> float:
     return (hook_start.target_duration_s if hook_start else 0.0) + (
         hook_end.target_duration_s if hook_end else 0.0
     )
+
+
+def teaser_settings_response(
+    config: JobConfig,
+    storyboard: Storyboard,
+    temp_dir: Path | None = None,
+) -> dict[str, object]:
+    """Build teaser settings payload including valid payoff downbeat positions."""
+    teaser: TeaserConfig = config.teaser
+    payoff_downbeats: list[float] = []
+    if teaser.enabled:
+        features: BeatSyncFeatures | None = None
+        if temp_dir is not None:
+            try:
+                from viral_editor.api.music import load_beat_features
+
+                features = load_beat_features(temp_dir)
+            except FileNotFoundError:
+                features = None
+        payoff_downbeats = hook_payoff_downbeats_s(
+            hook_output_budget_s(storyboard),
+            features,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+    return {
+        "enabled": teaser.enabled,
+        "tail_fraction": teaser.tail_fraction,
+        "duration_s": teaser.duration_s,
+        "mask": teaser.mask,
+        "payoff_downbeats_s": payoff_downbeats,
+    }
 
 
 def _is_hook_family_role(role: str) -> bool:

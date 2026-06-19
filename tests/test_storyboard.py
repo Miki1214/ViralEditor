@@ -8,8 +8,10 @@ import pytest
 from viral_editor.audio.features import BeatFeaturesMeta, BeatSyncFeatures
 from viral_editor.audio.storyboard import (
     apply_hook_inversion_layout,
+    hook_payoff_downbeats_s,
     plan_storyboard,
     relayout_beat_aligned_timeline,
+    snap_hook_payoff_s,
     storyboard_filled_enough,
     storyboard_to_segments,
 )
@@ -126,8 +128,14 @@ def test_apply_hook_inversion_layout_splits_hook_slots() -> None:
     assert roles[-1] == "hook_end"
     hook_start = split.slots[0]
     hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
-    assert hook_start.target_duration_s == pytest.approx(1.0)
-    assert hook_end.target_duration_s == pytest.approx(hook.target_duration_s - 1.0)
+    positions = hook_payoff_downbeats_s(
+        hook.target_duration_s,
+        None,
+        music_start_s=storyboard.music_start_s,
+        music_end_s=storyboard.music_end_s,
+    )
+    assert hook_start.target_duration_s in positions
+    assert hook_end.target_duration_s == pytest.approx(hook.target_duration_s - hook_start.target_duration_s)
     assert hook_start.crop_start_s == pytest.approx(2.4)
     assert hook_end.crop_end_s == pytest.approx(2.4)
 
@@ -136,26 +144,46 @@ def test_hook_inversion_realigns_slot_boundaries_to_downbeats() -> None:
     block = _block(24.0)
     features = _features([10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 34.0])
     storyboard = plan_storyboard(block, features=features, transients=[])
+    hook = storyboard.slots[0]
     split = apply_hook_inversion_layout(
         storyboard,
         enabled=True,
-        payoff_duration_s=1.2,
+        payoff_duration_s=2.0,
         tail_fraction=0.2,
         features=features,
     )
-    relative_downbeats = {
-        round(float(t - block.start_s), 3)
-        for t in features.downbeat_times_s.tolist()
-        if block.start_s - 1e-6 <= t <= block.end_s + 1e-6
-    }
     hook_start = next(slot for slot in split.slots if slot.role == "hook_start")
     hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
-    assert round(hook_start.out_end_s, 3) in relative_downbeats
-    assert round(hook_end.out_start_s, 3) in relative_downbeats
-    for slot in split.slots:
-        if slot.role in ("clip", "punch"):
-            assert round(slot.out_start_s, 3) in relative_downbeats
-            assert round(slot.out_end_s, 3) in relative_downbeats
+    assert hook_start.target_duration_s == pytest.approx(2.0)
+    assert hook_end.target_duration_s == pytest.approx(hook.target_duration_s - 2.0)
+    ordered = sorted(split.slots, key=lambda slot: slot.order)
+    assert ordered[0].out_start_s == pytest.approx(0.0)
+    assert ordered[-1].out_end_s == pytest.approx(split.total_duration_s)
+    for left, right in zip(ordered, ordered[1:]):
+        assert left.out_end_s == pytest.approx(right.out_start_s)
+
+
+def test_hook_payoff_downbeats_s_lists_valid_positions() -> None:
+    block = _block(17.74)
+    features = _features([10.0, 11.857, 13.714, 15.571, 27.74])
+    storyboard = plan_storyboard(block, features=features, transients=[])
+    hook_budget = storyboard.slots[0].target_duration_s
+    positions = hook_payoff_downbeats_s(
+        hook_budget,
+        features,
+        music_start_s=storyboard.music_start_s,
+        music_end_s=storyboard.music_end_s,
+    )
+    assert len(positions) >= 1
+    assert all(0.25 <= value <= hook_budget - 0.25 for value in positions)
+    snapped = snap_hook_payoff_s(
+        3.0,
+        hook_budget,
+        features,
+        music_start_s=storyboard.music_start_s,
+        music_end_s=storyboard.music_end_s,
+    )
+    assert snapped in positions
 
 
 def test_relayout_beat_aligned_timeline_preserves_total_duration() -> None:

@@ -43,6 +43,7 @@ from viral_editor.api.storyboard import (
     sync_config_clips_from_storyboard,
     sync_teaser_duration_from_layout,
     sync_storyboard_hook_layout,
+    teaser_settings_response,
     update_slot_crop,
     update_slot_transform,
 )
@@ -654,6 +655,7 @@ def _storyboard_response(
     *,
     preview_ready: bool,
     config,
+    temp_dir=None,
 ) -> StoryboardResponse:
     return StoryboardResponse(
         music_block_id=storyboard.music_block_id,
@@ -663,10 +665,7 @@ def _storyboard_response(
         loop_to_hook=storyboard.loop_to_hook,
         preview_ready=preview_ready,
         teaser=TeaserSettingsResponse(
-            enabled=config.teaser.enabled,
-            tail_fraction=config.teaser.tail_fraction,
-            duration_s=config.teaser.duration_s,
-            mask=config.teaser.mask,
+            **teaser_settings_response(config, storyboard, temp_dir),
         ),
         spatial_fx=SpatialFxSettingsResponse(
             enabled=config.spatial_fx.enabled,
@@ -727,6 +726,7 @@ def get_storyboard(job_id: str, request: Request) -> StoryboardResponse:
         storyboard,
         preview_ready=storyboard_filled_enough(storyboard),
         config=config,
+        temp_dir=temp_dir,
     )
 
 
@@ -755,6 +755,7 @@ def patch_effects(
         temp_dir=temp_dir,
     )
     updated_config = sync_teaser_duration_from_layout(updated_config, updated_storyboard)
+    updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)
     store.update_config(job_id, updated_config)
     write_job_config(updated_config, job.workspace)
     persist_storyboard(temp_dir, updated_storyboard)
@@ -764,6 +765,7 @@ def patch_effects(
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
         config=updated_config,
+        temp_dir=temp_dir,
     )
 
 
@@ -820,6 +822,7 @@ def patch_storyboard(
         updated,
         preview_ready=storyboard_filled_enough(updated),
         config=job.config,
+        temp_dir=temp_dir,
     )
 
 
@@ -914,6 +917,7 @@ async def assign_slot_video(
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
         config=updated_config,
+        temp_dir=temp_dir,
     )
 
 
@@ -965,6 +969,7 @@ def patch_slot_crop(
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
         config=updated_config,
+        temp_dir=temp_dir,
     )
 
 
@@ -1026,6 +1031,7 @@ def patch_slot_transform(
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
         config=updated_config,
+        temp_dir=temp_dir,
     )
 
 
@@ -1061,6 +1067,7 @@ def clear_slot_video(job_id: str, slot_id: str, request: Request) -> StoryboardR
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
         config=updated_config,
+        temp_dir=temp_dir,
     )
 
 

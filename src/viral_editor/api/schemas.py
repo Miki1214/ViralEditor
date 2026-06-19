@@ -132,6 +132,7 @@ class TeaserSettingsResponse(BaseModel):
     tail_fraction: float
     duration_s: float
     mask: Literal["vignette", "dir_blur"]
+    payoff_downbeats_s: list[float] = Field(default_factory=list)
 
 
 class SpatialFxSettingsResponse(BaseModel):

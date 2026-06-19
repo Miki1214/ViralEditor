@@ -184,6 +184,8 @@ export interface TeaserSettings {
   tail_fraction: number;
   duration_s: number;
   mask: TeaserMask;
+  /** Valid hook-start durations on the downbeat grid; length 1 = locked. */
+  payoff_downbeats_s?: number[];
 }
 
 export interface SpatialFxSettings {

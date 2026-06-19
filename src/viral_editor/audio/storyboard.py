@@ -191,13 +191,95 @@ def _snap_time_to_downbeat(
     return round(min(candidates, key=lambda t: abs(t - clamped)), 6)
 
 
+def hook_payoff_downbeats_s(
+    hook_budget_s: float,
+    features: BeatSyncFeatures | None,
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> list[float]:
+    """Valid hook-start durations on the music downbeat grid within hook budget."""
+    if hook_budget_s <= 2 * _HOOK_MIN_PART_S:
+        return [round(max(_HOOK_MIN_PART_S, hook_budget_s - _HOOK_MIN_PART_S), 6)]
+
+    min_s = _HOOK_MIN_PART_S
+    max_s = round(hook_budget_s - _HOOK_MIN_PART_S, 6)
+    downbeats = _relative_downbeats(
+        features,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    if not downbeats or downbeats[0] > 1e-6:
+        downbeats = [0.0, *downbeats]
+    candidates = sorted({round(t, 6) for t in downbeats if min_s - 1e-6 <= t <= max_s + 1e-6})
+    if candidates:
+        return candidates
+    fallback = round(min(max(hook_budget_s * 0.5, min_s), max_s), 6)
+    return [fallback]
+
+
+def snap_hook_payoff_s(
+    requested_s: float,
+    hook_budget_s: float,
+    features: BeatSyncFeatures | None,
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> float:
+    """Snap a requested hook payoff to the nearest valid downbeat position."""
+    positions = hook_payoff_downbeats_s(
+        hook_budget_s,
+        features,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    if not positions:
+        return round(requested_s, 6)
+    clamped = max(
+        _HOOK_MIN_PART_S,
+        min(requested_s, hook_budget_s - _HOOK_MIN_PART_S),
+    )
+    return min(positions, key=lambda t: abs(t - clamped))
+
+
+def _min_slot_duration_s(role: str) -> float:
+    if role in ("hook_start", "hook_end"):
+        return _HOOK_MIN_PART_S
+    return _MIN_SLOT_S
+
+
+def _place_timeline_slot(
+    slot: StorySlot,
+    *,
+    start_s: float,
+    end_s: float,
+    target_duration_s: float | None = None,
+) -> StorySlot:
+    """Place a slot on the output timeline without inflating hook part durations."""
+    if target_duration_s is not None:
+        duration = round(target_duration_s, 6)
+    elif slot.role in ("clip", "punch"):
+        duration = round(max(end_s - start_s, _MIN_SLOT_S), 6)
+        end_s = start_s + duration
+    else:
+        duration = round(max(end_s - start_s, _min_slot_duration_s(slot.role)), 6)
+        end_s = start_s + duration
+    return slot.model_copy(
+        update={
+            "out_start_s": round(start_s, 6),
+            "out_end_s": round(end_s, 6),
+            "target_duration_s": duration,
+        }
+    )
+
+
 def _slot_from_boundary(
     slot: StorySlot,
     *,
     start_s: float,
     end_s: float,
 ) -> StorySlot:
-    duration = max(end_s - start_s, _MIN_SLOT_S)
+    duration = max(end_s - start_s, _min_slot_duration_s(slot.role))
     end_s = start_s + duration
     return slot.model_copy(
         update={
@@ -243,46 +325,65 @@ def relayout_beat_aligned_timeline(
     ]
 
     if hook_start is not None and hook_end is not None:
-        hook_budget = hook_start.target_duration_s + hook_end.target_duration_s
+        payoff_d = hook_start.target_duration_s
+        build_d = hook_end.target_duration_s
+        hook_budget = round(payoff_d + build_d, 6)
+        max_payoff = max(hook_budget - _HOOK_MIN_PART_S, _HOOK_MIN_PART_S)
         payoff_end = _snap_time_to_downbeat(
-            hook_start.target_duration_s,
+            payoff_d,
             downbeats,
             min_s=_HOOK_MIN_PART_S,
-            max_s=max(hook_budget - _HOOK_MIN_PART_S, _HOOK_MIN_PART_S),
+            max_s=max_payoff,
         )
-        build_start = _snap_time_to_downbeat(
-            total_duration_s - hook_end.target_duration_s,
-            downbeats,
-            min_s=payoff_end + _MIN_SLOT_S * max(len(middle), 1),
-            max_s=total_duration_s - _HOOK_MIN_PART_S,
-        )
-        if build_start <= payoff_end + _MIN_SLOT_S * 0.5:
-            payoff_end = round(min(hook_start.target_duration_s, hook_budget - _HOOK_MIN_PART_S), 6)
-            build_start = round(total_duration_s - hook_end.target_duration_s, 6)
+        build_d = round(hook_budget - payoff_end, 6)
+        build_d = max(build_d, _HOOK_MIN_PART_S)
+        payoff_end = round(hook_budget - build_d, 6)
+        build_start = round(total_duration_s - build_d, 6)
+        middle_min = payoff_end + _MIN_SLOT_S * max(len(middle), 1)
+        if middle and build_start < middle_min:
+            build_start = round(middle_min, 6)
+            build_d = max(round(total_duration_s - build_start, 6), _HOOK_MIN_PART_S)
+            payoff_end = max(round(hook_budget - build_d, 6), _HOOK_MIN_PART_S)
+            build_d = round(hook_budget - payoff_end, 6)
+            build_start = round(total_duration_s - build_d, 6)
 
         relaid = [
-            _slot_from_boundary(hook_start, start_s=0.0, end_s=payoff_end),
+            _place_timeline_slot(
+                hook_start,
+                start_s=0.0,
+                end_s=payoff_end,
+                target_duration_s=payoff_end,
+            ),
         ]
         if middle:
+            span = build_start - payoff_end
             bounds = _compute_boundaries(
                 payoff_end,
                 build_start,
                 downbeats,
                 len(middle),
             )
+            bounds[0] = payoff_end
+            bounds[-1] = build_start
+            if any(bounds[i + 1] - bounds[i] < _MIN_SLOT_S - 1e-6 for i in range(len(middle))):
+                step = span / len(middle)
+                bounds = [
+                    round(payoff_end + step * index, 6) for index in range(len(middle))
+                ] + [round(build_start, 6)]
             for index, slot in enumerate(middle):
                 relaid.append(
-                    _slot_from_boundary(
+                    _place_timeline_slot(
                         slot,
                         start_s=bounds[index],
                         end_s=bounds[index + 1],
                     )
                 )
         relaid.append(
-            _slot_from_boundary(
+            _place_timeline_slot(
                 hook_end,
                 start_s=build_start,
                 end_s=total_duration_s,
+                target_duration_s=build_d,
             )
         )
         return relaid
@@ -406,7 +507,17 @@ def apply_hook_inversion_layout(
         )
         crop_start, crop_end = _full_hook_crop(hook_start, hook_end)
 
-    payoff_d = min(max(payoff_duration_s, _HOOK_MIN_PART_S), hook_budget - _HOOK_MIN_PART_S)
+    payoff_d = min(
+        max(payoff_duration_s, _HOOK_MIN_PART_S),
+        hook_budget - _HOOK_MIN_PART_S,
+    )
+    payoff_d = snap_hook_payoff_s(
+        payoff_d,
+        hook_budget,
+        features,
+        music_start_s=storyboard.music_start_s,
+        music_end_s=storyboard.music_end_s,
+    )
     build_d = hook_budget - payoff_d
     head, tail = split_hook_crop(crop_start, crop_end, tail_fraction)
 

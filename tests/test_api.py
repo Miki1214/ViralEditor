@@ -364,3 +364,111 @@ def test_patch_clips_recomputes_reel(
     assert len(body["clips"]) == 2
     assert (temp_dir / "clip_reel.json").is_file()
     assert (temp_dir / "speed_segments.json").is_file()
+
+
+def test_patch_effects_updates_hook_split_durations(
+    client: TestClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from viral_editor.api.store import job_workspace
+    from viral_editor.api.storyboard import persist_storyboard, refresh_hook_inversion_layout
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.config import JobConfig
+    from viral_editor.models import AudioTimeline, MusicBlock, MusicBlockPlan, write_artifact
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", lambda *args, **kwargs: None)
+
+    response = client.post(
+        "/api/jobs",
+        data={"hook_text": "Hook split"},
+        files={"audio": ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg")},
+    )
+    assert response.status_code == 201
+    job_id = response.json()["id"]
+    temp_dir = job_workspace(job_id) / "temp"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    write_artifact(
+        AudioTimeline(global_bpm=129.0, audio_duration_seconds=17.74, sample_rate=22050, transients=[]),
+        "audio_timeline",
+        temp_dir,
+    )
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=17.74,
+        duration_s=17.74,
+        score=0.9,
+        drop_count=1,
+        transient_count=1,
+        label="Intro",
+        reason="test",
+    )
+    write_artifact(
+        MusicBlockPlan(
+            target_duration_s=17.74,
+            track_duration_s=17.74,
+            selected_block_id="block_a",
+            blocks=[block],
+        ),
+        "music_blocks",
+        temp_dir,
+    )
+    from viral_editor.audio.features import BeatFeaturesMeta, BeatSyncFeatures, save_features
+    import numpy as np
+
+    downbeats = np.array([0.0, 1.857, 3.714, 5.571, 17.74], dtype=np.float64)
+    save_features(
+        BeatSyncFeatures(
+            beat_times_s=downbeats,
+            downbeat_times_s=downbeats,
+            chroma_sync=np.zeros((12, len(downbeats))),
+            mfcc_sync=np.zeros((20, len(downbeats))),
+            rms_sync=np.zeros((1, len(downbeats))),
+            contrast_sync=np.zeros((7, len(downbeats))),
+            tonnetz_sync=np.zeros((6, len(downbeats))),
+            meta=BeatFeaturesMeta(
+                engine="test",
+                global_bpm=129.0,
+                key="G#",
+                n_beats=len(downbeats),
+                n_downbeats=len(downbeats),
+                hop_length=512,
+                sample_rate=22050,
+            ),
+        ),
+        temp_dir / "features.npz",
+    )
+    job = client.get(f"/api/jobs/{job_id}").json()
+    config = JobConfig.model_validate(job["config"]).model_copy(
+        update={
+            "teaser": JobConfig.model_validate(job["config"]).teaser.model_copy(
+                update={"enabled": True, "duration_s": 1.8, "tail_fraction": 0.17}
+            )
+        }
+    )
+    client.app.state.job_store.update_config(job_id, config)
+    storyboard = refresh_hook_inversion_layout(plan_storyboard(block), config, temp_dir=temp_dir)
+    persist_storyboard(temp_dir, storyboard)
+
+    before = client.get(f"/api/jobs/{job_id}/storyboard").json()
+    hook_start = next(slot for slot in before["slots"] if slot["role"] == "hook_start")
+    hook_end = next(slot for slot in before["slots"] if slot["role"] == "hook_end")
+    positions = before["teaser"]["payoff_downbeats_s"]
+    assert len(positions) >= 1
+    assert hook_start["target_duration_s"] in positions
+
+    target = positions[-1] if len(positions) > 1 else positions[0]
+    patched = client.patch(
+        f"/api/jobs/{job_id}/effects",
+        json={"teaser": {"duration_s": target + 0.4}},
+    )
+    assert patched.status_code == 200
+    body = patched.json()
+    hook_start = next(slot for slot in body["slots"] if slot["role"] == "hook_start")
+    hook_end = next(slot for slot in body["slots"] if slot["role"] == "hook_end")
+    assert hook_start["target_duration_s"] in body["teaser"]["payoff_downbeats_s"]
+    assert hook_end["target_duration_s"] < hook_start["target_duration_s"]
+    assert body["teaser"]["duration_s"] == pytest.approx(hook_start["target_duration_s"])

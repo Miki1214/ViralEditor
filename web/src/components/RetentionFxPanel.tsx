@@ -84,6 +84,8 @@ function sliderReleaseHandlers(
     },
     onPointerDown: () => cancelDrag(),
     onPointerUp: commit,
+    onMouseUp: commit,
+    onTouchEnd: commit,
     onKeyUp: commit,
   };
 }
@@ -120,6 +122,20 @@ function hookBudgetS(storyboard: StoryboardPayload): number {
   const start = storyboard.slots.find((slot) => slot.role === "hook_start");
   const end = storyboard.slots.find((slot) => slot.role === "hook_end");
   return (start?.target_duration_s ?? 0) + (end?.target_duration_s ?? 0);
+}
+
+function nearestPayoffIndex(value: number, positions: number[]): number {
+  if (positions.length === 0) return 0;
+  let best = 0;
+  let bestDist = Math.abs(positions[0] - value);
+  for (let i = 1; i < positions.length; i += 1) {
+    const dist = Math.abs(positions[i] - value);
+    if (dist < bestDist) {
+      best = i;
+      bestDist = dist;
+    }
+  }
+  return best;
 }
 
 function Toggle({
@@ -170,22 +186,35 @@ export function RetentionFxPanel({
   const { teaser, spatial_fx: spatialFx } = storyboard;
   const debouncedPatch = useDebouncedPatch(onPatch);
   const hookBudget = useMemo(() => hookBudgetS(storyboard), [storyboard.slots]);
-  const payoffMaxS = Math.max(0.75, Math.min(4, hookBudget - 0.25));
-  const serverPayoffS = Math.min(
-    teaser.duration_s,
-    Math.max(0.5, hookBudget - 0.25),
+  const payoffDownbeats = useMemo(
+    () => teaser.payoff_downbeats_s ?? [],
+    [teaser.payoff_downbeats_s],
   );
+  const payoffLocked = teaser.enabled && payoffDownbeats.length <= 1;
+  const serverPayoffIndex = nearestPayoffIndex(teaser.duration_s, payoffDownbeats);
+  const serverPayoffS =
+    payoffDownbeats.length > 0
+      ? payoffDownbeats[serverPayoffIndex]
+      : Math.min(teaser.duration_s, Math.max(0.5, hookBudget - 0.25));
 
   const sourceSplit = useSliderDraft(
     Math.round(teaser.tail_fraction * 100),
     debouncedPatch,
     (value) => ({ teaser: { tail_fraction: value / 100 } }),
   );
-  const payoffSplit = useSliderDraft(
-    serverPayoffS,
-    debouncedPatch,
-    (value) => ({ teaser: { duration_s: value } }),
-  );
+  const [payoffIndex, setPayoffIndex] = useState(serverPayoffIndex);
+  const payoffIndexRef = useRef(serverPayoffIndex);
+
+  useEffect(() => {
+    payoffIndexRef.current = serverPayoffIndex;
+    setPayoffIndex(serverPayoffIndex);
+  }, [serverPayoffIndex, payoffDownbeats]);
+
+  const commitPayoffIndex = useCallback(() => {
+    const positions = payoffDownbeats;
+    if (positions.length === 0) return;
+    debouncedPatch.schedule({ teaser: { duration_s: positions[payoffIndexRef.current] } });
+  }, [debouncedPatch, payoffDownbeats]);
   const intensitySplit = useSliderDraft(
     Math.round(spatialFx.intensity * 100),
     debouncedPatch,
@@ -198,12 +227,19 @@ export function RetentionFxPanel({
   );
 
   const sourceSplitPct = sourceSplit.localValue;
-  const payoffS = payoffSplit.localValue;
+  const hookEndSlot = storyboard.slots.find((slot) => slot.role === "hook_end");
+  const payoffS =
+    payoffDownbeats.length > 0 ? payoffDownbeats[payoffIndex] ?? serverPayoffS : serverPayoffS;
   const intensityPct = intensitySplit.localValue;
   const maxEventsPerSecond = densitySplit.localValue;
 
-  const buildupS = Math.max(hookBudget - payoffS, 0.25);
+  const buildupFromSlots = hookEndSlot?.target_duration_s;
+  const buildupS =
+    buildupFromSlots != null && Math.abs(payoffS - serverPayoffS) < 0.05
+      ? buildupFromSlots
+      : Math.max(hookBudget - payoffS, 0.25);
   const payoffShare = hookBudget > 0 ? payoffS / hookBudget : 0.5;
+  const payoffStepCount = Math.max(payoffDownbeats.length - 1, 0);
 
   const fxCounts = useMemo(
     () =>
@@ -280,17 +316,23 @@ export function RetentionFxPanel({
                 <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-monitor-border" />
                 <input
                   type="range"
-                  min={0.5}
-                  max={payoffMaxS}
-                  step={0.1}
-                  disabled={saving || !teaser.enabled || hookBudget <= 0.75}
-                  value={payoffS}
+                  min={0}
+                  max={payoffStepCount}
+                  step={1}
+                  disabled={saving || !teaser.enabled || payoffLocked || payoffDownbeats.length === 0}
+                  value={payoffIndex}
                   className="relative z-[1] w-full"
-                  {...sliderReleaseHandlers(
-                    payoffSplit.setValue,
-                    payoffSplit.commit,
-                    payoffSplit.cancelDrag,
-                  )}
+                  onChange={(event) => {
+                    debouncedPatch.cancel();
+                    const index = Number(event.target.value);
+                    payoffIndexRef.current = index;
+                    setPayoffIndex(index);
+                  }}
+                  onPointerDown={() => debouncedPatch.cancel()}
+                  onPointerUp={commitPayoffIndex}
+                  onMouseUp={commitPayoffIndex}
+                  onTouchEnd={commitPayoffIndex}
+                  onKeyUp={commitPayoffIndex}
                 />
               </div>
               <span className="w-8 text-right tabular-nums text-scope-trace">
@@ -298,8 +340,11 @@ export function RetentionFxPanel({
               </span>
             </div>
             <p className="mt-1 font-mono text-[10px] text-monitor-muted">
-              Output timing — snapped to downbeats · {Math.round(payoffShare * 100)}% payoff ·{" "}
-              {Math.round((1 - payoffShare) * 100)}% build-up ({hookBudget.toFixed(1)}s hook budget)
+              {payoffLocked
+                ? `Locked to downbeat · ${payoffS.toFixed(1)}s payoff · ${buildupS.toFixed(1)}s build-up`
+                : payoffDownbeats.length > 1
+                  ? `${payoffDownbeats.length} downbeat positions · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`
+                  : `Snapped to downbeats · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`}
             </p>
           </label>
           <label className="block">

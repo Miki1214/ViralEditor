@@ -6,7 +6,10 @@ import numpy as np
 import pytest
 
 from viral_editor.audio.features import BeatSyncFeatures
-from viral_editor.audio.loop_planner import suggest_music_blocks_advanced
+from viral_editor.audio.loop_planner import (
+    suggest_music_blocks_advanced,
+    target_duration_bounds,
+)
 from viral_editor.models import AudioTimeline, MusicSection, Transient
 from tests.test_structure import _synthetic_abab_features
 
@@ -345,3 +348,35 @@ def test_advanced_planner_is_deterministic() -> None:
     first = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=15.0)
     second = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=15.0)
     assert first.model_dump() == second.model_dump()
+
+
+def test_target_duration_bounds_use_non_overlapping_buckets() -> None:
+    assert target_duration_bounds(20.0) == (20.0, 25.0)
+    assert target_duration_bounds(25.0) == (25.0, 30.0)
+    assert target_duration_bounds(15.0) == (15.0, 20.0)
+    assert target_duration_bounds(30.0) == (30.0, 45.0)
+    assert target_duration_bounds(60.0) == (60.0, float("inf"))
+
+
+def test_adjacent_targets_prefer_different_duration_windows() -> None:
+    from viral_editor.audio.loop_planner import _enumerate_phrase_candidates
+
+    features = _synthetic_abab_features(n_beats=320, bpm=129.0)
+    timeline = _timeline(120.0, bpm=129.0)
+    candidates_20 = _enumerate_phrase_candidates(
+        timeline, features, [], target_duration_s=20.0
+    )
+    candidates_25 = _enumerate_phrase_candidates(
+        timeline, features, [], target_duration_s=25.0
+    )
+    assert candidates_20
+    assert candidates_25
+    for candidate in candidates_20:
+        duration = candidate.end_s - candidate.start_s
+        assert 20.0 <= duration < 25.0
+    for candidate in candidates_25:
+        duration = candidate.end_s - candidate.start_s
+        assert 25.0 <= duration < 30.0
+    best_20 = max(candidates_20, key=lambda item: item.loop_quality)
+    best_25 = max(candidates_25, key=lambda item: item.loop_quality)
+    assert (best_20.start_s, best_20.end_s) != (best_25.start_s, best_25.end_s)
