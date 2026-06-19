@@ -18,6 +18,7 @@ interface StoryboardPanelProps {
     file: File,
     cropStartS: number,
     cropEndS: number,
+    transform?: { rotation_deg?: number; spatial_crop?: SpatialCrop | null },
   ) => Promise<void>;
   onUpdateSlotCrop: (
     slotId: string,
@@ -176,13 +177,13 @@ export function StoryboardPanel({
   const commitClip = async () => {
     if (!active || !localFile || durationS == null) return;
     const transform = slotTransform(active);
-    await onAssignClip(active.id, localFile, cropStartS, cropEndS);
-    if (transformNeedsSync(transform)) {
-      await onUpdateSlotTransform(active.id, {
-        rotation_deg: transform.rotation_deg,
-        spatial_crop: transform.spatial_crop,
-      });
-    }
+    await onAssignClip(
+      active.id,
+      localFile,
+      cropStartS,
+      cropEndS,
+      transformNeedsSync(transform) ? transform : undefined,
+    );
     setLocalFile(null);
     setDraftTransforms((prev) => {
       const next = { ...prev };

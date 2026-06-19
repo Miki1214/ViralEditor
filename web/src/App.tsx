@@ -351,11 +351,19 @@ export default function App() {
     file: File,
     cropStartS: number,
     cropEndS: number,
+    transform?: { rotation_deg?: number; spatial_crop?: { x: number; y: number; w: number; h: number } | null },
   ) => {
     if (!activeJobId) return;
     setStoryboardSaving(true);
     try {
-      const payload = await assignSlotClip(activeJobId, slotId, file, cropStartS, cropEndS);
+      const payload = await assignSlotClip(
+        activeJobId,
+        slotId,
+        file,
+        cropStartS,
+        cropEndS,
+        transform,
+      );
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
       setPreviewVersion((v) => v + 1);

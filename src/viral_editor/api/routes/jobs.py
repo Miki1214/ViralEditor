@@ -53,6 +53,7 @@ from viral_editor.api.schemas import (
     SpeedSelectionUpdate,
     SlotCropPatchRequest,
     SlotTransformPatchRequest,
+    SpatialCropInput,
     StageInfo,
     StoryboardPatchRequest,
     StoryboardResponse,
@@ -626,6 +627,12 @@ def _invalidate_composite_previews(temp_dir: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def _spatial_crop_response(crop) -> SpatialCropInput | None:
+    if crop is None:
+        return None
+    return SpatialCropInput(x=crop.x, y=crop.y, w=crop.w, h=crop.h)
+
+
 def _storyboard_response(
     job_id: str,
     storyboard,
@@ -655,7 +662,7 @@ def _storyboard_response(
                 clip_filename=slot.clip_filename,
                 rotation_deg=slot.rotation_deg,
                 fit_mode=slot.fit_mode,
-                spatial_crop=slot.spatial_crop,
+                spatial_crop=_spatial_crop_response(slot.spatial_crop),
                 clip_source_url=(
                     f"/api/jobs/{job_id}/clips/{slot.assigned_clip_id}/source"
                     if slot.assigned_clip_id
@@ -748,6 +755,8 @@ async def assign_slot_video(
     video: UploadFile = File(...),
     crop_start_s: float | None = Form(None),
     crop_end_s: float | None = Form(None),
+    rotation_deg: int | None = Form(None),
+    spatial_crop_json: str | None = Form(None),
 ) -> StoryboardResponse:
     store = _store(request)
     job = store.get(job_id)
@@ -774,6 +783,15 @@ async def assign_slot_video(
 
     media = probe_media(clip_path)
 
+    spatial_crop = None
+    if spatial_crop_json:
+        from viral_editor.models import SpatialCrop
+
+        try:
+            spatial_crop = SpatialCrop.model_validate(json.loads(spatial_crop_json))
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid spatial_crop_json") from exc
+
     updated_storyboard = assign_slot_clip(
         storyboard,
         slot_id,
@@ -782,6 +800,8 @@ async def assign_slot_video(
         crop_start_s=crop_start_s,
         crop_end_s=crop_end_s,
         media=media,
+        rotation_deg=rotation_deg or 0,
+        spatial_crop=spatial_crop,
     )
 
     existing = {clip.id: clip for clip in job.config.clips}

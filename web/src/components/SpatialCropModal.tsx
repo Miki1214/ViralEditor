@@ -7,7 +7,7 @@ import {
   normalizedToPixelRect,
   objectContainRect,
   pixelRectToNormalized,
-  resizeCropFromCorner,
+  resizeCropByDelta,
   type PixelRect,
 } from "../utils/spatialCrop";
 
@@ -40,9 +40,13 @@ export function SpatialCropModal({
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [cropBox, setCropBox] = useState<PixelRect | null>(null);
   const [dragging, setDragging] = useState<DragMode>(null);
+  const videoBoundsRef = useRef<PixelRect>({ x: 0, y: 0, w: 0, h: 0 });
+  const prevBoundsRef = useRef<PixelRect>({ x: 0, y: 0, w: 0, h: 0 });
+  const openSessionRef = useRef<string | null>(null);
 
   const frame = effectiveVideoSize(videoSize.width, videoSize.height, rotationDeg);
   const videoBounds = objectContainRect(stageSize.width, stageSize.height, frame.width, frame.height);
+  videoBoundsRef.current = videoBounds;
 
   const syncLayout = useCallback(() => {
     const stage = stageRef.current;
@@ -66,13 +70,51 @@ export function SpatialCropModal({
   }, [open, syncLayout, rotationDeg, videoUrl]);
 
   useEffect(() => {
-    if (!open || videoBounds.w <= 0 || videoBounds.h <= 0) return;
-    if (initialCrop) {
-      setCropBox(normalizedToPixelRect(initialCrop, videoBounds));
-    } else {
-      setCropBox(defaultPortraitCrop(videoBounds));
+    if (!open) {
+      openSessionRef.current = null;
+      setCropBox(null);
+      return;
     }
-  }, [open, initialCrop, videoBounds.x, videoBounds.y, videoBounds.w, videoBounds.h]);
+    const session = `${videoUrl}|${rotationDeg}|${JSON.stringify(initialCrop)}`;
+    if (openSessionRef.current === session) return;
+    openSessionRef.current = session;
+    setCropBox(null);
+  }, [open, videoUrl, rotationDeg, initialCrop]);
+
+  useEffect(() => {
+    if (!open || dragging || videoBounds.w <= 0 || videoBounds.h <= 0) return;
+
+    setCropBox((prev) => {
+      if (prev != null) return prev;
+      return initialCrop
+        ? normalizedToPixelRect(initialCrop, videoBounds)
+        : defaultPortraitCrop(videoBounds);
+    });
+  }, [open, dragging, initialCrop, videoBounds.x, videoBounds.y, videoBounds.w, videoBounds.h]);
+
+  useEffect(() => {
+    if (!open || dragging || videoBounds.w <= 0 || videoBounds.h <= 0) {
+      prevBoundsRef.current = videoBounds;
+      return;
+    }
+
+    const prev = prevBoundsRef.current;
+    const boundsChanged =
+      prev.w > 0 &&
+      (prev.x !== videoBounds.x ||
+        prev.y !== videoBounds.y ||
+        prev.w !== videoBounds.w ||
+        prev.h !== videoBounds.h);
+
+    if (boundsChanged) {
+      setCropBox((current) => {
+        if (current == null) return current;
+        const norm = pixelRectToNormalized(current, prev);
+        return normalizedToPixelRect(norm, videoBounds);
+      });
+    }
+    prevBoundsRef.current = videoBounds;
+  }, [open, dragging, videoBounds.x, videoBounds.y, videoBounds.w, videoBounds.h]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,12 +130,13 @@ export function SpatialCropModal({
 
     const onMove = (event: PointerEvent) => {
       const anchor = dragAnchorRef.current;
-      const bounds = videoBounds;
+      const bounds = videoBoundsRef.current;
       if (!anchor || bounds.w <= 0) return;
 
+      const dx = event.clientX - anchor.startX;
+      const dy = event.clientY - anchor.startY;
+
       if (anchor.mode === "move") {
-        const dx = event.clientX - anchor.startX;
-        const dy = event.clientY - anchor.startY;
         setCropBox(
           clampCropBox(
             {
@@ -106,9 +149,9 @@ export function SpatialCropModal({
           ),
         );
       } else if (anchor.mode === "resize-se") {
-        setCropBox(resizeCropFromCorner(anchor.box, event.clientX, event.clientY, bounds, "se"));
+        setCropBox(resizeCropByDelta(anchor.box, dx, dy, bounds, "se"));
       } else if (anchor.mode === "resize-nw") {
-        setCropBox(resizeCropFromCorner(anchor.box, event.clientX, event.clientY, bounds, "nw"));
+        setCropBox(resizeCropByDelta(anchor.box, dx, dy, bounds, "nw"));
       }
     };
 
@@ -119,15 +162,19 @@ export function SpatialCropModal({
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
     };
-  }, [dragging, videoBounds]);
+  }, [dragging]);
 
   const startDrag = (mode: DragMode, event: React.PointerEvent) => {
     if (!cropBox) return;
     event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
     dragAnchorRef.current = {
       mode,
       startX: event.clientX,

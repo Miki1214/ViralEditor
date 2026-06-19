@@ -178,11 +178,18 @@ export async function assignSlotClip(
   file: File,
   cropStartS: number,
   cropEndS: number,
+  transform?: { rotation_deg?: number; spatial_crop?: SpatialCrop | null },
 ): Promise<StoryboardPayload> {
   const form = new FormData();
   form.append("video", file);
   form.append("crop_start_s", String(cropStartS));
   form.append("crop_end_s", String(cropEndS));
+  if (transform?.rotation_deg != null) {
+    form.append("rotation_deg", String(transform.rotation_deg));
+  }
+  if (transform?.spatial_crop) {
+    form.append("spatial_crop_json", JSON.stringify(transform.spatial_crop));
+  }
   const res = await fetch(`/api/jobs/${jobId}/slots/${slotId}/clip`, {
     method: "PUT",
     body: form,

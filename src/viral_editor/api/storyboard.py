@@ -84,6 +84,9 @@ def assign_slot_clip(
     crop_start_s: float | None,
     crop_end_s: float | None,
     media: MediaInfo,
+    rotation_deg: int = 0,
+    fit_mode: str = "contain",
+    spatial_crop: SpatialCrop | None = None,
 ) -> Storyboard:
     clip = ClipInput(
         id=clip_id,
@@ -93,6 +96,9 @@ def assign_slot_clip(
         crop_end_s=crop_end_s,
     )
     norm_start, norm_end = normalize_crop_range(clip, media)
+    normalized_rot = int(rotation_deg) % 360
+    if normalized_rot not in (0, 90, 180, 270):
+        normalized_rot = 0
     slots = []
     for slot in storyboard.slots:
         if slot.id != slot_id:
@@ -105,9 +111,9 @@ def assign_slot_clip(
                     "crop_start_s": norm_start,
                     "crop_end_s": norm_end,
                     "clip_filename": filename,
-                    "rotation_deg": 0,
-                    "fit_mode": "contain",
-                    "spatial_crop": None,
+                    "rotation_deg": normalized_rot,
+                    "fit_mode": fit_mode,
+                    "spatial_crop": spatial_crop,
                 }
             )
         )

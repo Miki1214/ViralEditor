@@ -103,32 +103,78 @@ export function clampCropBox(box: PixelRect, bounds: PixelRect, minW = 48): Pixe
   return { x, y, w, h };
 }
 
-export function resizeCropFromCorner(
-  anchor: PixelRect,
-  pointerX: number,
-  pointerY: number,
+/** Clamp size while keeping the top-left corner fixed (SE resize). */
+export function clampCropBoxSe(
+  anchorX: number,
+  anchorY: number,
+  w: number,
   bounds: PixelRect,
-  corner: "se" | "nw",
+  minW = 48,
 ): PixelRect {
   const aspect = PORTRAIT_ASPECT;
-  let w: number;
-  let h: number;
-  let x: number;
-  let y: number;
+  const maxW = bounds.x + bounds.w - anchorX;
+  const maxH = bounds.y + bounds.h - anchorY;
+
+  let width = Math.max(minW, Math.min(w, maxW));
+  let height = width / aspect;
+  if (height > maxH) {
+    height = maxH;
+    width = height * aspect;
+  }
+  width = Math.max(minW, width);
+  height = width / aspect;
+  return { x: anchorX, y: anchorY, w: width, h: height };
+}
+
+/** Clamp size while keeping the bottom-right corner fixed (NW resize). */
+export function clampCropBoxNw(
+  fixedRight: number,
+  fixedBottom: number,
+  w: number,
+  bounds: PixelRect,
+  minW = 48,
+): PixelRect {
+  const aspect = PORTRAIT_ASPECT;
+  const maxW = fixedRight - bounds.x;
+  const maxH = fixedBottom - bounds.y;
+
+  let width = Math.max(minW, Math.min(w, maxW));
+  let height = width / aspect;
+  if (height > maxH) {
+    height = maxH;
+    width = height * aspect;
+  }
+  width = Math.max(minW, width);
+  height = width / aspect;
+
+  let x = fixedRight - width;
+  let y = fixedBottom - height;
+  return { x, y, w: width, h: height };
+}
+
+export function resizeCropByDelta(
+  startBox: PixelRect,
+  dx: number,
+  dy: number,
+  bounds: PixelRect,
+  corner: "se" | "nw",
+  minW = 48,
+): PixelRect {
+  const aspect = PORTRAIT_ASPECT;
+  const fixedRight = startBox.x + startBox.w;
+  const fixedBottom = startBox.y + startBox.h;
 
   if (corner === "se") {
-    w = pointerX - anchor.x;
-    h = w / aspect;
-    x = anchor.x;
-    y = anchor.y;
-  } else {
-    w = anchor.x + anchor.w - pointerX;
-    h = w / aspect;
-    x = pointerX;
-    y = anchor.y + anchor.h - h;
+    const wFromX = startBox.w + dx;
+    const wFromY = (startBox.h + dy) * aspect;
+    const w = Math.max(wFromX, wFromY, minW);
+    return clampCropBoxSe(startBox.x, startBox.y, w, bounds, minW);
   }
 
-  return clampCropBox({ x, y, w, h }, bounds);
+  const wFromX = startBox.w - dx;
+  const wFromY = (startBox.h - dy) * aspect;
+  const w = Math.max(wFromX, wFromY, minW);
+  return clampCropBoxNw(fixedRight, fixedBottom, w, bounds, minW);
 }
 
 function clamp01(value: number): number {

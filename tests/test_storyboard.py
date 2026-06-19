@@ -157,3 +157,28 @@ def test_update_slot_transform_rotates_and_sets_cover() -> None:
     assert slot.rotation_deg == 90
     assert slot.spatial_crop is not None
     assert slot.spatial_crop.w == pytest.approx(0.5)
+
+
+def test_assign_slot_clip_keeps_spatial_crop() -> None:
+    from viral_editor.api.storyboard import assign_slot_clip
+    from viral_editor.models import MediaInfo, SpatialCrop
+
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    hook = storyboard.slots[0]
+    media = MediaInfo(path=__file__, duration_s=10.0, has_video=True, width=1920, height=1080)
+    crop = SpatialCrop(x=0.1, y=0.05, w=0.45, h=0.8)
+    updated = assign_slot_clip(
+        storyboard,
+        hook.id,
+        clip_id=f"{hook.id}_clip",
+        filename="hook.mp4",
+        crop_start_s=0.0,
+        crop_end_s=2.0,
+        media=media,
+        rotation_deg=90,
+        spatial_crop=crop,
+    )
+    slot = next(item for item in updated.slots if item.id == hook.id)
+    assert slot.spatial_crop == crop
+    assert slot.rotation_deg == 90
