@@ -475,6 +475,7 @@ export default function App() {
               <StoryboardPanel
                 jobId={activeJobId}
                 storyboard={storyboard}
+                waveform={waveform}
                 selectedSlotId={selectedSlotId}
                 onSelectSlot={setSelectedSlotId}
                 onAssignClip={handleAssignClip}

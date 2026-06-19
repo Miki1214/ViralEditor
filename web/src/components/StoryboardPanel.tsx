@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SlotRole, SlotTransition, StoryboardPayload, StorySlot } from "../types";
+import type { SlotRole, SlotTransition, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
 import { formatSlotSpeedLabel } from "../utils/slotSpeed";
 import { ClipCropTimeline } from "./ClipCropTimeline";
+import { StoryboardBlockPlayer } from "./StoryboardBlockPlayer";
+import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
 
 interface StoryboardPanelProps {
   jobId: string;
   storyboard: StoryboardPayload;
+  waveform: WaveformPayload | null;
   selectedSlotId: string | null;
   onSelectSlot: (slotId: string) => void;
   onAssignClip: (
@@ -56,8 +59,9 @@ function probeVideoDuration(url: string): Promise<number | null> {
 }
 
 export function StoryboardPanel({
-  jobId: _jobId,
+  jobId,
   storyboard,
+  waveform,
   selectedSlotId,
   onSelectSlot,
   onAssignClip,
@@ -75,6 +79,7 @@ export function StoryboardPanel({
   const [durationS, setDurationS] = useState<number | null>(null);
   const [cropStartS, setCropStartS] = useState(0);
   const [cropEndS, setCropEndS] = useState(0);
+  const [blockPlayheadS, setBlockPlayheadS] = useState(0);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -182,6 +187,26 @@ export function StoryboardPanel({
           <dd className="text-scope-trace">{storyboard.total_duration_s.toFixed(1)}s</dd>
         </dl>
       </div>
+
+      {waveform && (
+        <div className="space-y-2">
+          <StoryboardScopeCanvas
+            waveform={waveform}
+            storyboard={storyboard}
+            selectedSlotId={selectedSlotId}
+            playheadS={blockPlayheadS}
+            onSelectSlot={onSelectSlot}
+          />
+          <StoryboardBlockPlayer
+            jobId={jobId}
+            storyboard={storyboard}
+            selectedSlotId={selectedSlotId}
+            playheadS={blockPlayheadS}
+            onPlayheadChange={setBlockPlayheadS}
+            onSelectSlot={onSelectSlot}
+          />
+        </div>
+      )}
 
       <div className="relative flex gap-2 overflow-x-auto pb-2">
         {ordered.map((slot, index) => {
