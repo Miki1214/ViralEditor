@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import {
   CUSTOM_DURATION_MAX_S,
   CUSTOM_DURATION_MIN_S,
@@ -28,6 +28,7 @@ interface JobFormProps {
   analyzing: boolean;
   disabled?: boolean;
   disabledReason?: string | null;
+  audioScope?: ReactNode;
 }
 
 function durationChipClass(active: boolean): string {
@@ -47,6 +48,7 @@ export function JobForm({
   analyzing,
   disabled = false,
   disabledReason = null,
+  audioScope = null,
 }: JobFormProps) {
   const audioInputId = useId();
   const [customDuration, setCustomDuration] = useState(false);
@@ -182,6 +184,7 @@ export function JobForm({
             )}
           </div>
         </label>
+        {audioScope}
       </section>
 
       <section className="space-y-4">

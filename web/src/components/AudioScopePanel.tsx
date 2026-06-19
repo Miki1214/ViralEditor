@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loopSeamPreviewUrl, previewAudioUrl } from "../api/client";
 import { TARGET_DURATION_PRESETS } from "../constants/durations";
 import type { MusicBlock, WaveformPayload } from "../types";
 import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
-import { ScopeCanvas } from "./ScopeCanvas";
+import { ScopeCanvas, blockPixelRange, scopeWidth } from "./ScopeCanvas";
 
 interface AudioScopePanelProps {
   jobId: string;
@@ -13,6 +13,7 @@ interface AudioScopePanelProps {
   selectedBlockId: string | null;
   onTargetChange: (targetDurationS: number, useFullTrack: boolean) => void;
   onSelectBlock: (block: MusicBlock) => void;
+  embedded?: boolean;
 }
 
 function fallbackFullTrackBlock(waveform: WaveformPayload): MusicBlock {
@@ -65,8 +66,10 @@ export function AudioScopePanel({
   selectedBlockId,
   onTargetChange,
   onSelectBlock,
+  embedded = false,
 }: AudioScopePanelProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const scopeScrollRef = useRef<HTMLDivElement>(null);
   const [playingBlockId, setPlayingBlockId] = useState<string | null>(null);
   const [playingMode, setPlayingMode] = useState<PreviewMode | null>(null);
 
@@ -107,6 +110,42 @@ export function AudioScopePanel({
 
   const blocks =
     waveform.blocks.length > 0 ? waveform.blocks : [fallbackFullTrackBlock(waveform)];
+
+  const scrollBlockIntoView = useCallback(
+    (block: MusicBlock) => {
+      const container = scopeScrollRef.current;
+      if (!container || waveform.duration_s <= 0) return;
+
+      const { startX, endX, canvasWidth } = blockPixelRange(
+        waveform.duration_s,
+        block.start_s,
+        block.end_s,
+      );
+      const viewLeft = container.scrollLeft;
+      const viewRight = viewLeft + container.clientWidth;
+      const edgePadding = 32;
+
+      if (startX >= viewLeft + edgePadding && endX <= viewRight - edgePadding) {
+        return;
+      }
+
+      const blockCenter = (startX + endX) / 2;
+      const maxScroll = Math.max(0, canvasWidth - container.clientWidth);
+      const target = Math.max(
+        0,
+        Math.min(blockCenter - container.clientWidth / 2, maxScroll),
+      );
+      container.scrollTo({ left: target, behavior: "smooth" });
+    },
+    [waveform.duration_s],
+  );
+
+  useEffect(() => {
+    if (!selectedBlockId) return;
+    const block = blocks.find((entry) => entry.id === selectedBlockId);
+    if (block) scrollBlockIntoView(block);
+  }, [selectedBlockId, blocks, scrollBlockIntoView]);
+
   const trackShorterThanTarget = waveform.duration_s <= targetDurationS;
   const onlyFullTrack =
     blocks.length === 1 && blocks[0]?.id === "block_full";
@@ -152,7 +191,13 @@ export function AudioScopePanel({
   const tiedBestLoop = bestLoopPresets.size > 1;
 
   return (
-    <section className="panel space-y-4 p-5">
+    <section
+      className={
+        embedded
+          ? "space-y-4 border-t border-monitor-border pt-5"
+          : "panel space-y-4 p-5"
+      }
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
@@ -227,17 +272,24 @@ export function AudioScopePanel({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <ScopeCanvas
-          durationS={waveform.duration_s}
-          points={waveform.points}
-          transients={waveform.transients}
-          sections={waveform.sections}
-          downbeats={waveform.downbeats}
-          blocks={blocks}
-          selectedBlockId={selectedBlockId}
-          playingBlockId={playingBlockId}
-        />
+      <div className="space-y-1">
+        {scopeWidth(waveform.duration_s) > 960 && (
+          <p className="font-mono text-[10px] text-monitor-muted">
+            Scroll horizontally to inspect the full track
+          </p>
+        )}
+        <div ref={scopeScrollRef} className="overflow-x-auto pb-1">
+          <ScopeCanvas
+            durationS={waveform.duration_s}
+            points={waveform.points}
+            transients={waveform.transients}
+            sections={waveform.sections}
+            downbeats={waveform.downbeats}
+            blocks={blocks}
+            selectedBlockId={selectedBlockId}
+            playingBlockId={playingBlockId}
+          />
+        </div>
       </div>
 
       <div className="space-y-2">

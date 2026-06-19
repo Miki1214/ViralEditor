@@ -418,58 +418,45 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1400px] gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="space-y-5">
-          <div className="panel flex flex-col items-center px-6 py-8">
-            <p className="mb-4 self-start font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-              Composed preview
-            </p>
-            <PhonePreview
-              hookText={form.hookText}
-              emphasisWords={form.emphasisWords}
-              fillColor={form.fillColor}
-              emphasisColor={form.emphasisColor}
-              fontFamily={form.fontFamily}
-              safePaddingPct={form.safePaddingPct}
-              videoPreviewUrl={compositeUrl}
-              compositeMode={previewReady}
-            />
-            {musicStartS != null && musicEndS != null && (
-              <dl className="mt-6 grid w-full max-w-sm grid-cols-2 gap-3 font-mono text-xs">
-                <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
-                  <dt className="text-monitor-muted">MUSIC WINDOW</dt>
-                  <dd className="text-scope-trace">
-                    {(musicEndS - musicStartS).toFixed(1)}s
-                  </dd>
-                </div>
-                <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
-                  <dt className="text-monitor-muted">STATUS</dt>
-                  <dd>{jobStatus ?? "idle"}</dd>
-                </div>
-              </dl>
-            )}
-            {previewReady && activeJobId && (
-              <button
-                type="button"
-                className="btn-ghost mt-4 text-xs"
-                onClick={() => setPreviewVersion((v) => v + 1)}
-              >
-                Refresh preview
-              </button>
-            )}
-          </div>
+      <div className="border-b border-monitor-border bg-monitor-surface/60 backdrop-blur">
+        <div className="mx-auto max-w-[1400px] px-5 py-3">
+          <StageTelemetry
+            stages={stages}
+            events={events}
+            status={jobStatus}
+            hasOutput={hasOutput}
+          />
+        </div>
+      </div>
 
-          {waveform && activeJobId && (
-            <AudioScopePanel
-              jobId={activeJobId}
-              waveform={waveform}
-              targetDurationS={form.targetDurationS}
-              useFullTrack={form.useFullTrack}
-              selectedBlockId={selectedBlockId}
-              onTargetChange={requestTargetChange}
-              onSelectBlock={handleSelectBlock}
-            />
-          )}
+      <main className="mx-auto grid max-w-[1400px] gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+        <section className="space-y-5">
+          <JobForm
+            form={form}
+            onPatch={patchForm}
+            onAudioSelected={handleAudioSelected}
+            onTargetDurationChange={(targetDurationS) =>
+              requestTargetChange(targetDurationS, false)
+            }
+            audioName={audioName}
+            analyzing={analyzing}
+            disabled={apiOnline === false || ffmpegOk === false}
+            disabledReason={renderBlockedReason}
+            audioScope={
+              waveform && activeJobId ? (
+                <AudioScopePanel
+                  embedded
+                  jobId={activeJobId}
+                  waveform={waveform}
+                  targetDurationS={form.targetDurationS}
+                  useFullTrack={form.useFullTrack}
+                  selectedBlockId={selectedBlockId}
+                  onTargetChange={requestTargetChange}
+                  onSelectBlock={handleSelectBlock}
+                />
+              ) : null
+            }
+          />
 
           {storyboard && activeJobId && (
             <StoryboardPanel
@@ -483,19 +470,6 @@ export default function App() {
               saving={storyboardSaving}
             />
           )}
-
-          <JobForm
-            form={form}
-            onPatch={patchForm}
-            onAudioSelected={handleAudioSelected}
-            onTargetDurationChange={(targetDurationS) =>
-              requestTargetChange(targetDurationS, false)
-            }
-            audioName={audioName}
-            analyzing={analyzing}
-            disabled={apiOnline === false || ffmpegOk === false}
-            disabledReason={renderBlockedReason}
-          />
 
           {apiOnline === false && (
             <div
@@ -528,13 +502,45 @@ export default function App() {
           />
         </section>
 
-        <aside className="space-y-5">
-          <StageTelemetry
-            stages={stages}
-            events={events}
-            status={jobStatus}
-            hasOutput={hasOutput}
-          />
+        <aside className="sticky top-6 flex max-h-[calc(100vh-1.5rem)] flex-col gap-5 self-start overflow-y-auto">
+          <div className="panel flex flex-col items-center px-6 py-8">
+            <p className="mb-4 self-start font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+              Composed preview
+            </p>
+            <PhonePreview
+              hookText={form.hookText}
+              emphasisWords={form.emphasisWords}
+              fillColor={form.fillColor}
+              emphasisColor={form.emphasisColor}
+              fontFamily={form.fontFamily}
+              safePaddingPct={form.safePaddingPct}
+              videoPreviewUrl={compositeUrl}
+              compositeMode={previewReady}
+            />
+            {musicStartS != null && musicEndS != null && (
+              <dl className="mt-6 grid w-full grid-cols-2 gap-3 font-mono text-xs">
+                <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
+                  <dt className="text-monitor-muted">MUSIC WINDOW</dt>
+                  <dd className="text-scope-trace">
+                    {(musicEndS - musicStartS).toFixed(1)}s
+                  </dd>
+                </div>
+                <div className="rounded border border-monitor-border bg-monitor-bg px-3 py-2">
+                  <dt className="text-monitor-muted">STATUS</dt>
+                  <dd>{jobStatus ?? "idle"}</dd>
+                </div>
+              </dl>
+            )}
+            {previewReady && activeJobId && (
+              <button
+                type="button"
+                className="btn-ghost mt-4 text-xs"
+                onClick={() => setPreviewVersion((v) => v + 1)}
+              >
+                Refresh preview
+              </button>
+            )}
+          </div>
 
           {jobs.length > 0 && (
             <div className="panel p-4">
