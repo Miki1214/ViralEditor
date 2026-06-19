@@ -55,7 +55,7 @@ export function PhonePreview({
           <video
             key={videoPreviewUrl}
             src={videoPreviewUrl}
-            className={`absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
+            className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
             playsInline
             autoPlay
             loop

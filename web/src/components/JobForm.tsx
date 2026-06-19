@@ -229,7 +229,7 @@ export function JobForm({
             <span className="field-label">Fill color</span>
             <input
               type="color"
-              className="mt-1 h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
+              className="field-color"
               value={form.fillColor}
               onChange={(e) => onPatch({ fillColor: e.target.value })}
             />
@@ -238,7 +238,7 @@ export function JobForm({
             <span className="field-label">Emphasis color</span>
             <input
               type="color"
-              className="mt-1 h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
+              className="field-color"
               value={form.emphasisColor}
               onChange={(e) => onPatch({ emphasisColor: e.target.value })}
             />

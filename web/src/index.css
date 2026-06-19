@@ -9,6 +9,45 @@
 @layer base {
   * {
     @apply border-monitor-border;
+    scrollbar-width: thin;
+    scrollbar-color: #2a9d5c #141618;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    margin: 2px;
+    border-radius: 9999px;
+    background: #141618;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 1px solid #141618;
+    border-radius: 9999px;
+    background: #3ddc84;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: #5ae99a;
+  }
+
+  *::-webkit-scrollbar-thumb:vertical {
+    background: linear-gradient(180deg, #2a9d5c, #3ddc84);
+  }
+
+  *::-webkit-scrollbar-thumb:horizontal {
+    background: linear-gradient(90deg, #2a9d5c, #3ddc84);
+  }
+
+  *::-webkit-scrollbar-thumb:vertical:hover {
+    background: #5ae99a;
+  }
+
+  *::-webkit-scrollbar-thumb:horizontal:hover {
+    background: #5ae99a;
   }
 
   body {
@@ -27,6 +66,10 @@
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
     }
+  }
+
+  input[type="range"] {
+    @apply field-range;
   }
 }
 
@@ -59,6 +102,138 @@
   .duration-chip-best-loop {
     @apply border-hook-gold/20 bg-hook-gold/[0.03] text-monitor-muted;
     animation: loop-hint-pulse 2.8s ease-in-out infinite;
+  }
+
+  .field-color {
+    @apply mt-1 h-10 w-full cursor-pointer rounded-md border border-monitor-border bg-monitor-bg p-1;
+  }
+
+  .field-color::-webkit-color-swatch-wrapper {
+    padding: 2px;
+  }
+
+  .field-color::-webkit-color-swatch {
+    border: none;
+    border-radius: 0.25rem;
+  }
+
+  .field-color::-moz-color-swatch {
+    border: none;
+    border-radius: 0.25rem;
+  }
+
+  .field-range {
+    @apply h-5 w-full cursor-pointer appearance-none bg-transparent;
+    accent-color: #3ddc84;
+  }
+
+  .field-range:focus-visible {
+    outline: none;
+  }
+
+  .field-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: #2a3038;
+  }
+
+  .field-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border-radius: 9999px;
+    border: 2px solid #141618;
+    background: linear-gradient(180deg, #5ae99a, #3ddc84);
+    box-shadow:
+      0 0 0 1px rgb(61 220 132 / 0.35),
+      0 2px 6px rgb(0 0 0 / 0.35);
+    transition: box-shadow 0.15s ease;
+  }
+
+  .field-range:hover::-webkit-slider-thumb {
+    box-shadow:
+      0 0 0 2px rgb(61 220 132 / 0.45),
+      0 2px 8px rgb(0 0 0 / 0.4);
+  }
+
+  .field-range::-moz-range-track {
+    height: 4px;
+    border-radius: 9999px;
+    background: #2a3038;
+    border: none;
+  }
+
+  .field-range::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    border: 2px solid #141618;
+    background: linear-gradient(180deg, #5ae99a, #3ddc84);
+    box-shadow:
+      0 0 0 1px rgb(61 220 132 / 0.35),
+      0 2px 6px rgb(0 0 0 / 0.35);
+  }
+
+  .monitor-video {
+    accent-color: #3ddc84;
+  }
+
+  .monitor-video::-webkit-media-controls-panel {
+    background: linear-gradient(180deg, transparent, rgb(20 22 24 / 0.94));
+  }
+
+  .monitor-video::-webkit-media-controls-timeline {
+    height: 4px;
+    margin-inline: 6px;
+    border-radius: 9999px;
+    background-color: #2a3038;
+  }
+
+  .monitor-video::-webkit-media-controls-volume-slider {
+    min-width: 56px;
+    height: 4px;
+    border-radius: 9999px;
+    background-color: #2a3038;
+  }
+
+  .crop-slider-track {
+    @apply relative h-9 cursor-crosshair rounded-md border border-monitor-border;
+    background: linear-gradient(180deg, #1a1d21, #141618);
+  }
+
+  .crop-slider-shade {
+    @apply absolute inset-y-0 bg-black/45;
+  }
+
+  .crop-slider-range {
+    @apply absolute inset-y-0 border-y-2 border-scope-trace;
+    background: rgb(61 220 132 / 0.12);
+    box-shadow: inset 0 0 14px rgb(61 220 132 / 0.08);
+  }
+
+  .crop-slider-handle {
+    @apply absolute top-1/2 z-10 h-5 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-sm border-2 border-monitor-bg;
+    background: linear-gradient(180deg, #5ae99a, #3ddc84);
+    box-shadow:
+      0 0 0 1px rgb(61 220 132 / 0.4),
+      0 2px 6px rgb(0 0 0 / 0.35);
+    transition:
+      box-shadow 0.15s ease,
+      filter 0.15s ease;
+  }
+
+  .crop-slider-handle:hover {
+    filter: brightness(1.08);
+    box-shadow:
+      0 0 0 2px rgb(61 220 132 / 0.5),
+      0 2px 8px rgb(0 0 0 / 0.4);
+  }
+
+  .crop-slider-handle:active {
+    box-shadow:
+      0 0 0 2px rgb(61 220 132 / 0.65),
+      0 2px 10px rgb(0 0 0 / 0.45);
   }
 }
 

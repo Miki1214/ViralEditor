@@ -8,10 +8,6 @@ interface ClipCropTimelineProps {
   onCropChange: (startS: number, endS: number) => void;
 }
 
-const TRACE = "#3DDC84";
-const DIM = "rgba(61,220,132,0.25)";
-const HANDLE = "#3DDC84";
-
 export function ClipCropTimeline({
   videoUrl,
   durationS,
@@ -76,34 +72,25 @@ export function ClipCropTimeline({
     <div className="space-y-2">
       <video
         src={videoUrl}
-        className="max-h-28 w-full rounded border border-monitor-border bg-black object-contain"
+        className="monitor-video max-h-28 w-full rounded border border-monitor-border bg-black object-contain"
         muted
         playsInline
         controls
       />
-      <div
-        ref={trackRef}
-        className="relative h-8 cursor-crosshair rounded border border-monitor-border bg-monitor-bg"
-        aria-label="Crop range"
-      >
-        <div className="absolute inset-y-0 left-0 bg-black/40" style={{ width: `${startPct}%` }} />
+      <div ref={trackRef} className="crop-slider-track" aria-label="Crop range">
+        <div className="crop-slider-shade left-0" style={{ width: `${startPct}%` }} />
+        <div className="crop-slider-shade right-0" style={{ width: `${100 - endPct}%` }} />
         <div
-          className="absolute inset-y-0 right-0 bg-black/40"
-          style={{ width: `${100 - endPct}%` }}
-        />
-        <div
-          className="absolute inset-y-0 border-y-2"
+          className="crop-slider-range"
           style={{
             left: `${startPct}%`,
             width: `${endPct - startPct}%`,
-            borderColor: TRACE,
-            backgroundColor: DIM,
           }}
         />
         <button
           type="button"
-          className="absolute top-0 h-full w-2 -translate-x-1/2 rounded-sm"
-          style={{ left: `${startPct}%`, backgroundColor: HANDLE }}
+          className="crop-slider-handle"
+          style={{ left: `${startPct}%` }}
           onPointerDown={(e) => {
             e.preventDefault();
             setDragging("start");
@@ -112,8 +99,8 @@ export function ClipCropTimeline({
         />
         <button
           type="button"
-          className="absolute top-0 h-full w-2 -translate-x-1/2 rounded-sm"
-          style={{ left: `${endPct}%`, backgroundColor: HANDLE }}
+          className="crop-slider-handle"
+          style={{ left: `${endPct}%` }}
           onPointerDown={(e) => {
             e.preventDefault();
             setDragging("end");

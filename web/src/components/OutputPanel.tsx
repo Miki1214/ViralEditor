@@ -39,7 +39,7 @@ export function OutputPanel({
       {hasOutput ? (
         <div className="mt-4 space-y-3">
           <video
-            className="w-full max-w-sm rounded-lg border border-monitor-border"
+            className="monitor-video w-full max-w-sm rounded-lg border border-monitor-border"
             controls
             src={outputUrl(jobId)}
           />
