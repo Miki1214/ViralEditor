@@ -17,12 +17,22 @@ TeaserMask = Literal["vignette", "dir_blur"]
 ClipRole = Literal["clip", "hook", "filler"]
 SlotRole = Literal["hook", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]
+SlotFitMode = Literal["contain", "cover"]
 
 
 class DomainModel(BaseModel):
     """Base for all pipeline data contracts."""
 
     model_config = ConfigDict(extra="forbid", frozen=False)
+
+
+class SpatialCrop(DomainModel):
+    """Normalized crop rectangle on the post-rotation source frame (0–1)."""
+
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    w: float = Field(gt=0, le=1)
+    h: float = Field(gt=0, le=1)
 
 
 class MediaInfo(DomainModel):
@@ -156,6 +166,9 @@ class ClipInput(DomainModel):
     role: ClipRole = "clip"
     crop_start_s: float | None = Field(default=None, ge=0)
     crop_end_s: float | None = Field(default=None, ge=0)
+    rotation_deg: int = Field(default=0, ge=0, lt=360)
+    fit_mode: SlotFitMode = "contain"
+    spatial_crop: SpatialCrop | None = None
 
 
 class ReelEntry(DomainModel):
@@ -198,6 +211,9 @@ class StorySlot(DomainModel):
     crop_start_s: float | None = Field(default=None, ge=0)
     crop_end_s: float | None = Field(default=None, ge=0)
     clip_filename: str | None = None
+    rotation_deg: int = Field(default=0, ge=0, lt=360)
+    fit_mode: SlotFitMode = "contain"
+    spatial_crop: SpatialCrop | None = None
 
 
 class Storyboard(DomainModel):

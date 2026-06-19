@@ -2,6 +2,8 @@ import type {
   HealthResponse,
   JobSummary,
   PipelineEvent,
+  SlotFitMode,
+  SpatialCrop,
   SlotTransition,
   StageInfo,
   StoryboardPayload,
@@ -213,6 +215,24 @@ export async function updateSlotCrop(
       crop_start_s: cropStartS,
       crop_end_s: cropEndS,
     }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateSlotTransform(
+  jobId: string,
+  slotId: string,
+  payload: {
+    rotation_deg?: number;
+    fit_mode?: SlotFitMode;
+    spatial_crop?: SpatialCrop | null;
+  },
+): Promise<StoryboardPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/slots/${slotId}/transform`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();

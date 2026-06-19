@@ -40,6 +40,7 @@ from viral_editor.api.storyboard import (
     refresh_storyboard_after_music,
     sync_config_clips_from_storyboard,
     update_slot_crop,
+    update_slot_transform,
 )
 from viral_editor.api.schemas import (
     ClipReelResponse,
@@ -51,6 +52,7 @@ from viral_editor.api.schemas import (
     PipelineStagesResponse,
     SpeedSelectionUpdate,
     SlotCropPatchRequest,
+    SlotTransformPatchRequest,
     StageInfo,
     StoryboardPatchRequest,
     StoryboardResponse,
@@ -651,6 +653,9 @@ def _storyboard_response(
                 crop_start_s=slot.crop_start_s,
                 crop_end_s=slot.crop_end_s,
                 clip_filename=slot.clip_filename,
+                rotation_deg=slot.rotation_deg,
+                fit_mode=slot.fit_mode,
+                spatial_crop=slot.spatial_crop,
                 clip_source_url=(
                     f"/api/jobs/{job_id}/clips/{slot.assigned_clip_id}/source"
                     if slot.assigned_clip_id
@@ -857,6 +862,66 @@ def patch_slot_crop(
     )
 
 
+@router.patch("/{job_id}/slots/{slot_id}/transform", response_model=StoryboardResponse)
+def patch_slot_transform(
+    job_id: str,
+    slot_id: str,
+    payload: SlotTransformPatchRequest,
+    request: Request,
+) -> StoryboardResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    slot = next((item for item in storyboard.slots if item.id == slot_id), None)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    if slot.assigned_clip_id is None:
+        raise HTTPException(status_code=400, detail="Slot has no assigned clip")
+
+    patch_fields = payload.model_dump(exclude_unset=True)
+    if not patch_fields:
+        raise HTTPException(status_code=400, detail="No transform fields provided")
+
+    spatial_crop = None
+    update_spatial_crop = False
+    if "spatial_crop" in patch_fields:
+        update_spatial_crop = True
+        raw = patch_fields["spatial_crop"]
+        if raw is not None:
+            from viral_editor.models import SpatialCrop
+
+            spatial_crop = SpatialCrop.model_validate(raw)
+
+    try:
+        updated_storyboard = update_slot_transform(
+            storyboard,
+            slot_id,
+            rotation_deg=payload.rotation_deg,
+            fit_mode=payload.fit_mode,
+            spatial_crop=spatial_crop,
+            update_spatial_crop=update_spatial_crop,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    updated_config = sync_config_clips_from_storyboard(job.config, updated_storyboard)
+    persist_storyboard(temp_dir, updated_storyboard)
+    _invalidate_composite_previews(temp_dir)
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    return _storyboard_response(
+        job_id,
+        updated_storyboard,
+        preview_ready=storyboard_filled_enough(updated_storyboard),
+    )
+
+
 @router.delete("/{job_id}/slots/{slot_id}/clip", response_model=StoryboardResponse)
 def clear_slot_video(job_id: str, slot_id: str, request: Request) -> StoryboardResponse:
     store = _store(request)
@@ -900,7 +965,7 @@ def get_composite_preview(
     if storyboard is None:
         raise HTTPException(status_code=404, detail="Storyboard not found")
     if not storyboard_filled_enough(storyboard):
-        raise HTTPException(status_code=400, detail="Assign hook and at least one clip slot first")
+        raise HTTPException(status_code=400, detail="Assign a clip to the hook slot first")
 
     clip_media = clip_media_for_storyboard(job.config)
     segments = storyboard_to_segments(storyboard, clip_media)
@@ -918,6 +983,24 @@ def get_composite_preview(
         for slot in sorted(storyboard.slots, key=lambda item: item.order)
         if slot.assigned_clip_id is not None
     ]
+    clip_transforms = {
+        slot.assigned_clip_id: (
+            slot.rotation_deg,
+            slot.fit_mode,
+            (
+                (
+                    slot.spatial_crop.x,
+                    slot.spatial_crop.y,
+                    slot.spatial_crop.w,
+                    slot.spatial_crop.h,
+                )
+                if slot.spatial_crop is not None
+                else None
+            ),
+        )
+        for slot in storyboard.slots
+        if slot.assigned_clip_id is not None
+    }
 
     import hashlib
     import json
@@ -939,6 +1022,7 @@ def get_composite_preview(
                 transitions,
                 clip_paths=clip_paths,
                 clip_durations=clip_durations,
+                clip_transforms=clip_transforms,
                 music_start_s=job.config.music.start_s,
                 music_end_s=job.config.music.end_s,
                 out_path=preview_path,

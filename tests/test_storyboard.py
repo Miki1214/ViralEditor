@@ -126,11 +126,34 @@ def test_storyboard_to_segments_scales_speed_to_target() -> None:
     assert segments[0].out_end_s - segments[0].out_start_s == pytest.approx(target)
 
 
-def test_storyboard_filled_enough_requires_hook_and_clip() -> None:
+def test_storyboard_filled_enough_requires_hook_clip() -> None:
     block = _block(12.0)
     storyboard = plan_storyboard(block, features=None, transients=[])
     assert storyboard_filled_enough(storyboard) is False
     hook = storyboard.slots[0].model_copy(update={"assigned_clip_id": "a"})
+    hook_only = storyboard.model_copy(update={"slots": [hook, *storyboard.slots[1:]]})
+    assert storyboard_filled_enough(hook_only) is True
     clip = storyboard.slots[1].model_copy(update={"assigned_clip_id": "b"})
     filled = storyboard.model_copy(update={"slots": [hook, clip, *storyboard.slots[2:]]})
     assert storyboard_filled_enough(filled) is True
+
+
+def test_update_slot_transform_rotates_and_sets_cover() -> None:
+    from viral_editor.api.storyboard import update_slot_transform
+    from viral_editor.models import SpatialCrop
+
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    hook = storyboard.slots[0].model_copy(update={"assigned_clip_id": "slot_0_clip"})
+    storyboard = storyboard.model_copy(update={"slots": [hook, *storyboard.slots[1:]]})
+    updated = update_slot_transform(
+        storyboard,
+        hook.id,
+        rotation_deg=90,
+        spatial_crop=SpatialCrop(x=0.1, y=0.0, w=0.5, h=0.9),
+        update_spatial_crop=True,
+    )
+    slot = updated.slots[0]
+    assert slot.rotation_deg == 90
+    assert slot.spatial_crop is not None
+    assert slot.spatial_crop.w == pytest.approx(0.5)

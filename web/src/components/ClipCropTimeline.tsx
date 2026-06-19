@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SlotRole } from "../types";
+import type { SlotRole, SpatialCrop } from "../types";
 import { slotPreviewPlaybackRate } from "../utils/slotSpeed";
+import { spatialCropPreviewStyle } from "../utils/spatialCrop";
 
 interface ClipCropTimelineProps {
   videoUrl: string;
@@ -9,6 +10,8 @@ interface ClipCropTimelineProps {
   cropEndS: number;
   targetDurationS: number;
   slotRole?: SlotRole;
+  rotationDeg?: number;
+  spatialCrop?: SpatialCrop | null;
   onCropChange: (startS: number, endS: number) => void;
   onCropCommit?: (startS: number, endS: number) => void;
 }
@@ -22,6 +25,8 @@ export function ClipCropTimeline({
   cropEndS,
   targetDurationS,
   slotRole = "clip",
+  rotationDeg = 0,
+  spatialCrop = null,
   onCropChange,
   onCropCommit,
 }: ClipCropTimelineProps) {
@@ -154,17 +159,40 @@ export function ClipCropTimeline({
   const startPct = durationS > 0 ? (cropStartS / durationS) * 100 : 0;
   const endPct = durationS > 0 ? (cropEndS / durationS) * 100 : 100;
 
+  const cropPreviewStyle = spatialCrop ? spatialCropPreviewStyle(spatialCrop) : null;
+
   return (
     <div className="space-y-2">
-      <video
-        ref={videoRef}
-        key={videoUrl}
-        src={videoUrl}
-        className="monitor-video max-h-28 w-full rounded border border-monitor-border bg-black object-contain"
-        muted
-        playsInline
-        controls
-      />
+      <div className="relative mx-auto aspect-[9/16] h-[min(360px,42vh)] w-auto overflow-hidden rounded border border-monitor-border bg-black">
+        {spatialCrop ? (
+          <div className="absolute inset-0 overflow-hidden">
+            <video
+              ref={videoRef}
+              key={videoUrl}
+              src={videoUrl}
+              className="monitor-video absolute max-w-none object-fill"
+              style={{
+                transform: `rotate(${rotationDeg}deg)`,
+                ...cropPreviewStyle,
+              }}
+              muted
+              playsInline
+              controls
+            />
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            key={videoUrl}
+            src={videoUrl}
+            className="monitor-video absolute inset-0 h-full w-full object-contain"
+            style={{ transform: `rotate(${rotationDeg}deg)` }}
+            muted
+            playsInline
+            controls
+          />
+        )}
+      </div>
       <div ref={trackRef} className="crop-slider-track" aria-label="Crop range">
         <div className="crop-slider-shade left-0" style={{ width: `${startPct}%` }} />
         <div className="crop-slider-shade right-0" style={{ width: `${100 - endPct}%` }} />

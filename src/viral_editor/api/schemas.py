@@ -100,6 +100,13 @@ class ClipReelResponse(BaseModel):
     entries: list[dict] = Field(default_factory=list)
 
 
+class SpatialCropInput(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    w: float = Field(gt=0, le=1)
+    h: float = Field(gt=0, le=1)
+
+
 class StorySlotResponse(BaseModel):
     id: str
     order: int
@@ -114,6 +121,9 @@ class StorySlotResponse(BaseModel):
     crop_end_s: float | None = None
     clip_filename: str | None = None
     clip_source_url: str | None = None
+    rotation_deg: int = 0
+    fit_mode: Literal["contain", "cover"] = "contain"
+    spatial_crop: SpatialCropInput | None = None
 
 
 class StoryboardResponse(BaseModel):
@@ -142,6 +152,15 @@ class StorySlotUpdate(BaseModel):
 class SlotCropPatchRequest(BaseModel):
     crop_start_s: float = Field(ge=0)
     crop_end_s: float = Field(gt=0)
+
+
+class SlotTransformPatchRequest(BaseModel):
+    rotation_deg: int | None = Field(default=None, ge=0, lt=360)
+    fit_mode: Literal["contain", "cover"] | None = None
+    spatial_crop: SpatialCropInput | None = Field(
+        default=None,
+        description="Normalized crop on post-rotation frame; send null to clear",
+    )
 
 
 class StoryboardPatchRequest(BaseModel):

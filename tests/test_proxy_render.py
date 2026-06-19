@@ -119,6 +119,50 @@ def test_build_composite_filtergraph_xfade_and_drawtext(monkeypatch) -> None:
     assert "nullsrc" in graph
 
 
+def test_build_composite_filtergraph_rotation_and_cover() -> None:
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=4.0,
+            speed_factor=2.0,
+            source_id="clip_a",
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        clip_transforms={"clip_a": (90, "contain", (0.1, 0.2, 0.5, 0.8))},
+    )
+    assert "transpose=1" in graph
+    assert "crop=iw*0.500000:ih*0.800000:iw*0.100000:ih*0.200000" in graph
+    assert "scale=360:640" in graph
+
+
+def test_build_composite_filtergraph_spatial_crop() -> None:
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=4.0,
+            speed_factor=2.0,
+            source_id="clip_a",
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        clip_transforms={"clip_a": (0, "contain", (0.0, 0.0, 0.5625, 1.0))},
+    )
+    assert "crop=iw*0.562500:ih*1.000000:iw*0.000000:ih*0.000000" in graph
+
+
 def test_render_composite_uses_looped_seam_audio(tmp_path, monkeypatch) -> None:
     from viral_editor.video.proxy_render import render_composite
 

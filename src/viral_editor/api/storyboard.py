@@ -9,7 +9,7 @@ from viral_editor.audio.features import BeatSyncFeatures
 from viral_editor.audio.storyboard import merge_storyboard_updates, plan_storyboard
 from viral_editor.config import JobConfig
 from viral_editor.ingest.loader import probe_media
-from viral_editor.models import ClipInput, MediaInfo, Storyboard, StorySlot, write_artifact
+from viral_editor.models import ClipInput, MediaInfo, SpatialCrop, Storyboard, StorySlot, write_artifact
 from viral_editor.video.clip_reel import normalize_crop_range
 
 
@@ -105,6 +105,9 @@ def assign_slot_clip(
                     "crop_start_s": norm_start,
                     "crop_end_s": norm_end,
                     "clip_filename": filename,
+                    "rotation_deg": 0,
+                    "fit_mode": "contain",
+                    "spatial_crop": None,
                 }
             )
         )
@@ -145,6 +148,39 @@ def update_slot_crop(
     return storyboard.model_copy(update={"slots": slots})
 
 
+def update_slot_transform(
+    storyboard: Storyboard,
+    slot_id: str,
+    *,
+    rotation_deg: int | None = None,
+    fit_mode: str | None = None,
+    spatial_crop: SpatialCrop | None = None,
+    update_spatial_crop: bool = False,
+) -> Storyboard:
+    slots = []
+    for slot in storyboard.slots:
+        if slot.id != slot_id:
+            slots.append(slot)
+            continue
+        if slot.assigned_clip_id is None:
+            raise ValueError(f"Slot {slot_id!r} has no assigned clip")
+        updates: dict[str, object] = {}
+        if rotation_deg is not None:
+            normalized = int(rotation_deg) % 360
+            if normalized not in (0, 90, 180, 270):
+                raise ValueError("rotation_deg must be a multiple of 90")
+            updates["rotation_deg"] = normalized
+        if fit_mode is not None:
+            updates["fit_mode"] = fit_mode
+        if update_spatial_crop:
+            updates["spatial_crop"] = spatial_crop
+        if not updates:
+            slots.append(slot)
+            continue
+        slots.append(slot.model_copy(update=updates))
+    return storyboard.model_copy(update={"slots": slots})
+
+
 def clear_slot_clip(storyboard: Storyboard, slot_id: str) -> Storyboard:
     slots = []
     for slot in storyboard.slots:
@@ -158,6 +194,9 @@ def clear_slot_clip(storyboard: Storyboard, slot_id: str) -> Storyboard:
                     "crop_start_s": None,
                     "crop_end_s": None,
                     "clip_filename": None,
+                    "rotation_deg": 0,
+                    "fit_mode": "contain",
+                    "spatial_crop": None,
                 }
             )
         )
@@ -188,6 +227,9 @@ def sync_config_clips_from_storyboard(
             update={
                 "crop_start_s": slot.crop_start_s,
                 "crop_end_s": slot.crop_end_s,
+                "rotation_deg": slot.rotation_deg,
+                "fit_mode": slot.fit_mode,
+                "spatial_crop": slot.spatial_crop,
             }
         )
     return config.model_copy(update={"clips": sorted(existing.values(), key=lambda c: c.order)})

@@ -171,10 +171,8 @@ def storyboard_to_segments(
 
 
 def storyboard_filled_enough(storyboard: Storyboard) -> bool:
-    """True when hook and at least one other slot have clips assigned."""
-    assigned = [slot for slot in storyboard.slots if slot.assigned_clip_id]
-    roles = {slot.role for slot in assigned}
-    return "hook" in roles and len(assigned) >= 2
+    """True when the hook slot has a clip assigned (minimum composited preview)."""
+    return any(slot.role == "hook" and slot.assigned_clip_id for slot in storyboard.slots)
 
 
 def xfade_overlap_s(storyboard: Storyboard) -> float:

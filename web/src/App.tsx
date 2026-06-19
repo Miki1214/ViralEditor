@@ -14,6 +14,7 @@ import {
   subscribeJobEvents,
   updateMusicSelection,
   updateSlotCrop,
+  updateSlotTransform,
 } from "./api/client";
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
@@ -384,6 +385,28 @@ export default function App() {
     }
   };
 
+  const handleUpdateSlotTransform = async (
+    slotId: string,
+    payload: {
+      rotation_deg?: number;
+      fit_mode?: "contain" | "cover";
+      spatial_crop?: { x: number; y: number; w: number; h: number } | null;
+    },
+  ) => {
+    if (!activeJobId) return;
+    setStoryboardSaving(true);
+    try {
+      const updated = await updateSlotTransform(activeJobId, slotId, payload);
+      setStoryboard(updated);
+      setPreviewReady(updated.preview_ready);
+      setPreviewVersion((v) => v + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update clip transform");
+    } finally {
+      setStoryboardSaving(false);
+    }
+  };
+
   const handleClearClip = async (slotId: string) => {
     if (!activeJobId) return;
     setStoryboardSaving(true);
@@ -516,6 +539,7 @@ export default function App() {
                 onSelectSlot={setSelectedSlotId}
                 onAssignClip={handleAssignClip}
                 onUpdateSlotCrop={handleUpdateSlotCrop}
+                onUpdateSlotTransform={handleUpdateSlotTransform}
                 onClearClip={handleClearClip}
                 onPatchStoryboard={handlePatchStoryboard}
                 saving={storyboardSaving}

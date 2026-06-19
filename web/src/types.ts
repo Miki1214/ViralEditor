@@ -137,6 +137,14 @@ export interface SpeedSegment {
 export type ClipRole = "clip" | "hook" | "filler";
 export type SlotRole = "hook" | "clip" | "punch";
 export type SlotTransition = "cut" | "xfade";
+export type SlotFitMode = "contain" | "cover";
+
+export interface SpatialCrop {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 export interface StorySlot {
   id: string;
@@ -152,6 +160,9 @@ export interface StorySlot {
   crop_end_s: number | null;
   clip_filename: string | null;
   clip_source_url: string | null;
+  rotation_deg: number;
+  fit_mode: SlotFitMode;
+  spatial_crop: SpatialCrop | null;
 }
 
 export interface StoryboardPayload {

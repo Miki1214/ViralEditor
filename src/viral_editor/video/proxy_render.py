@@ -57,6 +57,43 @@ def _source_trim_spans(
     return spans
 
 
+def _visual_filters(
+    width: int,
+    height: int,
+    *,
+    rotation_deg: int = 0,
+    fit_mode: str = "contain",
+    spatial_crop: tuple[float, float, float, float] | None = None,
+) -> str:
+    """Rotate, optionally spatial-crop, then scale/pad to the output frame."""
+    parts: list[str] = []
+    rot = rotation_deg % 360
+    if rot == 90:
+        parts.append("transpose=1")
+    elif rot == 180:
+        parts.append("hflip,vflip")
+    elif rot == 270:
+        parts.append("transpose=2")
+    if spatial_crop is not None:
+        crop_x, crop_y, crop_w, crop_h = spatial_crop
+        parts.append(
+            f"crop=iw*{crop_w:.6f}:ih*{crop_h:.6f}:"
+            f"iw*{crop_x:.6f}:ih*{crop_y:.6f}"
+        )
+        parts.append(f"scale={width}:{height},setsar=1")
+    elif fit_mode == "cover":
+        parts.append(
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},setsar=1"
+        )
+    else:
+        parts.append(
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        )
+    return ",".join(parts)
+
+
 def _segment_filter_chains(
     segment: SpeedSegment,
     *,
@@ -66,6 +103,9 @@ def _segment_filter_chains(
     height: int,
     label_prefix: str,
     allow_wrap: bool,
+    rotation_deg: int = 0,
+    fit_mode: str = "contain",
+    spatial_crop: tuple[float, float, float, float] | None = None,
 ) -> tuple[list[str], str]:
     """Build filter chains for one output segment, including source loops."""
     out_len = max(segment.out_end_s - segment.out_start_s, 1e-6)
@@ -80,6 +120,14 @@ def _segment_filter_chains(
     if not spans:
         spans = [(0.0, min(out_len * speed, max(src_duration, 1e-6)))]
 
+    visual = _visual_filters(
+        width,
+        height,
+        rotation_deg=rotation_deg,
+        fit_mode=fit_mode,
+        spatial_crop=spatial_crop,
+    )
+
     if len(spans) == 1:
         start, end = spans[0]
         label = label_prefix
@@ -87,8 +135,7 @@ def _segment_filter_chains(
             f"[{input_label}]trim=start={start:.6f}:end={end:.6f},"
             f"setpts=PTS-STARTPTS,"
             f"setpts=PTS/{speed:.6f},"
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
+            f"{visual},"
             f"trim=duration={out_len:.6f},setpts=PTS-STARTPTS[{label}]"
         )
         return [chain], f"[{label}]"
@@ -105,8 +152,7 @@ def _segment_filter_chains(
             f"[{input_label}]trim=start={start:.6f}:end={end:.6f},"
             f"setpts=PTS-STARTPTS,"
             f"setpts=PTS/{speed:.6f},"
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,"
+            f"{visual},"
             f"trim=duration={span_out:.6f},setpts=PTS-STARTPTS[{span_labels[-1]}]"
         )
 
@@ -167,6 +213,7 @@ def build_composite_filtergraph(
     scale: tuple[int, int] = (360, 640),
     clip_input_index: dict[str, int] | None = None,
     clip_durations: dict[str, float] | None = None,
+    clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     hook_text: str | None = None,
     xfade_s: float = 0.25,
 ) -> str:
@@ -186,6 +233,14 @@ def build_composite_filtergraph(
             input_idx = clip_input_index.get(segment.source_id, 0)
         if segment.source_id and clip_durations is not None:
             src_dur = clip_durations.get(segment.source_id, src_dur)
+        rotation_deg = 0
+        fit_mode = "contain"
+        spatial_crop = None
+        if segment.source_id and clip_transforms is not None:
+            rotation_deg, fit_mode, spatial_crop = clip_transforms.get(
+                segment.source_id,
+                (0, "contain", None),
+            )
         chains, concat_ref = _segment_filter_chains(
             segment,
             input_label=f"{input_idx}:v",
@@ -194,6 +249,9 @@ def build_composite_filtergraph(
             height=height,
             label_prefix=label,
             allow_wrap=False,
+            rotation_deg=rotation_deg,
+            fit_mode=fit_mode,
+            spatial_crop=spatial_crop,
         )
         parts.extend(chains)
         if index == 0 and hook_text:
@@ -243,6 +301,7 @@ def render_composite(
     *,
     clip_paths: dict[str, Path],
     clip_durations: dict[str, float],
+    clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     music_start_s: float | None,
     music_end_s: float | None,
     out_path: Path,
@@ -266,6 +325,7 @@ def render_composite(
         scale=scale,
         clip_input_index=clip_input_index,
         clip_durations=clip_durations,
+        clip_transforms=clip_transforms,
         hook_text=hook_text,
     )
 

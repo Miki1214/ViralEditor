@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SlotTransition, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
+import type { SlotFitMode, SlotTransition, SpatialCrop, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
 import { slotColorForIndex } from "../utils/slotColors";
 import { formatSlotSpeedLabel } from "../utils/slotSpeed";
 import { ClipCropTimeline } from "./ClipCropTimeline";
+import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
 
@@ -23,6 +24,14 @@ interface StoryboardPanelProps {
     cropStartS: number,
     cropEndS: number,
   ) => Promise<void>;
+  onUpdateSlotTransform: (
+    slotId: string,
+    payload: {
+      rotation_deg?: number;
+      fit_mode?: SlotFitMode;
+      spatial_crop?: SpatialCrop | null;
+    },
+  ) => Promise<void>;
   onClearClip: (slotId: string) => Promise<void>;
   onPatchStoryboard: (payload: {
     slots?: Array<{
@@ -40,6 +49,15 @@ interface StoryboardPanelProps {
   onToggleCompositePreview?: () => void;
   onSeekCompositePreview?: (blockPlayheadS: number) => void;
   onPlayCompositePreview?: () => void;
+}
+
+interface SlotTransformDraft {
+  rotation_deg: number;
+  spatial_crop: SpatialCrop | null;
+}
+
+function transformNeedsSync(transform: SlotTransformDraft): boolean {
+  return transform.rotation_deg !== 0 || transform.spatial_crop != null;
 }
 
 function isVideoFile(file: File): boolean {
@@ -68,6 +86,7 @@ export function StoryboardPanel({
   onSelectSlot,
   onAssignClip,
   onUpdateSlotCrop,
+  onUpdateSlotTransform,
   onClearClip,
   onPatchStoryboard,
   saving = false,
@@ -88,6 +107,8 @@ export function StoryboardPanel({
   const [durationS, setDurationS] = useState<number | null>(null);
   const [cropStartS, setCropStartS] = useState(0);
   const [cropEndS, setCropEndS] = useState(0);
+  const [draftTransforms, setDraftTransforms] = useState<Record<string, SlotTransformDraft>>({});
+  const [spatialCropOpen, setSpatialCropOpen] = useState(false);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -154,8 +175,20 @@ export function StoryboardPanel({
 
   const commitClip = async () => {
     if (!active || !localFile || durationS == null) return;
+    const transform = slotTransform(active);
     await onAssignClip(active.id, localFile, cropStartS, cropEndS);
+    if (transformNeedsSync(transform)) {
+      await onUpdateSlotTransform(active.id, {
+        rotation_deg: transform.rotation_deg,
+        spatial_crop: transform.spatial_crop,
+      });
+    }
     setLocalFile(null);
+    setDraftTransforms((prev) => {
+      const next = { ...prev };
+      delete next[active.id];
+      return next;
+    });
   };
 
   const commitCrop = async (startS: number, endS: number) => {
@@ -180,6 +213,63 @@ export function StoryboardPanel({
       : "";
   const activeSlotIndex = active ? ordered.findIndex((slot) => slot.id === active.id) : -1;
   const activeSlotColor = activeSlotIndex >= 0 ? slotColorForIndex(activeSlotIndex) : null;
+
+  const slotTransform = useCallback(
+    (slot: StorySlot): SlotTransformDraft => {
+      if (slot.assigned_clip_id && !localFile) {
+        return {
+          rotation_deg: slot.rotation_deg ?? 0,
+          spatial_crop: slot.spatial_crop ?? null,
+        };
+      }
+      return (
+        draftTransforms[slot.id] ?? {
+          rotation_deg: slot.rotation_deg ?? 0,
+          spatial_crop: slot.spatial_crop ?? null,
+        }
+      );
+    },
+    [draftTransforms, localFile],
+  );
+
+  const applySlotTransform = useCallback(
+    (
+      slot: StorySlot,
+      update: {
+        rotation_deg?: number;
+        spatial_crop?: SpatialCrop | null;
+      },
+    ) => {
+      const current = slotTransform(slot);
+      const next: SlotTransformDraft = {
+        rotation_deg: update.rotation_deg ?? current.rotation_deg,
+        spatial_crop: update.spatial_crop !== undefined ? update.spatial_crop : current.spatial_crop,
+      };
+      if (slot.assigned_clip_id && !localFile) {
+        void onUpdateSlotTransform(slot.id, update);
+        return;
+      }
+      setDraftTransforms((prev) => ({ ...prev, [slot.id]: next }));
+    },
+    [localFile, onUpdateSlotTransform, slotTransform],
+  );
+
+  const clearActiveClip = useCallback(() => {
+    if (!active) return;
+    if (localFile) {
+      setLocalFile(null);
+      setDraftTransforms((prev) => {
+        const next = { ...prev };
+        delete next[active.id];
+        return next;
+      });
+      return;
+    }
+    void onClearClip(active.id);
+  }, [active, localFile, onClearClip]);
+
+  const activeTransform = active ? slotTransform(active) : null;
+  const canClearClip = Boolean(active?.assigned_clip_id || localFile);
 
   return (
     <div className="panel space-y-4 p-5">
@@ -289,15 +379,43 @@ export function StoryboardPanel({
             >
               {active.label} · {active.target_duration_s.toFixed(1)}s target
             </p>
-            {active.assigned_clip_id && (
-              <button
-                type="button"
-                className="btn-ghost text-[10px]"
-                disabled={saving}
-                onClick={() => void onClearClip(active.id)}
-              >
-                Clear clip
-              </button>
+            {activeTransform && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  className="btn-ghost px-2 py-1 font-mono text-[10px]"
+                  disabled={saving}
+                  title="Rotate clip 90° clockwise"
+                  onClick={() =>
+                    applySlotTransform(active, {
+                      rotation_deg: (activeTransform.rotation_deg + 90) % 360,
+                    })
+                  }
+                >
+                  ↻ 90°
+                </button>
+                <button
+                  type="button"
+                  className={`btn-ghost px-2 py-1 font-mono text-[10px] ${
+                    activeTransform.spatial_crop ? "text-scope-trace" : ""
+                  }`}
+                  disabled={saving || !previewUrl}
+                  title="Open frame crop editor (9:16)"
+                  onClick={() => setSpatialCropOpen(true)}
+                >
+                  Frame crop
+                </button>
+                {canClearClip && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-[10px]"
+                    disabled={saving}
+                    onClick={clearActiveClip}
+                  >
+                    Clear clip
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -332,6 +450,8 @@ export function StoryboardPanel({
                 cropEndS={cropEndS}
                 targetDurationS={active.target_duration_s}
                 slotRole={active.role}
+                rotationDeg={activeTransform?.rotation_deg ?? 0}
+                spatialCrop={activeTransform?.spatial_crop ?? null}
                 onCropChange={(startS, endS) => {
                   setCropStartS(startS);
                   setCropEndS(endS);
@@ -368,6 +488,20 @@ export function StoryboardPanel({
             </>
           )}
         </div>
+      )}
+
+      {active && previewUrl && (
+        <SpatialCropModal
+          open={spatialCropOpen}
+          videoUrl={previewUrl}
+          rotationDeg={activeTransform?.rotation_deg ?? 0}
+          initialCrop={activeTransform?.spatial_crop ?? null}
+          onClose={() => setSpatialCropOpen(false)}
+          onApply={(crop) => {
+            applySlotTransform(active, { spatial_crop: crop });
+            setSpatialCropOpen(false);
+          }}
+        />
       )}
 
       {saving && (
