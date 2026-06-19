@@ -155,13 +155,6 @@ export default function App() {
     useFullTrack: boolean;
   } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
-  const [targetSuggestionPrompt, setTargetSuggestionPrompt] = useState<{
-    requested: number;
-    suggested: number;
-  } | null>(null);
-  const [dismissedTargetSuggestions, setDismissedTargetSuggestions] = useState<Set<string>>(
-    () => new Set(),
-  );
 
   const patchForm = useCallback((partial: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -183,35 +176,6 @@ export default function App() {
     loadHealth();
     fetchStages().then(setStages).catch(() => undefined);
   }, []);
-
-  useEffect(() => {
-    if (
-      !waveform?.target_match_failed ||
-      waveform.suggested_target_duration_s == null ||
-      !activeJobId ||
-      form.useFullTrack
-    ) {
-      return;
-    }
-    const suggested = Math.round(waveform.suggested_target_duration_s);
-    if (suggested === form.targetDurationS) {
-      return;
-    }
-    const key = `${activeJobId}:${form.targetDurationS}:${suggested}`;
-    if (dismissedTargetSuggestions.has(key)) {
-      return;
-    }
-    setTargetSuggestionPrompt({
-      requested: form.targetDurationS,
-      suggested,
-    });
-  }, [
-    waveform,
-    activeJobId,
-    form.targetDurationS,
-    form.useFullTrack,
-    dismissedTargetSuggestions,
-  ]);
 
   const renderBlockedReason = (() => {
     if (apiOnline === false) {
@@ -265,8 +229,6 @@ export default function App() {
     setEvents([]);
     setPreviewReady(false);
     setPreviewVersion(0);
-    setDismissedTargetSuggestions(new Set());
-    setTargetSuggestionPrompt(null);
 
     try {
       const { id } = await createDraftJob({
@@ -339,6 +301,49 @@ export default function App() {
     }
   };
 
+  const autoTargetSwitchRef = useRef<string | null>(null);
+  const handleTargetChangeRef = useRef(handleTargetChange);
+  handleTargetChangeRef.current = handleTargetChange;
+
+  useEffect(() => {
+    autoTargetSwitchRef.current = null;
+  }, [activeJobId]);
+
+  useEffect(() => {
+    if (!activeJobId || !waveform || form.useFullTrack || analyzing || regenerating) {
+      return;
+    }
+    if (waveform.target_match_failed !== true) {
+      return;
+    }
+    if (waveform.duration_s <= form.targetDurationS) {
+      return;
+    }
+    const suggested = waveform.suggested_target_duration_s;
+    if (suggested == null) {
+      return;
+    }
+    const suggestedRounded = Math.round(suggested);
+    if (suggestedRounded === form.targetDurationS) {
+      return;
+    }
+
+    const switchKey = `${activeJobId}:${form.targetDurationS}->${suggestedRounded}`;
+    if (autoTargetSwitchRef.current === switchKey) {
+      return;
+    }
+    autoTargetSwitchRef.current = switchKey;
+
+    void handleTargetChangeRef.current(suggestedRounded, false);
+  }, [
+    activeJobId,
+    analyzing,
+    form.targetDurationS,
+    form.useFullTrack,
+    regenerating,
+    waveform,
+  ]);
+
   const hasAssignedClip = Boolean(
     storyboard?.slots.some((slot) => slot.assigned_clip_id),
   );
@@ -366,29 +371,6 @@ export default function App() {
     const pending = regeneratePrompt;
     setRegeneratePrompt(null);
     void handleTargetChange(pending.targetDurationS, pending.useFullTrack);
-  };
-
-  const dismissTargetSuggestion = () => {
-    if (!targetSuggestionPrompt || !activeJobId) return;
-    const { requested, suggested } = targetSuggestionPrompt;
-    setDismissedTargetSuggestions((prev) => {
-      const next = new Set(prev);
-      next.add(`${activeJobId}:${requested}:${suggested}`);
-      return next;
-    });
-    setTargetSuggestionPrompt(null);
-  };
-
-  const confirmTargetSuggestion = () => {
-    if (!targetSuggestionPrompt || !activeJobId) return;
-    const { requested, suggested } = targetSuggestionPrompt;
-    setDismissedTargetSuggestions((prev) => {
-      const next = new Set(prev);
-      next.add(`${activeJobId}:${requested}:${suggested}`);
-      return next;
-    });
-    setTargetSuggestionPrompt(null);
-    void handleTargetChange(suggested, false);
   };
 
   const handleSelectBlock = async (block: MusicBlock) => {
@@ -593,11 +575,7 @@ export default function App() {
       <main className="mx-auto grid max-w-[1400px] gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <section className="space-y-5">
           <JobForm
-            form={form}
             onAudioSelected={handleAudioSelected}
-            onTargetDurationChange={(targetDurationS) =>
-              requestTargetChange(targetDurationS, false)
-            }
             audioName={audioName}
             analyzing={analyzing}
             disabled={apiOnline === false || ffmpegOk === false}
@@ -613,6 +591,7 @@ export default function App() {
                   selectedBlockId={selectedBlockId}
                   onTargetChange={requestTargetChange}
                   onSelectBlock={handleSelectBlock}
+                  switchingTarget={regenerating}
                 />
               ) : null
             }
@@ -735,20 +714,6 @@ export default function App() {
           </div>
         </aside>
       </main>
-
-      <ConfirmDialog
-        open={targetSuggestionPrompt !== null}
-        title="No loop at this length"
-        message={
-          targetSuggestionPrompt
-            ? `We couldn't find a phrase-aligned ${targetSuggestionPrompt.requested}s loop in this track. Switch to ${targetSuggestionPrompt.suggested}s for the closest matching short?`
-            : ""
-        }
-        confirmLabel={`Switch to ${targetSuggestionPrompt?.suggested ?? ""}s`}
-        cancelLabel={`Keep ${targetSuggestionPrompt?.requested ?? ""}s`}
-        onConfirm={confirmTargetSuggestion}
-        onCancel={dismissTargetSuggestion}
-      />
 
       <ConfirmDialog
         open={regeneratePrompt !== null}

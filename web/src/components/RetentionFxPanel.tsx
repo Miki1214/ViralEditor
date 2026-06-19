@@ -190,11 +190,9 @@ export function RetentionFxPanel({
     () => teaser.payoff_downbeats_s ?? [],
     [teaser.payoff_downbeats_s],
   );
-  const payoffLocked = teaser.enabled && payoffDownbeats.length <= 1;
-  const serverPayoffIndex = nearestPayoffIndex(teaser.duration_s, payoffDownbeats);
   const serverPayoffS =
     payoffDownbeats.length > 0
-      ? payoffDownbeats[serverPayoffIndex]
+      ? payoffDownbeats[nearestPayoffIndex(teaser.duration_s, payoffDownbeats)]
       : Math.min(teaser.duration_s, Math.max(0.5, hookBudget - 0.25));
 
   const sourceSplit = useSliderDraft(
@@ -202,19 +200,6 @@ export function RetentionFxPanel({
     debouncedPatch,
     (value) => ({ teaser: { tail_fraction: value / 100 } }),
   );
-  const [payoffIndex, setPayoffIndex] = useState(serverPayoffIndex);
-  const payoffIndexRef = useRef(serverPayoffIndex);
-
-  useEffect(() => {
-    payoffIndexRef.current = serverPayoffIndex;
-    setPayoffIndex(serverPayoffIndex);
-  }, [serverPayoffIndex, payoffDownbeats]);
-
-  const commitPayoffIndex = useCallback(() => {
-    const positions = payoffDownbeats;
-    if (positions.length === 0) return;
-    debouncedPatch.schedule({ teaser: { duration_s: positions[payoffIndexRef.current] } });
-  }, [debouncedPatch, payoffDownbeats]);
   const intensitySplit = useSliderDraft(
     Math.round(spatialFx.intensity * 100),
     debouncedPatch,
@@ -228,8 +213,7 @@ export function RetentionFxPanel({
 
   const sourceSplitPct = sourceSplit.localValue;
   const hookEndSlot = storyboard.slots.find((slot) => slot.role === "hook_end");
-  const payoffS =
-    payoffDownbeats.length > 0 ? payoffDownbeats[payoffIndex] ?? serverPayoffS : serverPayoffS;
+  const payoffS = serverPayoffS;
   const intensityPct = intensitySplit.localValue;
   const maxEventsPerSecond = densitySplit.localValue;
 
@@ -239,7 +223,15 @@ export function RetentionFxPanel({
       ? buildupFromSlots
       : Math.max(hookBudget - payoffS, 0.25);
   const payoffShare = hookBudget > 0 ? payoffS / hookBudget : 0.5;
-  const payoffStepCount = Math.max(payoffDownbeats.length - 1, 0);
+
+  const payoffOptions = useMemo(
+    () =>
+      payoffDownbeats.map((payoff) => ({
+        payoff,
+        buildup: Math.max(hookBudget - payoff, 0.25),
+      })),
+    [payoffDownbeats, hookBudget],
+  );
 
   const fxCounts = useMemo(
     () =>
@@ -308,45 +300,58 @@ export function RetentionFxPanel({
               Tail slice {sourceSplitPct}% — part 2 is the payoff source; part 1 is build-up.
             </p>
           </label>
-          <label className="block">
-            <span className="field-label">Hook split</span>
-            <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-monitor-muted">
-              <span className="w-8 tabular-nums text-scope-trace">1 · {payoffS.toFixed(1)}s</span>
-              <div className="relative flex-1">
-                <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-monitor-border" />
-                <input
-                  type="range"
-                  min={0}
-                  max={payoffStepCount}
-                  step={1}
-                  disabled={saving || !teaser.enabled || payoffLocked || payoffDownbeats.length === 0}
-                  value={payoffIndex}
-                  className="relative z-[1] w-full"
-                  onChange={(event) => {
-                    debouncedPatch.cancel();
-                    const index = Number(event.target.value);
-                    payoffIndexRef.current = index;
-                    setPayoffIndex(index);
-                  }}
-                  onPointerDown={() => debouncedPatch.cancel()}
-                  onPointerUp={commitPayoffIndex}
-                  onMouseUp={commitPayoffIndex}
-                  onTouchEnd={commitPayoffIndex}
-                  onKeyUp={commitPayoffIndex}
-                />
+          <fieldset
+            className="block border-0 p-0 m-0 min-w-0"
+            disabled={saving || !teaser.enabled}
+          >
+            <legend className="field-label">Hook split</legend>
+            {payoffOptions.length === 0 ? (
+              <p className="mt-1 font-mono text-[10px] text-monitor-muted">
+                No downbeat positions in hook budget ({hookBudget.toFixed(1)}s)
+              </p>
+            ) : (
+              <div
+                className="mt-2 space-y-1"
+                role="radiogroup"
+                aria-label="Hook split downbeat positions"
+              >
+                {payoffOptions.map(({ payoff, buildup }) => {
+                  const selected = Math.abs(serverPayoffS - payoff) < 0.05;
+                  const singleOption = payoffOptions.length === 1;
+                  return (
+                    <label
+                      key={payoff}
+                      className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 font-mono text-[10px] transition ${
+                        selected
+                          ? "border-scope-trace/60 bg-scope-trace/10 text-monitor-text"
+                          : "border-monitor-border/60 text-monitor-muted hover:border-scope-dim"
+                      } ${singleOption ? "cursor-default opacity-90" : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="hook-split-payoff"
+                        className="shrink-0 accent-[rgb(var(--scope-trace))]"
+                        checked={selected}
+                        disabled={singleOption}
+                        onChange={() => void onPatch({ teaser: { duration_s: payoff } })}
+                      />
+                      <span className="tabular-nums text-scope-trace">1 · {payoff.toFixed(1)}s</span>
+                      <span className="text-monitor-muted">→</span>
+                      <span className="tabular-nums text-scope-trace">2 · {buildup.toFixed(1)}s</span>
+                      {singleOption && (
+                        <span className="ml-auto text-monitor-muted">only downbeat</span>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
-              <span className="w-8 text-right tabular-nums text-scope-trace">
-                2 · {buildupS.toFixed(1)}s
-              </span>
-            </div>
+            )}
             <p className="mt-1 font-mono text-[10px] text-monitor-muted">
-              {payoffLocked
-                ? `Locked to downbeat · ${payoffS.toFixed(1)}s payoff · ${buildupS.toFixed(1)}s build-up`
-                : payoffDownbeats.length > 1
-                  ? `${payoffDownbeats.length} downbeat positions · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`
-                  : `Snapped to downbeats · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`}
+              {payoffOptions.length <= 1
+                ? `Snapped to downbeat · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`
+                : `${payoffOptions.length} downbeat positions · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`}
             </p>
-          </label>
+          </fieldset>
           <label className="block">
             <span className="field-label">Mask</span>
             <select

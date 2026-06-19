@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loopSeamPreviewUrl, previewAudioUrl } from "../api/client";
 import { TARGET_DURATION_PRESETS } from "../constants/durations";
 import type { MusicBlock, WaveformPayload } from "../types";
@@ -14,6 +14,38 @@ interface AudioScopePanelProps {
   onTargetChange: (targetDurationS: number, useFullTrack: boolean) => void;
   onSelectBlock: (block: MusicBlock) => void;
   embedded?: boolean;
+  switchingTarget?: boolean;
+}
+
+function TargetSwitchSpinner({ className = "" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-monitor-muted/25 border-t-hook-gold ${className}`}
+      role="status"
+      aria-label="Switching target length"
+    />
+  );
+}
+
+function ChipSwitchOverlay({
+  switching,
+  children,
+}: {
+  switching: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <span className="relative inline-flex items-center">
+      {switching && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <TargetSwitchSpinner />
+        </span>
+      )}
+      <span className={switching ? "invisible inline-flex items-center" : "inline-flex items-center"}>
+        {children}
+      </span>
+    </span>
+  );
 }
 
 function fallbackFullTrackBlock(waveform: WaveformPayload): MusicBlock {
@@ -67,6 +99,7 @@ export function AudioScopePanel({
   onTargetChange,
   onSelectBlock,
   embedded = false,
+  switchingTarget = false,
 }: AudioScopePanelProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scopeScrollRef = useRef<HTMLDivElement>(null);
@@ -84,6 +117,11 @@ export function AudioScopePanel({
     setPlayingBlockId(null);
     setPlayingMode(null);
   };
+
+  useEffect(() => {
+    if (!switchingTarget) return;
+    stopPreview();
+  }, [switchingTarget]);
 
   const handlePreview = (block: MusicBlock, mode: PreviewMode) => {
     if (playingBlockId === block.id && playingMode === mode) {
@@ -194,7 +232,7 @@ export function AudioScopePanel({
     <section
       className={
         embedded
-          ? "space-y-4 border-t border-monitor-border pt-5"
+          ? "space-y-4 pt-4"
           : "panel space-y-4 p-5"
       }
     >
@@ -216,6 +254,7 @@ export function AudioScopePanel({
           {TARGET_DURATION_PRESETS.map((preset) => {
             const matchable = isPresetMatchable(preset.value);
             const active = !useFullTrack && targetDurationS === preset.value;
+            const switching = switchingTarget && active;
             const unavailable = !matchable && !active;
             const loopQualityPct = loopQualityByPreset.get(preset.value);
             const isBestLoop =
@@ -236,38 +275,45 @@ export function AudioScopePanel({
             <button
               key={preset.value}
               type="button"
-              disabled={unavailable}
+              disabled={unavailable || switchingTarget}
               title={qualityTitle}
               className={durationChipClass(active, unavailable, isBestLoop)}
               onClick={() => onTargetChange(preset.value, false)}
             >
-              <span>{preset.label}</span>
-              {loopQualityPct != null && (
-                <span
-                  className={`ml-1 text-[10px] ${
-                    active
-                      ? "text-hook-gold/75"
-                      : isBestLoop
-                        ? "text-monitor-muted/45"
-                        : "text-monitor-muted/55"
-                  }`}
-                >
-                  {loopQualityPct}%
-                </span>
-              )}
+              <ChipSwitchOverlay switching={switching}>
+                <span>{preset.label}</span>
+                {loopQualityPct != null && (
+                  <span
+                    className={`ml-1 text-[10px] ${
+                      active
+                        ? "text-hook-gold/75"
+                        : isBestLoop
+                          ? "text-monitor-muted/45"
+                          : "text-monitor-muted/55"
+                    }`}
+                  >
+                    {loopQualityPct}%
+                  </span>
+                )}
+              </ChipSwitchOverlay>
             </button>
             );
           })}
           <button
             type="button"
+            disabled={switchingTarget}
             className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
               useFullTrack || trackShorterThanTarget
                 ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
                 : "border-monitor-border text-monitor-muted hover:border-scope-dim"
-            }`}
+            } ${switchingTarget ? "cursor-not-allowed" : ""}`}
             onClick={() => onTargetChange(waveform.duration_s, true)}
           >
-            Full
+            <ChipSwitchOverlay
+              switching={switchingTarget && (useFullTrack || trackShorterThanTarget)}
+            >
+              <span>Full</span>
+            </ChipSwitchOverlay>
           </button>
         </div>
       </div>
@@ -293,7 +339,7 @@ export function AudioScopePanel({
       </div>
 
       <div className="space-y-2">
-        {(trackShorterThanTarget || targetMismatch) && (
+        {(trackShorterThanTarget || targetMismatch) && !switchingTarget && (
           <p className="text-sm text-monitor-muted">
             {trackShorterThanTarget
               ? "Track is shorter than the target — the full track will drive the render."
@@ -302,20 +348,33 @@ export function AudioScopePanel({
                 : "No phrase-aligned window matched this target — preview the full track below."}
           </p>
         )}
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-          {onlyFullTrack ? "Track preview" : "Suggested blocks"}
-        </p>
-        {blocks.map((block) => (
-          <MusicBlockCard
-            key={block.id}
-            block={block}
-            selected={block.id === selectedBlockId}
-            playingMode={playingBlockId === block.id ? playingMode : null}
-            onSelect={() => onSelectBlock(block)}
-            onAudition={() => handlePreview(block, "audition")}
-            onLoopPreview={() => handlePreview(block, "loop")}
-          />
-        ))}
+        <div className="flex items-center gap-2">
+          {switchingTarget && <TargetSwitchSpinner />}
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+            {switchingTarget
+              ? "Updating blocks…"
+              : onlyFullTrack
+                ? "Track preview"
+                : "Suggested blocks"}
+          </p>
+        </div>
+        <div
+          className={`space-y-2 ${
+            switchingTarget ? "pointer-events-none opacity-45" : ""
+          }`}
+        >
+          {blocks.map((block) => (
+            <MusicBlockCard
+              key={block.id}
+              block={block}
+              selected={block.id === selectedBlockId}
+              playingMode={playingBlockId === block.id ? playingMode : null}
+              onSelect={() => onSelectBlock(block)}
+              onAudition={() => handlePreview(block, "audition")}
+              onLoopPreview={() => handlePreview(block, "loop")}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );
