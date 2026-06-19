@@ -365,7 +365,8 @@ def run_pipeline(
             ramp_timeline,
             ingest.video,
             seed=loaded.seed,
-        )
+            max_events_per_second=loaded.spatial_fx.max_events_per_second,
+        ) if loaded.spatial_fx.enabled else []
         fx_path = write_artifact_list(fx_events, "fx_events", work_temp)
         artifacts.append(fx_path.name)
         logger.info(

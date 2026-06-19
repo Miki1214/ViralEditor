@@ -15,7 +15,7 @@ BudgetPolicy = Literal["scale", "loop", "trim"]
 FxKind = Literal["zoom", "rotate"]
 TeaserMask = Literal["vignette", "dir_blur"]
 ClipRole = Literal["clip", "hook", "filler"]
-SlotRole = Literal["hook", "clip", "punch"]
+SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]
 SlotFitMode = Literal["contain", "cover"]
 

@@ -143,6 +143,70 @@ def test_build_composite_filtergraph_rotation_and_cover() -> None:
     assert "scale=360:640" in graph
 
 
+def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch) -> None:
+    from viral_editor.models import FxEvent
+
+    monkeypatch.setattr(
+        "viral_editor.video.proxy_render.resolve_drawtext_fontfile",
+        lambda: "C\\:/Windows/Fonts/arial.ttf",
+    )
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.5,
+            src_start_s=8.0,
+            src_end_s=10.0,
+            speed_factor=0.8,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=2.5,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=4.0,
+            speed_factor=2.0,
+            source_id="clip_b",
+        ),
+    ]
+    fx_events = [
+        FxEvent(timestamp_s=1.0, kind="zoom", magnitude=1.07, decay_frames=4),
+        FxEvent(timestamp_s=2.0, kind="rotate", magnitude=1.2, decay_frames=4),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut", "cut"],
+        clip_input_index={"clip_a": 0, "clip_b": 1},
+        clip_durations={"clip_a": 10.0, "clip_b": 12.0},
+        hook_text="Hook",
+        segment_roles=["hook_start", "clip"],
+        hook_start_mask="vignette",
+        fx_events=fx_events,
+        fx_seed=7,
+        fx_intensity=1.0,
+    )
+    assert "vignette=angle=PI/5" in graph
+    assert "concat=n=2:v=1:a=0[composed]" not in graph
+    assert "drawtext" in graph
+    assert "scale=w='trunc(iw*(" in graph
+    assert "rotate=a='if(between(t" in graph
+    assert "[outv]" in graph
+
+
+def test_composite_output_duration_uses_segment_timeline() -> None:
+    from viral_editor.video.proxy_render import composite_output_duration_s
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=5.0,
+            speed_factor=1.0,
+        ),
+    ]
+    assert composite_output_duration_s(segments) == pytest.approx(5.0)
+
+
 def test_build_composite_filtergraph_spatial_crop() -> None:
     segments = [
         SpeedSegment(

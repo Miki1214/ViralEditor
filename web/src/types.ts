@@ -135,7 +135,7 @@ export interface SpeedSegment {
 }
 
 export type ClipRole = "clip" | "hook" | "filler";
-export type SlotRole = "hook" | "clip" | "punch";
+export type SlotRole = "hook" | "hook_start" | "hook_end" | "clip" | "punch";
 export type SlotTransition = "cut" | "xfade";
 export type SlotFitMode = "contain" | "cover";
 
@@ -172,7 +172,24 @@ export interface StoryboardPayload {
   total_duration_s: number;
   loop_to_hook: boolean;
   preview_ready: boolean;
+  teaser: TeaserSettings;
+  spatial_fx: SpatialFxSettings;
   slots: StorySlot[];
+}
+
+export type TeaserMask = "vignette" | "dir_blur";
+
+export interface TeaserSettings {
+  enabled: boolean;
+  tail_fraction: number;
+  duration_s: number;
+  mask: TeaserMask;
+}
+
+export interface SpatialFxSettings {
+  enabled: boolean;
+  intensity: number;
+  max_events_per_second: number;
 }
 
 export interface ClipInfo {

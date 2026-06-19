@@ -123,9 +123,18 @@ class SpeedRampConfig(DomainModel):
 class TeaserConfig(DomainModel):
     """Frame-0 teaser clip parameters."""
 
+    enabled: bool = True
     tail_fraction: float = Field(default=0.05, gt=0, le=1)
     duration_s: float = Field(default=2.5, gt=0)
     mask: TeaserMask = "vignette"
+
+
+class SpatialFxConfig(DomainModel):
+    """Beat-synced zoom punches and rotation shakes."""
+
+    enabled: bool = True
+    intensity: float = Field(default=1.0, ge=0, le=1)
+    max_events_per_second: float = Field(default=8.0, gt=0, le=30)
 
 
 class MusicSelectionConfig(DomainModel):
@@ -157,6 +166,7 @@ class JobConfig(DomainModel):
     render: RenderConfig = Field(default_factory=RenderConfig)
     speed_ramp: SpeedRampConfig = Field(default_factory=SpeedRampConfig)
     teaser: TeaserConfig = Field(default_factory=TeaserConfig)
+    spatial_fx: SpatialFxConfig = Field(default_factory=SpatialFxConfig)
     music: MusicSelectionConfig = Field(default_factory=MusicSelectionConfig)
 
     def effective_clips(self) -> list[ClipInput]:

@@ -51,7 +51,7 @@ def test_teaser_rejects_zero_tail_fraction_in_config() -> None:
         TeaserConfig(tail_fraction=0.0)
 
 
-def test_teaser_uses_hook_clip_crop() -> None:
+def test_teaser_uses_hook_clip_tail_slice() -> None:
     hook = ClipInput(
         id="hook",
         path=Path("assets/hook.mp4"),
@@ -65,11 +65,25 @@ def test_teaser_uses_hook_clip_crop() -> None:
         duration_s=10.0,
         has_video=True,
     )
-    spec = build_teaser_spec(_video(30.0), TeaserConfig(), hook_clip=hook, hook_media=hook_media)
-    assert spec.src_start_s == pytest.approx(1.0)
+    spec = build_teaser_spec(
+        _video(30.0),
+        TeaserConfig(tail_fraction=0.1),
+        hook_clip=hook,
+        hook_media=hook_media,
+    )
+    # 10% of 3s crop window → 0.3s tail ending at crop_end 4.0
+    assert spec.src_start_s == pytest.approx(3.7)
     assert spec.src_end_s == pytest.approx(4.0)
     assert spec.source_id == "hook"
     assert spec.source_path == hook.path
+
+
+def test_split_hook_crop_head_and_tail() -> None:
+    from viral_editor.video.teaser import split_hook_crop
+
+    head, tail = split_hook_crop(1.0, 4.0, 0.1)
+    assert tail == pytest.approx((3.7, 4.0))
+    assert head == pytest.approx((1.0, 3.7))
 
 
 def test_body_output_duration_after_teaser() -> None:

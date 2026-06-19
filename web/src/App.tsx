@@ -10,6 +10,7 @@ import {
   fetchStages,
   fetchStoryboard,
   fetchWaveform,
+  patchEffects,
   patchStoryboard,
   subscribeJobEvents,
   updateMusicSelection,
@@ -507,6 +508,22 @@ export default function App() {
     }
   };
 
+  const handlePatchEffects = async (
+    payload: Parameters<typeof patchEffects>[1],
+  ) => {
+    if (!activeJobId) return;
+    setStoryboardSaving(true);
+    try {
+      const updated = await patchEffects(activeJobId, payload);
+      setStoryboard(updated);
+      refreshPreview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update retention FX");
+    } finally {
+      setStoryboardSaving(false);
+    }
+  };
+
   const compositeUrl =
     activeJobId && previewReady
       ? (() => {
@@ -614,6 +631,7 @@ export default function App() {
                 onUpdateSlotTransform={handleUpdateSlotTransform}
                 onClearClip={handleClearClip}
                 onPatchStoryboard={handlePatchStoryboard}
+                onPatchEffects={handlePatchEffects}
                 saving={storyboardSaving}
                 blockPlayheadS={blockPlayheadS}
                 onBlockPlayheadChange={setBlockPlayheadS}

@@ -37,8 +37,11 @@ from viral_editor.api.storyboard import (
     clip_media_for_storyboard,
     load_storyboard,
     persist_storyboard,
+    refresh_hook_inversion_layout,
     refresh_storyboard_after_music,
     sync_config_clips_from_storyboard,
+    sync_teaser_duration_from_layout,
+    sync_storyboard_hook_layout,
     update_slot_crop,
     update_slot_transform,
 )
@@ -47,6 +50,7 @@ from viral_editor.api.schemas import (
     ClipsPatchRequest,
     JobCreatedResponse,
     JobDetail,
+    EffectsPatchRequest,
     JobSummary,
     MusicSelectionUpdate,
     PipelineStagesResponse,
@@ -54,10 +58,16 @@ from viral_editor.api.schemas import (
     SlotCropPatchRequest,
     SlotTransformPatchRequest,
     SpatialCropInput,
+    SpatialFxSettingsResponse,
     StageInfo,
     StoryboardPatchRequest,
     StoryboardResponse,
     StorySlotResponse,
+    TeaserSettingsResponse,
+)
+from viral_editor.api.effects import (
+    apply_effects_patch,
+    spatial_fx_for_preview,
 )
 from viral_editor.api.speed import (
     compute_speed_options,
@@ -638,6 +648,7 @@ def _storyboard_response(
     storyboard,
     *,
     preview_ready: bool,
+    config,
 ) -> StoryboardResponse:
     return StoryboardResponse(
         music_block_id=storyboard.music_block_id,
@@ -646,6 +657,17 @@ def _storyboard_response(
         total_duration_s=storyboard.total_duration_s,
         loop_to_hook=storyboard.loop_to_hook,
         preview_ready=preview_ready,
+        teaser=TeaserSettingsResponse(
+            enabled=config.teaser.enabled,
+            tail_fraction=config.teaser.tail_fraction,
+            duration_s=config.teaser.duration_s,
+            mask=config.teaser.mask,
+        ),
+        spatial_fx=SpatialFxSettingsResponse(
+            enabled=config.spatial_fx.enabled,
+            intensity=config.spatial_fx.intensity,
+            max_events_per_second=config.spatial_fx.max_events_per_second,
+        ),
         slots=[
             StorySlotResponse(
                 id=slot.id,
@@ -676,7 +698,8 @@ def _storyboard_response(
 
 @router.get("/{job_id}/storyboard", response_model=StoryboardResponse)
 def get_storyboard(job_id: str, request: Request) -> StoryboardResponse:
-    job = _store(request).get(job_id)
+    store = _store(request)
+    job = store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     temp_dir = job.workspace / "temp"
@@ -685,10 +708,57 @@ def get_storyboard(job_id: str, request: Request) -> StoryboardResponse:
         storyboard = refresh_storyboard_after_music(job.config, temp_dir)
     if storyboard is None:
         raise HTTPException(status_code=404, detail="Storyboard not ready — select a music block")
+    synced = sync_storyboard_hook_layout(storyboard, job.config, temp_dir=temp_dir)
+    config = job.config
+    if synced is not storyboard:
+        persist_storyboard(temp_dir, synced)
+        storyboard = synced
+        config = sync_teaser_duration_from_layout(config, storyboard)
+        if config is not job.config:
+            store.update_config(job_id, config)
+            write_job_config(config, job.workspace)
     return _storyboard_response(
         job_id,
         storyboard,
         preview_ready=storyboard_filled_enough(storyboard),
+        config=config,
+    )
+
+
+@router.patch("/{job_id}/effects", response_model=StoryboardResponse)
+def patch_effects(
+    job_id: str,
+    payload: EffectsPatchRequest,
+    request: Request,
+) -> StoryboardResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not payload.teaser and not payload.spatial_fx:
+        raise HTTPException(status_code=400, detail="No effect fields provided")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+
+    updated_config = apply_effects_patch(job.config, payload)
+    updated_storyboard = refresh_hook_inversion_layout(
+        storyboard,
+        updated_config,
+        temp_dir=temp_dir,
+    )
+    updated_config = sync_teaser_duration_from_layout(updated_config, updated_storyboard)
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    persist_storyboard(temp_dir, updated_storyboard)
+    _invalidate_composite_previews(temp_dir)
+    return _storyboard_response(
+        job_id,
+        updated_storyboard,
+        preview_ready=storyboard_filled_enough(updated_storyboard),
+        config=updated_config,
     )
 
 
@@ -744,6 +814,7 @@ def patch_storyboard(
         job_id,
         updated,
         preview_ready=storyboard_filled_enough(updated),
+        config=job.config,
     )
 
 
@@ -770,11 +841,17 @@ async def assign_slot_video(
     if not any(slot.id == slot_id for slot in storyboard.slots):
         raise HTTPException(status_code=404, detail="Slot not found")
 
+    target_slot = next(slot for slot in storyboard.slots if slot.id == slot_id)
+    hook_root = slot_id.replace("_hook_start", "").replace("_hook_end", "")
+    if target_slot.role in ("hook", "hook_start", "hook_end"):
+        clip_id = f"{hook_root}_clip"
+    else:
+        clip_id = f"{slot_id}_clip"
+
     video_bytes = await video.read()
     if not video_bytes:
         raise HTTPException(status_code=400, detail="Video file is empty")
 
-    clip_id = f"{slot_id}_clip"
     video_name = Path(video.filename or f"{clip_id}.mp4").name
     input_dir = job.workspace / "input"
     save_upload(video_bytes, input_dir / video_name)
@@ -803,8 +880,14 @@ async def assign_slot_video(
         rotation_deg=rotation_deg or 0,
         spatial_crop=spatial_crop,
     )
+    updated_storyboard = refresh_hook_inversion_layout(
+        updated_storyboard,
+        job.config,
+        temp_dir=temp_dir,
+    )
+    updated_config = sync_teaser_duration_from_layout(job.config, updated_storyboard)
 
-    existing = {clip.id: clip for clip in job.config.clips}
+    existing = {clip.id: clip for clip in updated_config.clips}
     existing[clip_id] = ClipInput(
         id=clip_id,
         path=clip_path,
@@ -818,7 +901,7 @@ async def assign_slot_video(
             next(i for i, s in enumerate(updated_storyboard.slots) if s.id == slot_id)
         ].crop_end_s,
     )
-    updated_config = job.config.model_copy(update={"clips": list(existing.values())})
+    updated_config = updated_config.model_copy(update={"clips": list(existing.values())})
     updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)
 
     persist_storyboard(temp_dir, updated_storyboard)
@@ -829,6 +912,7 @@ async def assign_slot_video(
         job_id,
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
+        config=job.config,
     )
 
 
@@ -879,6 +963,7 @@ def patch_slot_crop(
         job_id,
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
+        config=job.config,
     )
 
 
@@ -939,6 +1024,7 @@ def patch_slot_transform(
         job_id,
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
+        config=job.config,
     )
 
 
@@ -967,6 +1053,7 @@ def clear_slot_video(job_id: str, slot_id: str, request: Request) -> StoryboardR
         job_id,
         updated_storyboard,
         preview_ready=storyboard_filled_enough(updated_storyboard),
+        config=job.config,
     )
 
 
@@ -984,11 +1071,12 @@ def get_composite_preview(
     storyboard = load_storyboard(temp_dir)
     if storyboard is None:
         raise HTTPException(status_code=404, detail="Storyboard not found")
+    storyboard = sync_storyboard_hook_layout(storyboard, job.config)
     if not storyboard_filled_enough(storyboard):
         raise HTTPException(status_code=400, detail="Assign a clip to the hook slot first")
 
     clip_media = clip_media_for_storyboard(job.config)
-    segments = storyboard_to_segments(storyboard, clip_media)
+    segments, segment_roles = storyboard_to_segments(storyboard, clip_media)
     if not segments:
         raise HTTPException(status_code=400, detail="No assigned clips to preview")
 
@@ -1022,12 +1110,28 @@ def get_composite_preview(
         if slot.assigned_clip_id is not None
     }
 
+    primary_media = next(iter(clip_media.values()), None)
+    fx_events = (
+        spatial_fx_for_preview(
+            job.config,
+            temp_dir,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+            media=primary_media,
+        )
+        if primary_media is not None
+        else []
+    )
+
     import hashlib
     import json
 
     cache_payload = {
         "storyboard": storyboard.model_dump(mode="json"),
         "hook": job.config.hook.text,
+        "teaser": job.config.teaser.model_dump(mode="json"),
+        "spatial_fx": job.config.spatial_fx.model_dump(mode="json"),
+        "seed": job.config.seed,
     }
     digest = hashlib.sha256(json.dumps(cache_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     preview_path = temp_dir / "previews" / f"composite_{digest}.mp4"
@@ -1048,6 +1152,13 @@ def get_composite_preview(
                 out_path=preview_path,
                 hook_text=job.config.hook.text,
                 temp_dir=temp_dir,
+                segment_roles=segment_roles,
+                hook_start_mask=(
+                    job.config.teaser.mask if job.config.teaser.enabled else None
+                ),
+                fx_events=fx_events,
+                fx_seed=job.config.seed,
+                fx_intensity=job.config.spatial_fx.intensity,
             )
         except (RuntimeError, FFmpegError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

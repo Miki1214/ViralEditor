@@ -286,7 +286,9 @@ export function PhonePreview({
       </div>
       <p className="mt-3 text-center font-mono text-[10px] text-monitor-muted">
         {compositeMode
-          ? "Composited preview · music + speed ramp + transitions"
+          ? storyboard?.teaser.enabled
+            ? "Composited preview · hook inversion + spatial FX"
+            : "Composited preview · spatial FX + transitions"
           : "1080 × 1920 · assign slots to preview"}
       </p>
     </div>

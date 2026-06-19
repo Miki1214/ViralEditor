@@ -7,7 +7,9 @@ import pytest
 
 from viral_editor.audio.features import BeatFeaturesMeta, BeatSyncFeatures
 from viral_editor.audio.storyboard import (
+    apply_hook_inversion_layout,
     plan_storyboard,
+    relayout_beat_aligned_timeline,
     storyboard_filled_enough,
     storyboard_to_segments,
 )
@@ -94,10 +96,104 @@ def test_storyboard_to_segments_maps_crops() -> None:
             has_video=True,
         )
     }
-    segments = storyboard_to_segments(storyboard, media)
+    segments, roles = storyboard_to_segments(storyboard, media)
     assert len(segments) == 1
+    assert roles == ["hook"]
     assert segments[0].source_id == "slot_0_clip"
     assert segments[0].src_end_s - segments[0].src_start_s == pytest.approx(4.0)
+
+
+def test_apply_hook_inversion_layout_splits_hook_slots() -> None:
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    hook = storyboard.slots[0].model_copy(
+        update={
+            "assigned_clip_id": "slot_0_clip",
+            "crop_start_s": 0.0,
+            "crop_end_s": 3.0,
+        }
+    )
+    storyboard = storyboard.model_copy(update={"slots": [hook, *storyboard.slots[1:]]})
+    split = apply_hook_inversion_layout(
+        storyboard,
+        enabled=True,
+        payoff_duration_s=1.0,
+        tail_fraction=0.2,
+    )
+    roles = [slot.role for slot in sorted(split.slots, key=lambda item: item.order)]
+    assert roles[0] == "hook_start"
+    assert roles[-1] == "hook_end"
+    hook_start = split.slots[0]
+    hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
+    assert hook_start.target_duration_s == pytest.approx(1.0)
+    assert hook_end.target_duration_s == pytest.approx(hook.target_duration_s - 1.0)
+    assert hook_start.crop_start_s == pytest.approx(2.4)
+    assert hook_end.crop_end_s == pytest.approx(2.4)
+
+
+def test_hook_inversion_realigns_slot_boundaries_to_downbeats() -> None:
+    block = _block(24.0)
+    features = _features([10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 34.0])
+    storyboard = plan_storyboard(block, features=features, transients=[])
+    split = apply_hook_inversion_layout(
+        storyboard,
+        enabled=True,
+        payoff_duration_s=1.2,
+        tail_fraction=0.2,
+        features=features,
+    )
+    relative_downbeats = {
+        round(float(t - block.start_s), 3)
+        for t in features.downbeat_times_s.tolist()
+        if block.start_s - 1e-6 <= t <= block.end_s + 1e-6
+    }
+    hook_start = next(slot for slot in split.slots if slot.role == "hook_start")
+    hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
+    assert round(hook_start.out_end_s, 3) in relative_downbeats
+    assert round(hook_end.out_start_s, 3) in relative_downbeats
+    for slot in split.slots:
+        if slot.role in ("clip", "punch"):
+            assert round(slot.out_start_s, 3) in relative_downbeats
+            assert round(slot.out_end_s, 3) in relative_downbeats
+
+
+def test_relayout_beat_aligned_timeline_preserves_total_duration() -> None:
+    block = _block(16.0)
+    features = _features([10.0, 12.0, 14.0, 16.0, 26.0])
+    storyboard = plan_storyboard(block, features=features, transients=[])
+    hook = storyboard.slots[0]
+    middle = storyboard.slots[1:]
+    split_slots = [
+        hook.model_copy(
+            update={
+                "id": "slot_0_hook_start",
+                "role": "hook_start",
+                "label": "Hook · start",
+                "target_duration_s": 1.0,
+            }
+        ),
+        *middle,
+        hook.model_copy(
+            update={
+                "id": "slot_0_hook_end",
+                "role": "hook_end",
+                "label": "Hook · end",
+                "order": len(middle) + 1,
+                "target_duration_s": hook.target_duration_s - 1.0,
+            }
+        ),
+    ]
+    relaid = relayout_beat_aligned_timeline(
+        split_slots,
+        total_duration_s=storyboard.total_duration_s,
+        features=features,
+        music_start_s=storyboard.music_start_s,
+        music_end_s=storyboard.music_end_s,
+    )
+    assert relaid[0].out_start_s == pytest.approx(0.0)
+    assert relaid[-1].out_end_s == pytest.approx(storyboard.total_duration_s)
+    for left, right in zip(relaid, relaid[1:]):
+        assert left.out_end_s == pytest.approx(right.out_start_s)
 
 
 def test_storyboard_to_segments_scales_speed_to_target() -> None:
@@ -120,7 +216,7 @@ def test_storyboard_to_segments_scales_speed_to_target() -> None:
             has_video=True,
         )
     }
-    segments = storyboard_to_segments(storyboard, media)
+    segments, _roles = storyboard_to_segments(storyboard, media)
     assert len(segments) == 1
     assert segments[0].speed_factor == pytest.approx(1.5)
     assert segments[0].out_end_s - segments[0].out_start_s == pytest.approx(target)

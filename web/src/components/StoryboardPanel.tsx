@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SlotFitMode, SlotTransition, SpatialCrop, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
+import type { SlotFitMode, SlotTransition, SpatialCrop, SpatialFxSettings, StoryboardPayload, StorySlot, TeaserSettings, WaveformPayload } from "../types";
 import { slotColorForIndex } from "../utils/slotColors";
 import { ClipCropTimeline } from "./ClipCropTimeline";
+import { RetentionFxPanel } from "./RetentionFxPanel";
 import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
@@ -40,6 +41,10 @@ interface StoryboardPanelProps {
       transition_in?: SlotTransition;
     }>;
     loop_to_hook?: boolean;
+  }) => Promise<void>;
+  onPatchEffects: (payload: {
+    teaser?: Partial<TeaserSettings>;
+    spatial_fx?: Partial<SpatialFxSettings>;
   }) => Promise<void>;
   saving?: boolean;
   blockPlayheadS: number;
@@ -97,6 +102,7 @@ export function StoryboardPanel({
   onUpdateSlotTransform,
   onClearClip,
   onPatchStoryboard,
+  onPatchEffects,
   saving = false,
   blockPlayheadS,
   onBlockPlayheadChange,
@@ -395,6 +401,13 @@ export function StoryboardPanel({
           </div>
         )}
       </div>
+
+      <RetentionFxPanel
+        storyboard={storyboard}
+        waveform={waveform}
+        saving={saving}
+        onPatch={onPatchEffects}
+      />
 
       {active && (
         <div className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-3">

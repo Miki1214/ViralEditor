@@ -126,6 +126,19 @@ class StorySlotResponse(BaseModel):
     spatial_crop: SpatialCropInput | None = None
 
 
+class TeaserSettingsResponse(BaseModel):
+    enabled: bool
+    tail_fraction: float
+    duration_s: float
+    mask: Literal["vignette", "dir_blur"]
+
+
+class SpatialFxSettingsResponse(BaseModel):
+    enabled: bool
+    intensity: float
+    max_events_per_second: float
+
+
 class StoryboardResponse(BaseModel):
     music_block_id: str | None = None
     music_start_s: float
@@ -134,6 +147,26 @@ class StoryboardResponse(BaseModel):
     loop_to_hook: bool
     slots: list[StorySlotResponse]
     preview_ready: bool = False
+    teaser: TeaserSettingsResponse
+    spatial_fx: SpatialFxSettingsResponse
+
+
+class TeaserSettingsPatch(BaseModel):
+    enabled: bool | None = None
+    tail_fraction: float | None = Field(default=None, gt=0, le=1)
+    duration_s: float | None = Field(default=None, gt=0)
+    mask: Literal["vignette", "dir_blur"] | None = None
+
+
+class SpatialFxSettingsPatch(BaseModel):
+    enabled: bool | None = None
+    intensity: float | None = Field(default=None, ge=0, le=1)
+    max_events_per_second: float | None = Field(default=None, gt=0, le=30)
+
+
+class EffectsPatchRequest(BaseModel):
+    teaser: TeaserSettingsPatch | None = None
+    spatial_fx: SpatialFxSettingsPatch | None = None
 
 
 class StorySlotUpdate(BaseModel):

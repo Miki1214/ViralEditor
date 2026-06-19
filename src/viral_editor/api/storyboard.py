@@ -6,7 +6,11 @@ from pathlib import Path
 
 from viral_editor.audio.block_planner import selected_block
 from viral_editor.audio.features import BeatSyncFeatures
-from viral_editor.audio.storyboard import merge_storyboard_updates, plan_storyboard
+from viral_editor.audio.storyboard import (
+    apply_hook_inversion_layout,
+    merge_storyboard_updates,
+    plan_storyboard,
+)
 from viral_editor.config import JobConfig
 from viral_editor.ingest.loader import probe_media
 from viral_editor.models import ClipInput, MediaInfo, SpatialCrop, Storyboard, StorySlot, write_artifact
@@ -22,6 +26,77 @@ def load_storyboard(temp_dir: Path) -> Storyboard | None:
 
 def persist_storyboard(temp_dir: Path, storyboard: Storyboard) -> Path:
     return write_artifact(storyboard, "storyboard", temp_dir)
+
+
+def refresh_hook_inversion_layout(
+    storyboard: Storyboard,
+    config: JobConfig,
+    temp_dir: Path | None = None,
+) -> Storyboard:
+    """Split or merge hook slots to match retention FX settings."""
+    features = None
+    if temp_dir is not None:
+        try:
+            from viral_editor.api.music import load_beat_features
+
+            features = load_beat_features(temp_dir)
+        except FileNotFoundError:
+            features = None
+    return apply_hook_inversion_layout(
+        storyboard,
+        enabled=config.teaser.enabled,
+        payoff_duration_s=config.teaser.duration_s,
+        tail_fraction=config.teaser.tail_fraction,
+        features=features,
+    )
+
+
+def sync_teaser_duration_from_layout(
+    config: JobConfig,
+    storyboard: Storyboard,
+) -> JobConfig:
+    """Keep teaser.duration_s aligned with downbeat-snapped hook start slot."""
+    if not config.teaser.enabled:
+        return config
+    hook_start = next(
+        (slot for slot in storyboard.slots if slot.role == "hook_start"),
+        None,
+    )
+    if hook_start is None:
+        return config
+    snapped = round(hook_start.target_duration_s, 6)
+    if abs(snapped - config.teaser.duration_s) < 1e-3:
+        return config
+    return config.model_copy(
+        update={"teaser": config.teaser.model_copy(update={"duration_s": snapped})}
+    )
+
+
+def sync_storyboard_hook_layout(
+    storyboard: Storyboard,
+    config: JobConfig,
+    temp_dir: Path | None = None,
+) -> Storyboard:
+    """Reconcile hook inversion layout and downbeat alignment with current settings."""
+    split = any(slot.role in ("hook_start", "hook_end") for slot in storyboard.slots)
+    if config.teaser.enabled or split:
+        return refresh_hook_inversion_layout(storyboard, config, temp_dir=temp_dir)
+    return storyboard
+
+
+def hook_output_budget_s(storyboard: Storyboard) -> float:
+    hook = next((slot for slot in storyboard.slots if slot.role == "hook"), None)
+    if hook is not None:
+        return hook.target_duration_s
+    hook_start = next((slot for slot in storyboard.slots if slot.role == "hook_start"), None)
+    hook_end = next((slot for slot in storyboard.slots if slot.role == "hook_end"), None)
+    return (hook_start.target_duration_s if hook_start else 0.0) + (
+        hook_end.target_duration_s if hook_end else 0.0
+    )
+
+
+def _is_hook_family_role(role: str) -> bool:
+    return role in ("hook", "hook_start", "hook_end")
 
 
 def persist_storyboard_for_job(
@@ -50,6 +125,7 @@ def persist_storyboard_for_job(
         features=features,
         transients=timeline.transients,
     )
+    storyboard = refresh_hook_inversion_layout(storyboard, config, temp_dir=temp_dir)
     persist_storyboard(temp_dir, storyboard)
     return storyboard
 
@@ -99,24 +175,29 @@ def assign_slot_clip(
     normalized_rot = int(rotation_deg) % 360
     if normalized_rot not in (0, 90, 180, 270):
         normalized_rot = 0
+    target = next(slot for slot in storyboard.slots if slot.id == slot_id)
+    assignment = {
+        "assigned_clip_id": clip_id,
+        "crop_start_s": norm_start,
+        "crop_end_s": norm_end,
+        "clip_filename": filename,
+        "rotation_deg": normalized_rot,
+        "fit_mode": fit_mode,
+        "spatial_crop": spatial_crop,
+    }
+    if _is_hook_family_role(target.role):
+        budget = hook_output_budget_s(storyboard)
+        full_end = min(media.duration_s, budget)
+        assignment["crop_start_s"] = 0.0
+        assignment["crop_end_s"] = full_end
     slots = []
     for slot in storyboard.slots:
-        if slot.id != slot_id:
+        if slot.id == slot_id or (
+            _is_hook_family_role(target.role) and _is_hook_family_role(slot.role)
+        ):
+            slots.append(slot.model_copy(update=assignment))
+        else:
             slots.append(slot)
-            continue
-        slots.append(
-            slot.model_copy(
-                update={
-                    "assigned_clip_id": clip_id,
-                    "crop_start_s": norm_start,
-                    "crop_end_s": norm_end,
-                    "clip_filename": filename,
-                    "rotation_deg": normalized_rot,
-                    "fit_mode": fit_mode,
-                    "spatial_crop": spatial_crop,
-                }
-            )
-        )
     return storyboard.model_copy(update={"slots": slots})
 
 
@@ -184,28 +265,56 @@ def update_slot_transform(
             slots.append(slot)
             continue
         slots.append(slot.model_copy(update=updates))
-    return storyboard.model_copy(update={"slots": slots})
+    updated = storyboard.model_copy(update={"slots": slots})
+    target = next(item for item in updated.slots if item.id == slot_id)
+    if not _is_hook_family_role(target.role):
+        return updated
+    synced = []
+    for slot in updated.slots:
+        if slot.id == slot_id:
+            synced.append(slot)
+            continue
+        if _is_hook_family_role(slot.role):
+            synced.append(
+                slot.model_copy(
+                    update={
+                        "rotation_deg": target.rotation_deg,
+                        "fit_mode": target.fit_mode,
+                        "spatial_crop": target.spatial_crop,
+                    }
+                )
+            )
+        else:
+            synced.append(slot)
+    return storyboard.model_copy(update={"slots": synced})
 
 
 def clear_slot_clip(storyboard: Storyboard, slot_id: str) -> Storyboard:
+    target = next((slot for slot in storyboard.slots if slot.id == slot_id), None)
+    clear_roles = (
+        {"hook", "hook_start", "hook_end"}
+        if target is not None and _is_hook_family_role(target.role)
+        else {target.role if target else ""}
+    )
+    cleared = {
+        "assigned_clip_id": None,
+        "crop_start_s": None,
+        "crop_end_s": None,
+        "clip_filename": None,
+        "rotation_deg": 0,
+        "fit_mode": "contain",
+        "spatial_crop": None,
+    }
     slots = []
     for slot in storyboard.slots:
-        if slot.id != slot_id:
+        if slot.id == slot_id or (
+            target is not None
+            and _is_hook_family_role(target.role)
+            and slot.role in clear_roles
+        ):
+            slots.append(slot.model_copy(update=cleared))
+        else:
             slots.append(slot)
-            continue
-        slots.append(
-            slot.model_copy(
-                update={
-                    "assigned_clip_id": None,
-                    "crop_start_s": None,
-                    "crop_end_s": None,
-                    "clip_filename": None,
-                    "rotation_deg": 0,
-                    "fit_mode": "contain",
-                    "spatial_crop": None,
-                }
-            )
-        )
     return storyboard.model_copy(update={"slots": slots})
 
 

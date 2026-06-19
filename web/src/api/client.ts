@@ -4,9 +4,11 @@ import type {
   PipelineEvent,
   SlotFitMode,
   SpatialCrop,
+  SpatialFxSettings,
   SlotTransition,
   StageInfo,
   StoryboardPayload,
+  TeaserSettings,
   WaveformPayload,
 } from "../types";
 import { DEFAULT_TARGET_DURATION_S } from "../constants/durations";
@@ -237,6 +239,22 @@ export async function updateSlotTransform(
   },
 ): Promise<StoryboardPayload> {
   const res = await fetch(`/api/jobs/${jobId}/slots/${slotId}/transform`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function patchEffects(
+  jobId: string,
+  payload: {
+    teaser?: Partial<TeaserSettings>;
+    spatial_fx?: Partial<SpatialFxSettings>;
+  },
+): Promise<StoryboardPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/effects`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
