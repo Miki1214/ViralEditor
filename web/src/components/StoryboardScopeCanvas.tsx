@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import type { SlotRole, StoryboardPayload, WaveformPayload } from "../types";
+import type { StoryboardPayload, WaveformPayload } from "../types";
+import { slotColorForIndex } from "../utils/slotColors";
 
 interface StoryboardScopeCanvasProps {
   waveform: WaveformPayload;
@@ -13,30 +14,6 @@ const TRACE = "#3DDC84";
 const HEIGHT = 72;
 const PAD_X = 4;
 const PAD_Y = 8;
-
-const SLOT_STYLE: Record<
-  SlotRole,
-  { fill: string; fillActive: string; stroke: string; strokeActive: string }
-> = {
-  hook: {
-    fill: "rgba(244,196,48,0.10)",
-    fillActive: "rgba(244,196,48,0.26)",
-    stroke: "rgba(244,196,48,0.45)",
-    strokeActive: "#F4C430",
-  },
-  punch: {
-    fill: "rgba(56,189,248,0.10)",
-    fillActive: "rgba(56,189,248,0.26)",
-    stroke: "rgba(56,189,248,0.45)",
-    strokeActive: "#38BDF8",
-  },
-  clip: {
-    fill: "rgba(61,220,132,0.08)",
-    fillActive: "rgba(61,220,132,0.22)",
-    stroke: "rgba(61,220,132,0.35)",
-    strokeActive: "#3DDC84",
-  },
-};
 
 function blockPoints(
   points: WaveformPayload["points"],
@@ -116,9 +93,9 @@ export function StoryboardScopeCanvas({
           if (slotId) onSelectSlot(slotId);
         }}
       >
-        {orderedSlots.map((slot) => {
+        {orderedSlots.map((slot, index) => {
           const selected = slot.id === selectedSlotId;
-          const style = SLOT_STYLE[slot.role];
+          const color = slotColorForIndex(index);
           const x = PAD_X + (slot.out_start_s / blockDurationS) * innerW;
           const w = Math.max(
             2,
@@ -131,9 +108,9 @@ export function StoryboardScopeCanvas({
                 y={PAD_Y}
                 width={w}
                 height={innerH}
-                fill={selected ? style.fillActive : style.fill}
-                stroke={selected ? style.strokeActive : style.stroke}
-                strokeWidth={selected ? 1.5 : 1}
+                fill={selected ? color.fillActive : color.fill}
+                stroke={selected ? color.stroke : color.border}
+                strokeWidth={selected ? 2 : 1.25}
                 rx={2}
               />
               {selected && (
@@ -141,7 +118,7 @@ export function StoryboardScopeCanvas({
                   x={x + w / 2}
                   y={PAD_Y + 10}
                   textAnchor="middle"
-                  fill={style.strokeActive}
+                  fill={color.stroke}
                   fontSize={8}
                   fontFamily="JetBrains Mono, ui-monospace, monospace"
                   style={{ pointerEvents: "none" }}
@@ -167,8 +144,10 @@ export function StoryboardScopeCanvas({
 
         {selectedSlotId &&
           orderedSlots
-            .filter((slot) => slot.id === selectedSlotId)
-            .map((slot) => {
+            .map((slot, index) => ({ slot, index }))
+            .filter(({ slot }) => slot.id === selectedSlotId)
+            .map(({ slot, index }) => {
+              const color = slotColorForIndex(index);
               const clipStart = PAD_X + (slot.out_start_s / blockDurationS) * innerW;
               const clipWidth = Math.max(
                 2,
@@ -194,7 +173,7 @@ export function StoryboardScopeCanvas({
                   <path
                     d={highlightPath}
                     fill="none"
-                    stroke={SLOT_STYLE[slot.role].strokeActive}
+                    stroke={color.stroke}
                     strokeWidth={2.25}
                     strokeLinejoin="round"
                     strokeLinecap="round"

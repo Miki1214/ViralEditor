@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewAudioUrl } from "../api/client";
-import type { SlotRole, StoryboardPayload, StorySlot } from "../types";
+import type { StoryboardPayload, StorySlot } from "../types";
+import { slotColorForIndex } from "../utils/slotColors";
+
+type LoopMode = "slot" | "block";
 
 interface StoryboardBlockPlayerProps {
   jobId: string;
@@ -10,12 +13,6 @@ interface StoryboardBlockPlayerProps {
   onPlayheadChange: (seconds: number) => void;
   onSelectSlot?: (slotId: string) => void;
 }
-
-const SLOT_MARKER: Record<SlotRole, string> = {
-  hook: "#F4C430",
-  punch: "#38BDF8",
-  clip: "#3DDC84",
-};
 
 function formatTime(seconds: number): string {
   return `${Math.max(0, seconds).toFixed(1)}s`;
@@ -30,8 +27,9 @@ export function StoryboardBlockPlayer({
   onSelectSlot,
 }: StoryboardBlockPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const prevAudioTimeRef = useRef(0);
   const [playing, setPlaying] = useState(false);
-  const [loopSlot, setLoopSlot] = useState(true);
+  const [loopMode, setLoopMode] = useState<LoopMode>("slot");
   const [ready, setReady] = useState(false);
 
   const blockDurationS = storyboard.total_duration_s;
@@ -56,20 +54,38 @@ export function StoryboardBlockPlayer({
   );
 
   const activeSlot = slotAtTime(playheadS);
+  const activeSlotIndex = activeSlot
+    ? orderedSlots.findIndex((slot) => slot.id === activeSlot.id)
+    : -1;
+  const activeSlotColor =
+    activeSlotIndex >= 0 ? slotColorForIndex(activeSlotIndex).stroke : undefined;
+
+  useEffect(() => {
+    if (loopMode === "slot" && !selectedSlot) {
+      setLoopMode("block");
+    }
+  }, [loopMode, selectedSlot]);
 
   useEffect(() => {
     setPlaying(false);
     setReady(false);
+    prevAudioTimeRef.current = 0;
     onPlayheadChange(0);
   }, [audioUrl, onPlayheadChange]);
 
   useEffect(() => {
-    if (!loopSlot || !selectedSlot) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.loop = false;
+  }, [loopMode, audioUrl]);
+
+  useEffect(() => {
+    if (loopMode !== "slot" || !selectedSlot) return;
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = selectedSlot.out_start_s;
     onPlayheadChange(selectedSlot.out_start_s);
-  }, [selectedSlot?.id, loopSlot, selectedSlot, onPlayheadChange]);
+  }, [selectedSlot?.id, loopMode, selectedSlot, onPlayheadChange]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -77,15 +93,37 @@ export function StoryboardBlockPlayer({
 
     const onTimeUpdate = () => {
       const t = audio.currentTime;
-      if (loopSlot && selectedSlot && t >= selectedSlot.out_end_s - 0.04) {
+      if (loopMode === "slot" && selectedSlot && t >= selectedSlot.out_end_s - 0.04) {
         audio.currentTime = selectedSlot.out_start_s;
         onPlayheadChange(selectedSlot.out_start_s);
+        prevAudioTimeRef.current = selectedSlot.out_start_s;
+        return;
+      }
+      if (loopMode === "block") {
+        if (t >= blockDurationS - 0.04 || (playing && t < prevAudioTimeRef.current - 0.25)) {
+          audio.currentTime = 0;
+          onPlayheadChange(0);
+          prevAudioTimeRef.current = 0;
+          return;
+        }
+        onPlayheadChange(t);
+        prevAudioTimeRef.current = t;
         return;
       }
       onPlayheadChange(Math.min(t, blockDurationS));
+      prevAudioTimeRef.current = t;
     };
 
-    const onEnded = () => setPlaying(false);
+    const onEnded = () => {
+      if (loopMode === "block") {
+        audio.currentTime = 0;
+        onPlayheadChange(0);
+        prevAudioTimeRef.current = 0;
+        void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+        return;
+      }
+      setPlaying(false);
+    };
     const onLoaded = () => setReady(true);
 
     audio.addEventListener("timeupdate", onTimeUpdate);
@@ -96,7 +134,7 @@ export function StoryboardBlockPlayer({
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("loadedmetadata", onLoaded);
     };
-  }, [blockDurationS, loopSlot, selectedSlot, onPlayheadChange]);
+  }, [blockDurationS, loopMode, playing, selectedSlot, onPlayheadChange]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -106,9 +144,12 @@ export function StoryboardBlockPlayer({
       setPlaying(false);
       return;
     }
-    if (loopSlot && selectedSlot && playheadS >= selectedSlot.out_end_s - 0.05) {
+    if (loopMode === "slot" && selectedSlot && playheadS >= selectedSlot.out_end_s - 0.05) {
       audio.currentTime = selectedSlot.out_start_s;
       onPlayheadChange(selectedSlot.out_start_s);
+    } else if (loopMode === "block" && playheadS >= blockDurationS - 0.05) {
+      audio.currentTime = 0;
+      onPlayheadChange(0);
     }
     void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   };
@@ -119,6 +160,7 @@ export function StoryboardBlockPlayer({
     const clamped = Math.max(0, Math.min(timeS, blockDurationS));
     audio.currentTime = clamped;
     onPlayheadChange(clamped);
+    prevAudioTimeRef.current = clamped;
     const hit = slotAtTime(clamped);
     if (hit && hit.id !== selectedSlotId) {
       onSelectSlot?.(hit.id);
@@ -128,7 +170,7 @@ export function StoryboardBlockPlayer({
   const playSelectedSlot = () => {
     if (!selectedSlot) return;
     seek(selectedSlot.out_start_s);
-    setLoopSlot(true);
+    setLoopMode("slot");
     const audio = audioRef.current;
     if (!audio || !ready) return;
     void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
@@ -146,10 +188,11 @@ export function StoryboardBlockPlayer({
           className="pointer-events-none absolute inset-x-0 top-1 h-1.5 overflow-hidden rounded-full bg-[#2a3038]"
           aria-hidden
         >
-          {orderedSlots.map((slot) => {
+          {orderedSlots.map((slot, index) => {
             const left = (slot.out_start_s / blockDurationS) * 100;
             const width = ((slot.out_end_s - slot.out_start_s) / blockDurationS) * 100;
             const selected = slot.id === selectedSlotId;
+            const color = slotColorForIndex(index);
             return (
               <div
                 key={slot.id}
@@ -157,9 +200,7 @@ export function StoryboardBlockPlayer({
                 style={{
                   left: `${left}%`,
                   width: `${width}%`,
-                  backgroundColor: selected
-                    ? SLOT_MARKER[slot.role]
-                    : `${SLOT_MARKER[slot.role]}55`,
+                  backgroundColor: selected ? color.stroke : `${color.stroke}66`,
                 }}
               />
             );
@@ -202,15 +243,30 @@ export function StoryboardBlockPlayer({
             Play slot
           </button>
         )}
-        <label className="ml-auto flex items-center gap-2 font-mono text-[10px] text-monitor-muted">
-          <input
-            type="checkbox"
-            className="accent-scope-trace"
-            checked={loopSlot}
-            onChange={(e) => setLoopSlot(e.target.checked)}
-          />
-          Loop selected slot
-        </label>
+        <fieldset className="ml-auto flex items-center gap-3 border-0 p-0">
+          <legend className="sr-only">Loop mode</legend>
+          <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-monitor-muted">
+            <input
+              type="radio"
+              name="storyboard-loop-mode"
+              className="accent-scope-trace"
+              checked={loopMode === "slot"}
+              disabled={!selectedSlot}
+              onChange={() => setLoopMode("slot")}
+            />
+            Loop slot
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5 font-mono text-[10px] text-monitor-muted">
+            <input
+              type="radio"
+              name="storyboard-loop-mode"
+              className="accent-scope-trace"
+              checked={loopMode === "block"}
+              onChange={() => setLoopMode("block")}
+            />
+            Loop track
+          </label>
+        </fieldset>
       </div>
 
       <p className="font-mono text-[10px] text-monitor-muted">
@@ -223,17 +279,19 @@ export function StoryboardBlockPlayer({
           {formatTime(playheadS)} / {formatTime(blockDurationS)}
         </span>
         {activeSlot ? (
-          <span style={{ color: SLOT_MARKER[activeSlot.role] }}>
+          <span style={{ color: activeSlotColor }}>
             {activeSlot.label} · {formatTime(activeSlot.out_end_s - activeSlot.out_start_s)}
           </span>
         ) : (
           <span>No slot</span>
         )}
-        {selectedSlot && loopSlot && (
+        {loopMode === "slot" && selectedSlot ? (
           <span className="text-scope-dim">
             looping {selectedSlot.label.toLowerCase()}
           </span>
-        )}
+        ) : loopMode === "block" ? (
+          <span className="text-scope-dim">looping whole track</span>
+        ) : null}
       </div>
     </div>
   );

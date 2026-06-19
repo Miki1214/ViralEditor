@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { SlotRole, SlotTransition, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
+import type { SlotTransition, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
+import { slotColorForIndex } from "../utils/slotColors";
 import { formatSlotSpeedLabel } from "../utils/slotSpeed";
 import { ClipCropTimeline } from "./ClipCropTimeline";
 import { StoryboardBlockPlayer } from "./StoryboardBlockPlayer";
@@ -37,12 +38,6 @@ interface StoryboardPanelProps {
 function isVideoFile(file: File): boolean {
   if (file.type.startsWith("video/")) return true;
   return /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name);
-}
-
-function roleClass(role: SlotRole): string {
-  if (role === "hook") return "border-hook-gold bg-hook-gold/10";
-  if (role === "punch") return "border-bass-blue bg-bass-blue/10";
-  return "border-scope-trace/40 bg-scope-trace/5";
 }
 
 function probeVideoDuration(url: string): Promise<number | null> {
@@ -170,6 +165,8 @@ export function StoryboardPanel({
     active != null
       ? formatSlotSpeedLabel(cropSpanS, active.target_duration_s, active.role)
       : "";
+  const activeSlotIndex = active ? ordered.findIndex((slot) => slot.id === active.id) : -1;
+  const activeSlotColor = activeSlotIndex >= 0 ? slotColorForIndex(activeSlotIndex) : null;
 
   return (
     <div className="panel space-y-4 p-5">
@@ -211,6 +208,7 @@ export function StoryboardPanel({
       <div className="relative flex gap-2 overflow-x-auto pb-2">
         {ordered.map((slot, index) => {
           const selected = slot.id === active?.id;
+          const color = slotColorForIndex(index);
           return (
             <div key={slot.id} className="flex shrink-0 items-center gap-1">
               {index > 0 && (
@@ -227,15 +225,30 @@ export function StoryboardPanel({
               <button
                 type="button"
                 onClick={() => onSelectSlot(slot.id)}
-                className={`min-w-[120px] rounded border p-3 text-left transition ${roleClass(slot.role)} ${
-                  selected ? "ring-1 ring-scope-trace" : ""
-                } ${!slot.assigned_clip_id ? "opacity-80" : ""}`}
+                className={`min-w-[120px] rounded border p-3 text-left transition ${
+                  !slot.assigned_clip_id ? "opacity-80" : ""
+                }`}
+                style={{
+                  borderColor: selected ? color.stroke : color.border,
+                  backgroundColor: selected ? color.fillActive : color.bg,
+                  boxShadow: selected ? `0 0 0 1px ${color.stroke}` : undefined,
+                }}
               >
-                <p className="font-mono text-[10px] uppercase text-monitor-muted">{slot.label}</p>
+                <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-monitor-muted">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: color.stroke }}
+                    aria-hidden
+                  />
+                  {slot.label}
+                </p>
                 <p className="mt-1 font-mono text-[11px] text-monitor-text">
                   {slot.target_duration_s.toFixed(1)}s
                 </p>
-                <p className="mt-1 truncate font-mono text-[10px] text-scope-trace">
+                <p
+                  className="mt-1 truncate font-mono text-[10px]"
+                  style={{ color: color.stroke }}
+                >
                   {slot.clip_filename ?? (slot.assigned_clip_id ? "assigned" : "empty")}
                 </p>
               </button>
@@ -252,7 +265,10 @@ export function StoryboardPanel({
       {active && (
         <div className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-scope-trace">
+            <p
+              className="font-mono text-[10px] uppercase tracking-[0.18em]"
+              style={{ color: activeSlotColor?.stroke ?? undefined }}
+            >
               {active.label} · {active.target_duration_s.toFixed(1)}s target
             </p>
             {active.assigned_clip_id && (
