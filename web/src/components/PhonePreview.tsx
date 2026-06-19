@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 interface PhonePreviewProps {
   hookText: string;
   emphasisWords: string;
@@ -45,6 +47,12 @@ export function PhonePreview({
   videoPreviewUrl,
   compositeMode = false,
 }: PhonePreviewProps) {
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [videoPreviewUrl]);
+
   return (
     <div className="relative w-[min(100%,280px)]">
       <div
@@ -52,15 +60,23 @@ export function PhonePreview({
         style={{ background: "#0a0b0d" }}
       >
         {videoPreviewUrl ? (
-          <video
-            key={videoPreviewUrl}
-            src={videoPreviewUrl}
-            className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
-            playsInline
-            autoPlay
-            loop
-            controls={compositeMode}
-          />
+          <>
+            <video
+              key={videoPreviewUrl}
+              src={videoPreviewUrl}
+              className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
+              playsInline
+              autoPlay
+              loop
+              controls={compositeMode}
+              onError={() => setLoadFailed(true)}
+            />
+            {loadFailed && (
+              <div className="absolute inset-0 flex items-center justify-center bg-monitor-bg/90 px-4 text-center font-mono text-[10px] text-hook-gold">
+                Preview failed to load — use Refresh preview after assigning clips
+              </div>
+            )}
+          </>
         ) : (
           <div className="absolute inset-0 bg-gradient-to-b from-monitor-surface to-monitor-bg" />
         )}

@@ -79,7 +79,11 @@ def test_build_proxy_filtergraph_multi_input_source_id() -> None:
     assert "[1:v]trim=start=0.000000:end=2.000000" in graph
 
 
-def test_build_composite_filtergraph_xfade_and_drawtext() -> None:
+def test_build_composite_filtergraph_xfade_and_drawtext(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "viral_editor.video.proxy_render.resolve_drawtext_fontfile",
+        lambda: "C\\:/Windows/Fonts/arial.ttf",
+    )
     segments = [
         SpeedSegment(
             out_start_s=0.0,
@@ -106,6 +110,7 @@ def test_build_composite_filtergraph_xfade_and_drawtext() -> None:
         hook_text="Hello hook",
     )
     assert "drawtext" in graph
+    assert "fontfile='C\\:/Windows/Fonts/arial.ttf'" in graph
     assert "xfade=transition=fade" in graph
     assert "[outv]" in graph
     graph = build_proxy_filtergraph(

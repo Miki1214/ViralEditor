@@ -84,6 +84,46 @@ def resolve_ffmpeg_binary(name: str) -> str | None:
     return None
 
 
+def escape_filter_path(path: Path) -> str:
+    """Escape a filesystem path for ffmpeg filter arguments."""
+    resolved = path.resolve().as_posix()
+    if sys.platform == "win32" and len(resolved) >= 2 and resolved[1] == ":":
+        return f"{resolved[0]}\\:{resolved[2:]}"
+    return resolved.replace(":", "\\:")
+
+
+def resolve_drawtext_fontfile() -> str | None:
+    """Return an ffmpeg-safe fontfile= path, or None if no bundled/system font exists."""
+    candidates: list[Path] = []
+    if sys.platform == "win32":
+        windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+        candidates.extend(
+            [
+                windir / "Fonts" / "arial.ttf",
+                windir / "Fonts" / "segoeui.ttf",
+            ]
+        )
+    elif sys.platform == "darwin":
+        candidates.extend(
+            [
+                Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
+                Path("/Library/Fonts/Arial.ttf"),
+            ]
+        )
+    else:
+        candidates.extend(
+            [
+                Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+                Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
+            ]
+        )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return escape_filter_path(candidate)
+    return None
+
+
 def ffmpeg_available() -> bool:
     """Return True when both ffmpeg and ffprobe can be resolved."""
     return (

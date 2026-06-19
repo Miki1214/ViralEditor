@@ -28,6 +28,10 @@ export function StoryboardBlockPlayer({
 }: StoryboardBlockPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const prevAudioTimeRef = useRef(0);
+  const loopModeRef = useRef<LoopMode>("slot");
+  const selectedSlotRef = useRef<StorySlot | null>(null);
+  const onPlayheadChangeRef = useRef(onPlayheadChange);
+  const blockDurationRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [loopMode, setLoopMode] = useState<LoopMode>("slot");
   const [ready, setReady] = useState(false);
@@ -60,6 +64,39 @@ export function StoryboardBlockPlayer({
   const activeSlotColor =
     activeSlotIndex >= 0 ? slotColorForIndex(activeSlotIndex).stroke : undefined;
 
+  loopModeRef.current = loopMode;
+  selectedSlotRef.current = selectedSlot;
+  onPlayheadChangeRef.current = onPlayheadChange;
+  blockDurationRef.current = blockDurationS;
+
+  const syncPlayheadFromAudio = useCallback((audio: HTMLAudioElement) => {
+    const t = audio.currentTime;
+    const mode = loopModeRef.current;
+    const slot = selectedSlotRef.current;
+    const blockDuration = blockDurationRef.current;
+
+    if (mode === "slot" && slot && t >= slot.out_end_s - 0.04) {
+      audio.currentTime = slot.out_start_s;
+      onPlayheadChangeRef.current(slot.out_start_s);
+      prevAudioTimeRef.current = slot.out_start_s;
+      return;
+    }
+    if (mode === "block") {
+      if (t >= blockDuration - 0.04) {
+        audio.currentTime = 0;
+        onPlayheadChangeRef.current(0);
+        prevAudioTimeRef.current = 0;
+        return;
+      }
+      onPlayheadChangeRef.current(t);
+      prevAudioTimeRef.current = t;
+      return;
+    }
+    const clamped = Math.min(t, blockDuration);
+    onPlayheadChangeRef.current(clamped);
+    prevAudioTimeRef.current = clamped;
+  }, []);
+
   useEffect(() => {
     if (loopMode === "slot" && !selectedSlot) {
       setLoopMode("block");
@@ -91,33 +128,10 @@ export function StoryboardBlockPlayer({
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTimeUpdate = () => {
-      const t = audio.currentTime;
-      if (loopMode === "slot" && selectedSlot && t >= selectedSlot.out_end_s - 0.04) {
-        audio.currentTime = selectedSlot.out_start_s;
-        onPlayheadChange(selectedSlot.out_start_s);
-        prevAudioTimeRef.current = selectedSlot.out_start_s;
-        return;
-      }
-      if (loopMode === "block") {
-        if (t >= blockDurationS - 0.04 || (playing && t < prevAudioTimeRef.current - 0.25)) {
-          audio.currentTime = 0;
-          onPlayheadChange(0);
-          prevAudioTimeRef.current = 0;
-          return;
-        }
-        onPlayheadChange(t);
-        prevAudioTimeRef.current = t;
-        return;
-      }
-      onPlayheadChange(Math.min(t, blockDurationS));
-      prevAudioTimeRef.current = t;
-    };
-
     const onEnded = () => {
-      if (loopMode === "block") {
+      if (loopModeRef.current === "block") {
         audio.currentTime = 0;
-        onPlayheadChange(0);
+        onPlayheadChangeRef.current(0);
         prevAudioTimeRef.current = 0;
         void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
         return;
@@ -126,21 +140,36 @@ export function StoryboardBlockPlayer({
     };
     const onLoaded = () => setReady(true);
 
-    audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
     audio.addEventListener("loadedmetadata", onLoaded);
     return () => {
-      audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("loadedmetadata", onLoaded);
     };
-  }, [blockDurationS, loopMode, playing, selectedSlot, onPlayheadChange]);
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (!playing) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    let frameId = 0;
+    const tick = () => {
+      if (!audio.paused) {
+        syncPlayheadFromAudio(audio);
+      }
+      frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [playing, syncPlayheadFromAudio, audioUrl]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || !ready) return;
     if (playing) {
       audio.pause();
+      syncPlayheadFromAudio(audio);
       setPlaying(false);
       return;
     }
@@ -215,7 +244,7 @@ export function StoryboardBlockPlayer({
           className="field-range relative z-[1]"
           min={0}
           max={blockDurationS}
-          step={0.05}
+          step={0.001}
           value={playheadS}
           disabled={!ready}
           onChange={(e) => seek(Number(e.target.value))}

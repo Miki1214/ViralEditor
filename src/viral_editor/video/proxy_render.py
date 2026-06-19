@@ -6,7 +6,7 @@ from pathlib import Path
 
 from viral_editor.audio.preview import ensure_loop_seam_audio
 from viral_editor.models import SpeedRampPlan, SpeedSegment
-from viral_editor.utils.ffmpeg import FFmpegError, run_ffmpeg
+from viral_editor.utils.ffmpeg import FFmpegError, resolve_drawtext_fontfile, run_ffmpeg
 
 
 def _append_looped_music_input(
@@ -196,16 +196,16 @@ def build_composite_filtergraph(
             allow_wrap=False,
         )
         parts.extend(chains)
-        out_label = label
         if index == 0 and hook_text:
-            escaped = hook_text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-            titled = f"{label}titled"
-            parts.append(
-                f"{concat_ref}drawtext=text='{escaped}':fontsize=28:fontcolor=white:"
-                f"x=(w-text_w)/2:y=h*0.12:box=1:boxcolor=black@0.55:boxborderw=8[{titled}]"
-            )
-            out_label = titled
-            concat_ref = f"[{titled}]"
+            font_path = resolve_drawtext_fontfile()
+            if font_path:
+                escaped = hook_text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+                titled = f"{label}titled"
+                parts.append(
+                    f"{concat_ref}drawtext=text='{escaped}':fontfile='{font_path}':fontsize=28:fontcolor=white:"
+                    f"x=(w-text_w)/2:y=h*0.12:box=1:boxcolor=black@0.55:boxborderw=8[{titled}]"
+                )
+                concat_ref = f"[{titled}]"
         segment_labels.append(concat_ref)
 
     if len(segment_labels) == 1:
