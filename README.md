@@ -72,7 +72,9 @@ python -m viral_editor run config/job.example.json --verbose
 
 The pipeline is a stub in Phase 0; full end-to-end wiring lands in Phase 7.
 
-**Phase 1 (current):** loads and validates the job JSON, probes video/audio with ffprobe, writes `temp/media_info.json`, and derives `output_duration_s` from the music track. Relative paths in the job file resolve against the **current working directory**.
+**Phase 1:** loads and validates the job JSON, probes video/audio with ffprobe, writes `temp/media_info.json`, and derives `output_duration_s` from the music track.
+
+**Phase 2 (current):** runs librosa beat/transient analysis, writes `temp/audio_timeline.json` and `temp/onset_envelope.npy` (BPM, classified transients for speed-ramp and FX).
 
 ## Project layout
 

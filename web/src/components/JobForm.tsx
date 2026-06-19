@@ -7,6 +7,8 @@ type FormState = {
   emphasisColor: string;
   fontFamily: string;
   safePaddingPct: number;
+  targetDurationS: number;
+  useFullTrack: boolean;
   video: File | null;
   audio: File | null;
 };
@@ -17,6 +19,7 @@ interface JobFormProps {
   onSubmit: () => void;
   submitting: boolean;
   disabled?: boolean;
+  disabledReason?: string | null;
 }
 
 function FileField({
@@ -48,14 +51,18 @@ function FileField({
   );
 }
 
+const TARGET_PRESETS = [15, 30, 45, 60] as const;
+
 export function JobForm({
   form,
   onChange,
   onSubmit,
   submitting,
   disabled,
+  disabledReason,
 }: JobFormProps) {
   const patch = (partial: Partial<FormState>) => onChange({ ...form, ...partial });
+  const missingAssets = !form.video || !form.audio;
 
   return (
     <form
@@ -165,9 +172,56 @@ export function JobForm({
         </div>
       </div>
 
-      <button type="submit" className="btn-primary w-full" disabled={submitting || disabled}>
+      <div>
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          Music window
+        </h2>
+        <p className="mt-1 text-xs text-monitor-muted">
+          Target short length for long tracks — analysis will suggest the best blocks.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {TARGET_PRESETS.map((seconds) => (
+            <button
+              key={seconds}
+              type="button"
+              className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
+                !form.useFullTrack && form.targetDurationS === seconds
+                  ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+                  : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+              }`}
+              onClick={() => patch({ targetDurationS: seconds, useFullTrack: false })}
+            >
+              {seconds}s
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
+              form.useFullTrack
+                ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+                : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+            }`}
+            onClick={() => patch({ useFullTrack: true })}
+          >
+            Full track
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        className="btn-primary w-full"
+        disabled={submitting || disabled || missingAssets}
+      >
         {submitting ? "Running pipeline…" : "Render"}
       </button>
+      {(disabledReason || missingAssets) && !submitting && (
+        <p className="text-center text-xs text-hook-gold" role="status">
+          {missingAssets
+            ? "Add a timelapse video and music track to enable Render."
+            : disabledReason}
+        </p>
+      )}
     </form>
   );
 }

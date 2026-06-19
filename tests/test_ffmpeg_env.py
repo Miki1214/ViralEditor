@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import shutil
+from pathlib import Path
 
 import pytest
 
 from viral_editor.utils import ffmpeg as ffmpeg_module
-from viral_editor.utils.ffmpeg import ensure_ffmpeg
+from viral_editor.utils.ffmpeg import ensure_ffmpeg, resolve_ffmpeg_binary
 
 
 def test_ensure_ffmpeg_succeeds_when_binaries_on_path() -> None:
-    if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+    if not resolve_ffmpeg_binary("ffmpeg") or not resolve_ffmpeg_binary("ffprobe"):
         pytest.skip("ffmpeg/ffprobe not installed on this machine")
     ensure_ffmpeg()
 
@@ -19,7 +19,9 @@ def test_ensure_ffmpeg_succeeds_when_binaries_on_path() -> None:
 def test_ensure_ffmpeg_raises_with_install_hint_when_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    ffmpeg_module._RESOLVED_BINARIES.clear()
     monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(ffmpeg_module, "_winget_ffmpeg_candidates", lambda _name: [])
 
     with pytest.raises(EnvironmentError) as exc_info:
         ensure_ffmpeg()
@@ -28,6 +30,27 @@ def test_ensure_ffmpeg_raises_with_install_hint_when_missing(
     assert "winget install Gyan.FFmpeg" in message
     assert "choco install ffmpeg" in message
     assert "ffmpeg -version" in message
+
+
+def test_resolve_ffmpeg_binary_falls_back_to_winget_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ffmpeg_module._RESOLVED_BINARIES.clear()
+    monkeypatch.setattr(ffmpeg_module.shutil, "which", lambda _name: None)
+
+    fake_bin = tmp_path / "ffmpeg.exe"
+    fake_bin.write_bytes(b"")
+    fake_probe = tmp_path / "ffprobe.exe"
+    fake_probe.write_bytes(b"")
+
+    def fake_candidates(name: str) -> list[Path]:
+        return [fake_bin if name == "ffmpeg" else fake_probe]
+
+    monkeypatch.setattr(ffmpeg_module, "_winget_ffmpeg_candidates", fake_candidates)
+
+    assert resolve_ffmpeg_binary("ffmpeg") == str(fake_bin.resolve())
+    assert resolve_ffmpeg_binary("ffprobe") == str(fake_probe.resolve())
 
 
 def test_run_ffprobe_json_parses_output(

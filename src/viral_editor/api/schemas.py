@@ -48,3 +48,9 @@ class PipelineStagesResponse(BaseModel):
 
 class EventPayload(BaseModel):
     event: PipelineEvent
+
+
+class MusicSelectionUpdate(BaseModel):
+    target_duration_s: float | None = Field(default=None, gt=0)
+    selected_block_id: str | None = None
+    use_full_track: bool | None = None

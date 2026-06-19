@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { JobSummary, PipelineEvent, StageInfo } from "./types";
+import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, WaveformPayload } from "./types";
 import {
   createJob,
   fetchArtifact,
   fetchHealth,
   fetchJobs,
   fetchStages,
+  fetchWaveform,
   subscribeJobEvents,
+  updateMusicSelection,
 } from "./api/client";
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
+import { AudioScopePanel } from "./components/AudioScopePanel";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { PhonePreview } from "./components/PhonePreview";
@@ -21,6 +24,8 @@ type FormState = {
   emphasisColor: string;
   fontFamily: string;
   safePaddingPct: number;
+  targetDurationS: number;
+  useFullTrack: boolean;
   video: File | null;
   audio: File | null;
 };
@@ -32,6 +37,8 @@ const initialForm: FormState = {
   emphasisColor: "#FFD700",
   fontFamily: DEFAULT_HOOK_FONT,
   safePaddingPct: 10,
+  targetDurationS: 30,
+  useFullTrack: false,
   video: null,
   audio: null,
 };
@@ -42,7 +49,10 @@ export default function App() {
   const [events, setEvents] = useState<PipelineEvent[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobSummary["status"] | null>(null);
+  const [jobArtifacts, setJobArtifacts] = useState<string[]>([]);
+  const [hasOutput, setHasOutput] = useState(false);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [ffmpegOk, setFfmpegOk] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +61,10 @@ export default function App() {
     videoFps: number | null;
     videoSize: string | null;
   }>({ outputDuration: null, videoFps: null, videoSize: null });
+  const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [musicStartS, setMusicStartS] = useState<number | null>(null);
+  const [musicEndS, setMusicEndS] = useState<number | null>(null);
 
   const videoPreviewUrl = useMemo(() => {
     if (!form.video) return null;
@@ -63,16 +77,113 @@ export default function App() {
     };
   }, [videoPreviewUrl]);
 
-  useEffect(() => {
+  const loadHealth = () => {
     fetchHealth()
-      .then((h) => setFfmpegOk(h.ffmpeg_available))
-      .catch(() => setFfmpegOk(false));
+      .then((h) => {
+        setApiOnline(true);
+        setFfmpegOk(h.ffmpeg_available);
+      })
+      .catch(() => {
+        setApiOnline(false);
+        setFfmpegOk(null);
+      });
+  };
+
+  useEffect(() => {
+    loadHealth();
     fetchStages().then(setStages).catch(() => undefined);
     fetchJobs().then(setJobs).catch(() => undefined);
   }, []);
 
+  const renderBlockedReason = (() => {
+    if (apiOnline === false) {
+      return "API offline — run: python -m viral_editor serve";
+    }
+    if (ffmpegOk === false) {
+      return "FFmpeg not found on PATH — install FFmpeg, then restart the API.";
+    }
+    return null;
+  })();
+
   const refreshJobs = () => {
     fetchJobs().then(setJobs).catch(() => undefined);
+  };
+
+  const loadScope = (jobId: string) => {
+    fetchWaveform(jobId)
+      .then((payload) => {
+        setWaveform(payload);
+        setSelectedBlockId(payload.selected_block_id);
+        const selected = payload.blocks.find((block) => block.id === payload.selected_block_id);
+        if (selected) {
+          setMusicStartS(selected.start_s);
+          setMusicEndS(selected.end_s);
+          setMediaInfo((prev) => ({
+            ...prev,
+            outputDuration: selected.end_s - selected.start_s,
+          }));
+        }
+      })
+      .catch(() => {
+        window.setTimeout(() => {
+          fetchWaveform(jobId)
+            .then((payload) => {
+              setWaveform(payload);
+              setSelectedBlockId(payload.selected_block_id);
+            })
+            .catch(() => undefined);
+        }, 500);
+      });
+  };
+
+  const handleFormChange = (next: FormState) => {
+    const assetsChanged =
+      next.video !== form.video ||
+      next.audio !== form.audio;
+    if (assetsChanged && activeJobId && !submitting) {
+      setActiveJobId(null);
+      setJobStatus(null);
+      setJobArtifacts([]);
+      setHasOutput(false);
+      setWaveform(null);
+      setSelectedBlockId(null);
+      setMusicStartS(null);
+      setMusicEndS(null);
+      setEvents([]);
+      setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
+    }
+    setForm(next);
+  };
+
+  const handleTargetChange = async (targetDurationS: number, useFullTrack: boolean) => {
+    if (!activeJobId) return;
+    setForm((prev) => ({ ...prev, targetDurationS, useFullTrack }));
+    try {
+      await updateMusicSelection(activeJobId, {
+        target_duration_s: targetDurationS,
+        use_full_track: useFullTrack,
+      });
+      loadScope(activeJobId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update target length");
+    }
+  };
+
+  const handleSelectBlock = async (block: MusicBlock) => {
+    if (!activeJobId) return;
+    setSelectedBlockId(block.id);
+    setMusicStartS(block.start_s);
+    setMusicEndS(block.end_s);
+    setMediaInfo((prev) => ({
+      ...prev,
+      outputDuration: block.end_s - block.start_s,
+    }));
+    try {
+      await updateMusicSelection(activeJobId, { selected_block_id: block.id });
+      loadScope(activeJobId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not select block");
+    }
   };
 
   const handleSubmit = async () => {
@@ -83,6 +194,12 @@ export default function App() {
     setError(null);
     setSubmitting(true);
     setEvents([]);
+    setJobArtifacts([]);
+    setHasOutput(false);
+    setWaveform(null);
+    setSelectedBlockId(null);
+    setMusicStartS(null);
+    setMusicEndS(null);
     setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
 
     try {
@@ -95,6 +212,11 @@ export default function App() {
         emphasisColor: form.emphasisColor,
         fontFamily: form.fontFamily,
         safePaddingPct: form.safePaddingPct,
+        targetDurationS: form.targetDurationS,
+        useFullTrack: form.useFullTrack,
+        selectedBlockId: selectedBlockId,
+        musicStartS: musicStartS,
+        musicEndS: musicEndS,
       });
 
       setActiveJobId(id);
@@ -118,15 +240,23 @@ export default function App() {
               })
               .catch(() => undefined);
           }
+          if (event.stage === "audio" && event.action === "complete") {
+            loadScope(id);
+          }
         },
         () => {
           setSubmitting(false);
           setJobStatus((prev) => (prev === "running" ? "completed" : prev));
           refreshJobs();
+          loadScope(id);
           fetchJobs()
             .then((list) => {
               const job = list.find((j) => j.id === id);
-              if (job) setJobStatus(job.status);
+              if (job) {
+                setJobStatus(job.status);
+                setJobArtifacts(job.artifacts);
+                setHasOutput(job.has_output);
+              }
             })
             .catch(() => undefined);
         },
@@ -156,6 +286,22 @@ export default function App() {
           <div className="flex items-center gap-3 font-mono text-xs">
             <span
               className={
+                apiOnline
+                  ? "text-scope-trace"
+                  : apiOnline === false
+                    ? "text-hook-gold"
+                    : "text-monitor-muted"
+              }
+            >
+              {apiOnline === null
+                ? "CHECKING API…"
+                : apiOnline
+                  ? "API ONLINE"
+                  : "API OFFLINE"}
+            </span>
+            <span className="text-monitor-muted">|</span>
+            <span
+              className={
                 ffmpegOk
                   ? "text-scope-trace"
                   : ffmpegOk === false
@@ -163,11 +309,13 @@ export default function App() {
                     : "text-monitor-muted"
               }
             >
-              {ffmpegOk === null
-                ? "CHECKING FFMPEG…"
-                : ffmpegOk
-                  ? "FFMPEG ONLINE"
-                  : "FFMPEG OFFLINE"}
+              {apiOnline === false
+                ? "FFMPEG UNKNOWN"
+                : ffmpegOk === null
+                  ? "CHECKING FFMPEG…"
+                  : ffmpegOk
+                    ? "FFMPEG ONLINE"
+                    : "FFMPEG OFFLINE"}
             </span>
             <span className="text-monitor-muted">|</span>
             <span className="text-monitor-muted">9:16 / 60fps</span>
@@ -208,13 +356,45 @@ export default function App() {
             )}
           </div>
 
+          {waveform && activeJobId && (
+            <AudioScopePanel
+              jobId={activeJobId}
+              waveform={waveform}
+              targetDurationS={form.targetDurationS}
+              useFullTrack={form.useFullTrack}
+              selectedBlockId={selectedBlockId}
+              onTargetChange={handleTargetChange}
+              onSelectBlock={handleSelectBlock}
+            />
+          )}
+
           <JobForm
             form={form}
-            onChange={setForm}
+            onChange={handleFormChange}
             onSubmit={handleSubmit}
             submitting={submitting}
-            disabled={ffmpegOk === false}
+            disabled={apiOnline === false || ffmpegOk === false}
+            disabledReason={renderBlockedReason}
           />
+
+          {apiOnline === false && (
+            <div
+              role="alert"
+              className="rounded-md border border-hook-gold/40 bg-hook-gold/10 px-4 py-3 text-sm text-hook-gold"
+            >
+              Control Room API is not reachable. In a terminal, from the project folder with
+              your venv activated, run:{" "}
+              <code className="font-mono text-xs">python -m viral_editor serve</code>
+              {" "}— then refresh this page.
+              <button
+                type="button"
+                className="btn-ghost ml-3 mt-2 inline-flex text-xs"
+                onClick={loadHealth}
+              >
+                Retry connection
+              </button>
+            </div>
+          )}
 
           {error && (
             <div
@@ -225,11 +405,22 @@ export default function App() {
             </div>
           )}
 
-          <OutputPanel jobId={activeJobId} status={jobStatus} />
+          <OutputPanel
+            jobId={activeJobId}
+            status={jobStatus}
+            hasOutput={hasOutput}
+            artifacts={jobArtifacts}
+            scopeReady={waveform !== null}
+          />
         </section>
 
         <aside className="space-y-5">
-          <StageTelemetry stages={stages} events={events} status={jobStatus} />
+          <StageTelemetry
+            stages={stages}
+            events={events}
+            status={jobStatus}
+            hasOutput={hasOutput}
+          />
 
           {jobs.length > 0 && (
             <div className="panel p-4">

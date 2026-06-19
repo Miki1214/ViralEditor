@@ -111,6 +111,22 @@ class TeaserConfig(DomainModel):
     mask: TeaserMask = "vignette"
 
 
+class MusicSelectionConfig(DomainModel):
+    """Target short length and selected music window for the render."""
+
+    target_duration_s: float = Field(default=30.0, gt=0)
+    use_full_track: bool = False
+    selected_block_id: str | None = None
+    start_s: float | None = Field(default=None, ge=0)
+    end_s: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def window_end_after_start(self) -> MusicSelectionConfig:
+        if self.start_s is not None and self.end_s is not None and self.end_s <= self.start_s:
+            raise ValueError("music.end_s must be greater than music.start_s")
+        return self
+
+
 class JobConfig(DomainModel):
     """Validated job request — single source of truth for a render run."""
 
@@ -123,6 +139,7 @@ class JobConfig(DomainModel):
     render: RenderConfig = Field(default_factory=RenderConfig)
     speed_ramp: SpeedRampConfig = Field(default_factory=SpeedRampConfig)
     teaser: TeaserConfig = Field(default_factory=TeaserConfig)
+    music: MusicSelectionConfig = Field(default_factory=MusicSelectionConfig)
 
     @classmethod
     def load(cls, path: Path) -> JobConfig:

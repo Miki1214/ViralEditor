@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from viral_editor.utils.logging import get_logger
@@ -20,6 +22,8 @@ _FFMPEG_INSTALL_HINT = (
     "  ffmpeg -version\n"
     "  ffprobe -version"
 )
+
+_RESOLVED_BINARIES: dict[str, str] = {}
 
 
 class FFmpegError(RuntimeError):
@@ -39,35 +43,86 @@ class FFmpegError(RuntimeError):
         self.returncode = returncode
 
 
-def _binary_version(binary: str) -> str:
+def _winget_ffmpeg_candidates(binary: str) -> list[Path]:
+    """Common WinGet / Gyan.FFmpeg install locations on Windows."""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if not local_app_data:
+        return []
+
+    candidates: list[Path] = []
+    links = Path(local_app_data) / "Microsoft" / "WinGet" / "Links" / f"{binary}.exe"
+    if links.is_file():
+        candidates.append(links)
+
+    packages_root = Path(local_app_data) / "Microsoft" / "WinGet" / "Packages"
+    if packages_root.is_dir():
+        for package_dir in packages_root.glob("Gyan.FFmpeg*"):
+            for exe in package_dir.glob(f"*/bin/{binary}.exe"):
+                if exe.is_file():
+                    candidates.append(exe)
+
+    return candidates
+
+
+def resolve_ffmpeg_binary(name: str) -> str | None:
+    """Resolve ``ffmpeg`` or ``ffprobe`` on PATH or known install locations."""
+    if name in _RESOLVED_BINARIES:
+        return _RESOLVED_BINARIES[name]
+
+    found = shutil.which(name)
+    if found:
+        _RESOLVED_BINARIES[name] = found
+        return found
+
+    if sys.platform == "win32":
+        for candidate in _winget_ffmpeg_candidates(name):
+            resolved = str(candidate.resolve())
+            _RESOLVED_BINARIES[name] = resolved
+            logger.debug("Resolved %s via WinGet path: %s", name, resolved)
+            return resolved
+
+    return None
+
+
+def ffmpeg_available() -> bool:
+    """Return True when both ffmpeg and ffprobe can be resolved."""
+    return (
+        resolve_ffmpeg_binary("ffmpeg") is not None
+        and resolve_ffmpeg_binary("ffprobe") is not None
+    )
+
+
+def _binary_version(binary_path: str) -> str:
     result = subprocess.run(
-        [binary, "-version"],
+        [binary_path, "-version"],
         capture_output=True,
         text=True,
         check=False,
     )
     if result.returncode != 0:
         raise FFmpegError(
-            f"{binary} failed a version check.",
-            command=[binary, "-version"],
+            f"{binary_path} failed a version check.",
+            command=[binary_path, "-version"],
             stderr=result.stderr,
             returncode=result.returncode,
         )
-    return result.stdout.splitlines()[0] if result.stdout else binary
+    return result.stdout.splitlines()[0] if result.stdout else binary_path
 
 
 def ensure_ffmpeg() -> None:
-    """Verify ``ffmpeg`` and ``ffprobe`` are available on PATH.
+    """Verify ``ffmpeg`` and ``ffprobe`` are available.
 
     Raises:
         EnvironmentError: If either binary is missing, with install guidance.
     """
-    missing = [name for name in ("ffmpeg", "ffprobe") if shutil.which(name) is None]
+    missing = [
+        name for name in ("ffmpeg", "ffprobe") if resolve_ffmpeg_binary(name) is None
+    ]
     if missing:
         raise EnvironmentError(_FFMPEG_INSTALL_HINT)
 
-    ffmpeg_line = _binary_version("ffmpeg")
-    ffprobe_line = _binary_version("ffprobe")
+    ffmpeg_line = _binary_version(resolve_ffmpeg_binary("ffmpeg") or "ffmpeg")
+    ffprobe_line = _binary_version(resolve_ffmpeg_binary("ffprobe") or "ffprobe")
     logger.info("FFmpeg ready: %s", ffmpeg_line)
     logger.debug("FFprobe ready: %s", ffprobe_line)
 
@@ -78,7 +133,11 @@ def run_ffmpeg(
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``ffmpeg`` with logging and structured error reporting."""
-    command = ["ffmpeg", *args]
+    ffmpeg = resolve_ffmpeg_binary("ffmpeg")
+    if ffmpeg is None:
+        raise EnvironmentError(_FFMPEG_INSTALL_HINT)
+
+    command = [ffmpeg, *args]
     logger.debug("Running: %s", " ".join(command))
 
     result = subprocess.run(
@@ -103,7 +162,11 @@ def run_ffmpeg(
 
 def run_ffprobe_json(args: list[str]) -> dict:
     """Run ``ffprobe -print_format json`` and parse stdout."""
-    command = ["ffprobe", "-print_format", "json", *args]
+    ffprobe = resolve_ffmpeg_binary("ffprobe")
+    if ffprobe is None:
+        raise EnvironmentError(_FFMPEG_INSTALL_HINT)
+
+    command = [ffprobe, "-print_format", "json", *args]
     logger.debug("Running: %s", " ".join(command))
 
     result = subprocess.run(

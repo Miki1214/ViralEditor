@@ -2,8 +2,10 @@ import type {
   HealthResponse,
   JobSummary,
   MediaInfoArtifact,
+  MusicBlock,
   PipelineEvent,
   StageInfo,
+  WaveformPayload,
 } from "../types";
 
 async function parseError(response: Response): Promise<string> {
@@ -44,6 +46,11 @@ export interface CreateJobInput {
   emphasisColor: string;
   fontFamily: string;
   safePaddingPct: number;
+  targetDurationS?: number;
+  useFullTrack?: boolean;
+  selectedBlockId?: string | null;
+  musicStartS?: number | null;
+  musicEndS?: number | null;
 }
 
 export async function createJob(input: CreateJobInput): Promise<{ id: string }> {
@@ -56,6 +63,17 @@ export async function createJob(input: CreateJobInput): Promise<{ id: string }> 
   form.append("emphasis_color", input.emphasisColor);
   form.append("font_family", input.fontFamily);
   form.append("safe_padding_pct", String(input.safePaddingPct));
+  form.append("target_duration_s", String(input.targetDurationS ?? 30));
+  form.append("use_full_track", String(input.useFullTrack ?? false));
+  if (input.selectedBlockId) {
+    form.append("selected_block_id", input.selectedBlockId);
+  }
+  if (input.musicStartS != null) {
+    form.append("music_start_s", String(input.musicStartS));
+  }
+  if (input.musicEndS != null) {
+    form.append("music_end_s", String(input.musicEndS));
+  }
 
   const res = await fetch("/api/jobs", { method: "POST", body: form });
   if (!res.ok) throw new Error(await parseError(res));
@@ -95,6 +113,36 @@ export async function fetchArtifact(jobId: string, name: string): Promise<MediaI
   const res = await fetch(`/api/jobs/${jobId}/artifacts/${name}`);
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
+}
+
+export async function fetchWaveform(jobId: string): Promise<WaveformPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/audio/waveform`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateMusicSelection(
+  jobId: string,
+  payload: {
+    target_duration_s?: number;
+    selected_block_id?: string;
+    use_full_track?: boolean;
+  },
+): Promise<void> {
+  const res = await fetch(`/api/jobs/${jobId}/music-selection`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export function previewAudioUrl(jobId: string, startS: number, endS: number): string {
+  const params = new URLSearchParams({
+    start_s: String(startS),
+    end_s: String(endS),
+  });
+  return `/api/jobs/${jobId}/audio/preview?${params.toString()}`;
 }
 
 export function outputUrl(jobId: string): string {

@@ -6,7 +6,8 @@ import threading
 from pathlib import Path
 
 from viral_editor.api.store import JobStore, write_job_config
-from viral_editor.config import ConfigError, JobConfig, StyleConfig, TitleConfig
+from viral_editor.audio.beat_detector import AudioAnalysisError
+from viral_editor.config import ConfigError, JobConfig, MusicSelectionConfig, StyleConfig, TitleConfig
 from viral_editor.ingest.loader import IngestError
 from viral_editor.pipeline import run_pipeline
 from viral_editor.pipeline_events import PipelineEvent
@@ -54,8 +55,9 @@ def start_job(
                 job_id,
                 output_duration_s=result.output_duration_s,
                 artifacts=result.artifacts,
+                config=result.config,
             )
-        except (ConfigError, IngestError) as exc:
+        except (ConfigError, IngestError, AudioAnalysisError) as exc:
             logger.error("Job %s failed: %s", job_id, exc)
             store.set_error(job_id, str(exc))
             store.publish(job_id, PipelineEvent.now("pipeline", "error", message=str(exc)))
@@ -84,6 +86,11 @@ def build_job_config(
     font_family: str = "Montserrat Black",
     safe_padding_pct: int = 10,
     seed: int = 42,
+    target_duration_s: float = 30.0,
+    use_full_track: bool = False,
+    selected_block_id: str | None = None,
+    music_start_s: float | None = None,
+    music_end_s: float | None = None,
 ) -> JobConfig:
     input_dir = workspace / "input"
     output_dir = workspace / "output"
@@ -98,5 +105,12 @@ def build_job_config(
             fill_color=fill_color,
             emphasis_color=emphasis_color,
             safe_padding_pct=safe_padding_pct,
+        ),
+        music=MusicSelectionConfig(
+            target_duration_s=target_duration_s,
+            use_full_track=use_full_track,
+            selected_block_id=selected_block_id,
+            start_s=music_start_s,
+            end_s=music_end_s,
         ),
     )

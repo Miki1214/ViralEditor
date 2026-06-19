@@ -54,6 +54,48 @@ class AudioTimeline(DomainModel):
     transients: list[Transient] = Field(default_factory=list)
 
 
+class MusicBlock(DomainModel):
+    """A suggested short-form music window inside a longer track."""
+
+    id: str
+    start_s: float = Field(ge=0)
+    end_s: float = Field(ge=0)
+    duration_s: float = Field(gt=0)
+    score: float = Field(ge=0, le=1)
+    drop_count: int = Field(ge=0)
+    transient_count: int = Field(ge=0)
+    label: str
+    reason: str
+
+
+class MusicBlockPlan(DomainModel):
+    """Ranked block suggestions for a target short duration."""
+
+    target_duration_s: float = Field(gt=0)
+    track_duration_s: float = Field(ge=0)
+    selected_block_id: str | None = None
+    use_full_track: bool = False
+    blocks: list[MusicBlock] = Field(default_factory=list)
+
+
+class WaveformPoint(DomainModel):
+    """Single downsampled point on the onset envelope."""
+
+    t: float = Field(ge=0)
+    v: float = Field(ge=0)
+
+
+class WaveformPayload(DomainModel):
+    """Downsampled scope data for the Control Room UI."""
+
+    duration_s: float = Field(ge=0)
+    global_bpm: float = Field(gt=0)
+    points: list[WaveformPoint] = Field(default_factory=list)
+    transients: list[Transient] = Field(default_factory=list)
+    blocks: list[MusicBlock] = Field(default_factory=list)
+    selected_block_id: str | None = None
+
+
 class SpeedSegment(DomainModel):
     """Piecewise-constant speed mapping between output and source time."""
 

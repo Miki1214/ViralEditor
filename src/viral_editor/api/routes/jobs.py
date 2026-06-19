@@ -7,20 +7,32 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
+from viral_editor.api.music import (
+    load_audio_timeline,
+    load_chroma,
+    load_music_blocks,
+    load_onset_envelope,
+    refresh_music_selection,
+)
 from viral_editor.api.runner import build_job_config, start_job
 from viral_editor.api.schemas import (
     JobCreatedResponse,
     JobDetail,
     JobSummary,
+    MusicSelectionUpdate,
     PipelineStagesResponse,
     StageInfo,
 )
-from viral_editor.api.store import JobStore, job_workspace, save_upload
+from viral_editor.api.store import JobStore, job_workspace, save_upload, write_job_config
+from viral_editor.audio.block_planner import suggest_music_blocks
+from viral_editor.audio.preview import ensure_audio_preview
+from viral_editor.audio.waveform import build_waveform_payload
 from viral_editor.config import ConfigError
-from viral_editor.pipeline import PIPELINE_STAGES
+from viral_editor.models import WaveformPayload
+from viral_editor.utils.ffmpeg import FFmpegError
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -76,6 +88,11 @@ async def create_job(
     font_family: str = Form("Montserrat Black"),
     safe_padding_pct: int = Form(10),
     seed: int = Form(42),
+    target_duration_s: float = Form(30.0),
+    use_full_track: bool = Form(False),
+    selected_block_id: str | None = Form(None),
+    music_start_s: float | None = Form(None),
+    music_end_s: float | None = Form(None),
     verbose: bool = Form(False),
 ) -> JobCreatedResponse:
     store = _store(request)
@@ -109,6 +126,11 @@ async def create_job(
             font_family=font_family,
             safe_padding_pct=safe_padding_pct,
             seed=seed,
+            target_duration_s=target_duration_s,
+            use_full_track=use_full_track,
+            selected_block_id=selected_block_id,
+            music_start_s=music_start_s,
+            music_end_s=music_end_s,
         )
     except ConfigError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -186,3 +208,85 @@ def get_output(job_id: str, request: Request) -> FileResponse:
     if not output_path.is_file():
         raise HTTPException(status_code=404, detail="Output not ready")
     return FileResponse(output_path, media_type="video/mp4", filename="result.mp4")
+
+
+@router.get("/{job_id}/audio/waveform", response_model=WaveformPayload)
+def get_waveform(job_id: str, request: Request) -> WaveformPayload:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    temp_dir = job.workspace / "temp"
+    try:
+        timeline = load_audio_timeline(temp_dir)
+        envelope = load_onset_envelope(temp_dir)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        block_plan = load_music_blocks(temp_dir)
+    except FileNotFoundError:
+        block_plan = suggest_music_blocks(
+            timeline,
+            envelope,
+            chroma=load_chroma(temp_dir),
+            target_duration_s=job.config.music.target_duration_s,
+            selected_block_id=job.config.music.selected_block_id,
+        )
+
+    return build_waveform_payload(timeline, envelope, block_plan)
+
+
+@router.get("/{job_id}/audio/preview")
+def get_audio_preview(
+    job_id: str,
+    request: Request,
+    start_s: float = Query(..., ge=0),
+    end_s: float = Query(..., gt=0),
+) -> FileResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if end_s <= start_s:
+        raise HTTPException(status_code=400, detail="end_s must be greater than start_s")
+    try:
+        preview_path = ensure_audio_preview(
+            job.config.audio_path,
+            start_s=start_s,
+            end_s=end_s,
+            temp_dir=job.workspace / "temp",
+        )
+    except (ValueError, FFmpegError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return FileResponse(preview_path, media_type="audio/wav", filename=preview_path.name)
+
+
+@router.patch("/{job_id}/music-selection", response_model=JobDetail)
+def update_music_selection(
+    job_id: str,
+    payload: MusicSelectionUpdate,
+    request: Request,
+) -> JobDetail:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    try:
+        updated_config, _plan = refresh_music_selection(
+            job.config,
+            temp_dir,
+            target_duration_s=payload.target_duration_s,
+            selected_block_id=payload.selected_block_id,
+            use_full_track=payload.use_full_track,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    job = store.get(job_id)
+    assert job is not None
+    return JobDetail(**job.to_summary().model_dump(), config=job.config)

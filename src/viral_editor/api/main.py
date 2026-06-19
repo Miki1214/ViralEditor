@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -13,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from viral_editor.api.routes import jobs as jobs_routes
 from viral_editor.api.schemas import HealthResponse
 from viral_editor.api.store import JobStore
+from viral_editor.utils.ffmpeg import ffmpeg_available
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
 
@@ -43,8 +43,7 @@ def create_app() -> FastAPI:
     def health() -> HealthResponse:
         return HealthResponse(
             status="ok",
-            ffmpeg_available=shutil.which("ffmpeg") is not None
-            and shutil.which("ffprobe") is not None,
+            ffmpeg_available=ffmpeg_available(),
         )
 
     app.include_router(jobs_routes.router, prefix="/api")

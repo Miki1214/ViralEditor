@@ -4,6 +4,7 @@ interface StageTelemetryProps {
   stages: StageInfo[];
   events: PipelineEvent[];
   status: JobSummary["status"] | null;
+  hasOutput?: boolean;
 }
 
 function stageState(
@@ -26,16 +27,18 @@ const stateStyles: Record<string, string> = {
   error: "border-hook-gold text-hook-gold",
 };
 
-export function StageTelemetry({ stages, events, status }: StageTelemetryProps) {
+export function StageTelemetry({ stages, events, status, hasOutput = false }: StageTelemetryProps) {
+  const statusLabel =
+    status === "completed" && !hasOutput ? "analysis done" : status ?? "";
   return (
     <div className="panel p-4">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
           Pipeline telemetry
         </h2>
-        {status && (
+        {statusLabel && (
           <span className="font-mono text-[10px] uppercase tracking-wider text-scope-trace">
-            {status}
+            {statusLabel}
           </span>
         )}
       </div>

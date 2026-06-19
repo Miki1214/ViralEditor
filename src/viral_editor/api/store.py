@@ -143,6 +143,7 @@ class JobStore:
         *,
         output_duration_s: float | None,
         artifacts: list[str],
+        config: JobConfig | None = None,
     ) -> None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -151,6 +152,17 @@ class JobStore:
             job.status = "completed"
             job.output_duration_s = output_duration_s
             job.artifacts = artifacts
+            if config is not None:
+                job.config = config
+
+    def update_config(self, job_id: str, config: JobConfig) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                raise KeyError(job_id)
+            job.config = config
+            if config.music.start_s is not None and config.music.end_s is not None:
+                job.output_duration_s = config.music.end_s - config.music.start_s
 
 
 def job_workspace(job_id: str) -> Path:
