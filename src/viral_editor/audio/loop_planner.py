@@ -124,6 +124,36 @@ def _classify_candidate(
     return label, reason
 
 
+def _make_full_track_block(
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    *,
+    reason: str,
+) -> MusicBlock:
+    track_duration = timeline.audio_duration_seconds
+    n_beats = int(features.chroma_sync.shape[1]) if features.chroma_sync.ndim == 2 else 0
+    loop_q = (
+        _loop_quality(0, n_beats, features)
+        if n_beats >= BEATS_PER_BAR
+        else 0.5
+    )
+    drops = sum(1 for t in timeline.transients if t.type == "drop")
+    return MusicBlock(
+        id="block_full",
+        start_s=0.0,
+        end_s=track_duration,
+        duration_s=track_duration,
+        score=1.0,
+        drop_count=drops,
+        transient_count=len(timeline.transients),
+        label="Full track",
+        reason=reason,
+        loop_quality=round(loop_q, 4),
+        phrase_bars=0,
+        key=features.meta.key,
+    )
+
+
 def suggest_music_blocks_advanced(
     timeline: AudioTimeline,
     features: BeatSyncFeatures,
@@ -136,20 +166,10 @@ def suggest_music_blocks_advanced(
     """Suggest blocks using downbeats, phrase lengths, sections, and beat-sync loop quality."""
     track_duration = timeline.audio_duration_seconds
     if track_duration <= target_duration_s:
-        drops = sum(1 for t in timeline.transients if t.type == "drop")
-        block = MusicBlock(
-            id="block_full",
-            start_s=0.0,
-            end_s=track_duration,
-            duration_s=track_duration,
-            score=1.0,
-            drop_count=drops,
-            transient_count=len(timeline.transients),
-            label="Full track",
+        block = _make_full_track_block(
+            timeline,
+            features,
             reason="Track is already shorter than the target short length",
-            loop_quality=1.0,
-            phrase_bars=0,
-            key=features.meta.key,
         )
         return MusicBlockPlan(
             target_duration_s=target_duration_s,
@@ -227,10 +247,17 @@ def suggest_music_blocks_advanced(
                 end_idx += phrase_beats
 
     if not candidates:
+        block = _make_full_track_block(
+            timeline,
+            features,
+            reason="No phrase-aligned window for this target — preview the full track",
+        )
         return MusicBlockPlan(
             target_duration_s=target_duration_s,
             track_duration_s=track_duration,
-            blocks=[],
+            selected_block_id=block.id,
+            use_full_track=True,
+            blocks=[block],
         )
 
     def combined_score(c: _Candidate) -> float:

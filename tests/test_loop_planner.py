@@ -85,6 +85,26 @@ def test_periodic_features_high_loop_quality() -> None:
     assert top.loop_quality >= 0.75
 
 
+def test_no_candidates_falls_back_to_full_track() -> None:
+    features = _synthetic_abab_features(n_beats=8, bpm=120.0)
+    timeline = _timeline(3.0, bpm=120.0)
+    plan = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=15.0)
+    assert len(plan.blocks) == 1
+    assert plan.blocks[0].id == "block_full"
+    assert plan.use_full_track is True
+    assert plan.blocks[0].end_s == pytest.approx(3.0)
+
+
+def test_short_track_returns_full_block_with_preview() -> None:
+    features = _synthetic_abab_features(n_beats=32, bpm=120.0)
+    timeline = _timeline(12.0, bpm=120.0)
+    plan = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=15.0)
+    assert plan.use_full_track is True
+    assert plan.blocks[0].id == "block_full"
+    assert plan.blocks[0].start_s == 0.0
+    assert plan.blocks[0].end_s == pytest.approx(12.0)
+
+
 def test_advanced_planner_is_deterministic() -> None:
     features = _synthetic_abab_features(n_beats=80)
     timeline = _timeline(40.0, transients=[

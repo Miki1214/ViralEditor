@@ -21,6 +21,25 @@ interface AudioScopePanelProps {
   onSelectBlock: (block: MusicBlock) => void;
 }
 
+function fallbackFullTrackBlock(waveform: WaveformPayload): MusicBlock {
+  return {
+    id: "block_full",
+    start_s: 0,
+    end_s: waveform.duration_s,
+    duration_s: waveform.duration_s,
+    score: 1,
+    drop_count: waveform.transients.filter((t) => t.type === "drop").length,
+    transient_count: waveform.transients.length,
+    label: "Full track",
+    reason: "Preview the full track",
+    loop_quality: 0,
+    phrase_bars: 0,
+    section_label: null,
+    key: waveform.key,
+    is_repeated_section: false,
+  };
+}
+
 export function AudioScopePanel({
   jobId,
   waveform,
@@ -69,7 +88,11 @@ export function AudioScopePanel({
     setPlayingMode(mode);
   };
 
-  const showBlockPicker = !waveform.blocks.some((block) => block.id === "block_full");
+  const blocks =
+    waveform.blocks.length > 0 ? waveform.blocks : [fallbackFullTrackBlock(waveform)];
+  const trackShorterThanTarget = waveform.duration_s <= targetDurationS;
+  const onlyFullTrack =
+    blocks.length === 1 && blocks[0]?.id === "block_full";
 
   return (
     <section className="panel space-y-4 p-5">
@@ -84,38 +107,39 @@ export function AudioScopePanel({
             {waveform.beat_engine ? ` · ${waveform.beat_engine}` : ""}
           </p>
         </div>
-        {showBlockPicker && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
-              Target short length
-            </span>
-            {TARGET_PRESETS.map((preset) => (
-              <button
-                key={preset.value}
-                type="button"
-                className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
-                  !useFullTrack && targetDurationS === preset.value
-                    ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
-                    : "border-monitor-border text-monitor-muted hover:border-scope-dim"
-                }`}
-                onClick={() => onTargetChange(preset.value, false)}
-              >
-                {preset.label}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
+            Target short length
+          </span>
+          {TARGET_PRESETS.map((preset) => (
             <button
+              key={preset.value}
               type="button"
+              disabled={waveform.duration_s <= preset.value}
               className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
-                useFullTrack
+                !useFullTrack && targetDurationS === preset.value
                   ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
-                  : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+                  : waveform.duration_s <= preset.value
+                    ? "cursor-not-allowed border-monitor-border/50 text-monitor-muted/40"
+                    : "border-monitor-border text-monitor-muted hover:border-scope-dim"
               }`}
-              onClick={() => onTargetChange(waveform.duration_s, true)}
+              onClick={() => onTargetChange(preset.value, false)}
             >
-              Full
+              {preset.label}
             </button>
-          </div>
-        )}
+          ))}
+          <button
+            type="button"
+            className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
+              useFullTrack || trackShorterThanTarget
+                ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+                : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+            }`}
+            onClick={() => onTargetChange(waveform.duration_s, true)}
+          >
+            Full
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -125,34 +149,35 @@ export function AudioScopePanel({
           transients={waveform.transients}
           sections={waveform.sections}
           downbeats={waveform.downbeats}
-          blocks={waveform.blocks}
+          blocks={blocks}
           selectedBlockId={selectedBlockId}
           playingBlockId={playingBlockId}
         />
       </div>
 
-      {showBlockPicker ? (
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-            Suggested blocks
+      <div className="space-y-2">
+        {(trackShorterThanTarget || onlyFullTrack) && (
+          <p className="text-sm text-monitor-muted">
+            {trackShorterThanTarget
+              ? "Track is shorter than the target — the full track will drive the render."
+              : "No shorter phrase-aligned window matched this target — preview the full track below."}
           </p>
-          {waveform.blocks.map((block) => (
-            <MusicBlockCard
-              key={block.id}
-              block={block}
-              selected={block.id === selectedBlockId}
-              playingMode={playingBlockId === block.id ? playingMode : null}
-              onSelect={() => onSelectBlock(block)}
-              onAudition={() => handlePreview(block, "audition")}
-              onLoopPreview={() => handlePreview(block, "loop")}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="text-sm text-monitor-muted">
-          Track is already shorter than the target — the full track will drive the render.
+        )}
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          {onlyFullTrack ? "Track preview" : "Suggested blocks"}
         </p>
-      )}
+        {blocks.map((block) => (
+          <MusicBlockCard
+            key={block.id}
+            block={block}
+            selected={block.id === selectedBlockId}
+            playingMode={playingBlockId === block.id ? playingMode : null}
+            onSelect={() => onSelectBlock(block)}
+            onAudition={() => handlePreview(block, "audition")}
+            onLoopPreview={() => handlePreview(block, "loop")}
+          />
+        ))}
+      </div>
     </section>
   );
 }
