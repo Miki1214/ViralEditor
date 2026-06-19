@@ -1,0 +1,37 @@
+{
+  "video_path": "assets/timelapse.mp4",
+  "audio_path": "assets/track.mp3",
+  "output_path": "output/result.mp4",
+  "seed": 42,
+  "hook": {
+    "text": "I built this in 30 days",
+    "emphasis_words": ["30", "days"]
+  },
+  "style": {
+    "font_family": "Montserrat Black",
+    "fill_color": "#FFFFFF",
+    "emphasis_color": "#FFD700",
+    "box_color": "rgba(0,0,0,0.85)",
+    "safe_padding_pct": 10
+  },
+  "render": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 60,
+    "vcodec": "libx264",
+    "acodec": "aac",
+    "crf": 18,
+    "preset": "medium",
+    "pix_fmt": "yuv420p"
+  },
+  "speed_ramp": {
+    "s_min": 1.0,
+    "s_max": 30.0,
+    "alpha": 0.0
+  },
+  "teaser": {
+    "tail_fraction": 0.05,
+    "duration_s": 2.5,
+    "mask": "vignette"
+  }
+}

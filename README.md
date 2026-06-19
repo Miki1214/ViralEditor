@@ -1,0 +1,116 @@
+# Viral Editor
+
+Local-first Python CLI that turns a timelapse video plus a music track into a high-retention vertical short (`1080x1920`, H.264 + AAC, 60 fps). FFmpeg handles rendering; Python orchestrates a modular, testable pipeline.
+
+## Requirements
+
+- **Python 3.11+** (best librosa/numba wheel support on Windows)
+- **FFmpeg 6.x** on `PATH` (`ffmpeg` and `ffprobe`)
+
+## Setup (Windows)
+
+Use a **project virtualenv** — do not install into system Python (`C:\Python312`), or scripts may fail to land on PATH.
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[ui,dev]"
+```
+
+After activation, run commands with either form:
+
+```powershell
+python -m viral_editor serve    # always works
+viral-editor serve              # same, if Scripts is on PATH
+```
+
+Install FFmpeg if missing:
+
+```powershell
+winget install Gyan.FFmpeg
+# or: choco install ffmpeg
+ffmpeg -version
+ffprobe -version
+```
+
+Place sample assets under `assets/` (see `assets/README.md`). Job configs live in `config/`.
+
+## Control Room UI (Option A)
+
+Local web dashboard for configuring jobs, watching pipeline telemetry, and previewing output.
+
+### Development (two terminals)
+
+```powershell
+# Terminal 1 — API (with venv activated)
+python -m viral_editor serve
+
+# Terminal 2 — UI with hot reload
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 (Vite proxies `/api` to the API on port 8765).
+
+### Production-style (single server)
+
+```powershell
+cd web && npm install && npm run build
+cd ..
+python -m viral_editor serve
+```
+
+Open http://127.0.0.1:8765 — serves the built UI from `web/dist/`.
+
+## Usage (CLI)
+
+```powershell
+python -m viral_editor run config/job.example.json
+python -m viral_editor run config/job.example.json --verbose
+```
+
+The pipeline is a stub in Phase 0; full end-to-end wiring lands in Phase 7.
+
+**Phase 1 (current):** loads and validates the job JSON, probes video/audio with ffprobe, writes `temp/media_info.json`, and derives `output_duration_s` from the music track. Relative paths in the job file resolve against the **current working directory**.
+
+## Project layout
+
+```
+src/viral_editor/     # application package
+  cli.py              # Typer entrypoint
+  models.py           # shared domain models (stage contracts)
+  pipeline.py         # orchestrator (stub)
+  utils/ffmpeg.py     # FFmpeg/ffprobe wrapper
+  utils/logging.py    # structured logging
+config/               # job JSON files
+assets/               # input media (gitignored)
+output/               # rendered MP4s (gitignored)
+temp/                 # per-stage JSON artifacts (gitignored)
+tests/
+```
+
+## Shared domain models
+
+Defined in `viral_editor.models` and serialized to `temp/*.json` between stages:
+
+| Model | Purpose |
+| :--- | :--- |
+| `MediaInfo` | Probed stream metadata (duration, fps, resolution, codecs) |
+| `Transient` | Audio hit at `{timestamp_ms, amplitude_normalized, type}` |
+| `AudioTimeline` | BPM, duration, sample rate, and transient list |
+| `SpeedSegment` | Output/source time window with constant speed factor |
+| `FxEvent` | Zoom or rotation impulse keyed to a timestamp |
+| `TeaserSpec` | Tail-clip teaser window and mask style |
+| `TitleSpec` | Hook text layout, colors, and overlay window |
+| `RenderPlan` | Aggregate plan handed to the FFmpeg builder |
+
+## Development
+
+```powershell
+pytest
+```
+
+## Phased implementation
+
+See [Documentation/plans/README.md](Documentation/plans/README.md) for the full phase breakdown. Phase 0 delivers scaffolding only; video logic begins in Phase 1.

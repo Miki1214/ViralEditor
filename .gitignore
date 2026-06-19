@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Pipeline artifacts
+output/
+temp/
+
+# Sample media (user-provided; keep README/.gitkeep only)
+assets/*
+!assets/.gitkeep
+!assets/README.md
+
+web/node_modules/
+web/dist/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

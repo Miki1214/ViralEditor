@@ -1,0 +1,58 @@
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-monitor-border;
+  }
+
+  body {
+    @apply min-h-screen font-sans;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-scope-trace;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-monitor-border bg-monitor-surface;
+  }
+
+  .field-label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wider text-monitor-muted;
+  }
+
+  .field-input {
+    @apply w-full rounded-md border border-monitor-border bg-monitor-bg px-3 py-2 text-sm text-monitor-text placeholder:text-monitor-muted focus:border-scope-trace;
+  }
+
+  .field-select {
+    @apply field-input cursor-pointer appearance-none bg-[length:12px] bg-[right_0.75rem_center] bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%238B9298' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-scope-trace px-4 py-2.5 text-sm font-semibold text-monitor-bg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-md border border-monitor-border px-3 py-2 text-sm text-monitor-text transition hover:border-scope-dim hover:text-scope-trace;
+  }
+}
