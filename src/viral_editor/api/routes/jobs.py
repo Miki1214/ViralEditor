@@ -39,6 +39,7 @@ from viral_editor.api.storyboard import (
     persist_storyboard,
     refresh_storyboard_after_music,
     sync_config_clips_from_storyboard,
+    update_slot_crop,
 )
 from viral_editor.api.schemas import (
     ClipReelResponse,
@@ -49,6 +50,7 @@ from viral_editor.api.schemas import (
     MusicSelectionUpdate,
     PipelineStagesResponse,
     SpeedSelectionUpdate,
+    SlotCropPatchRequest,
     StageInfo,
     StoryboardPatchRequest,
     StoryboardResponse,
@@ -793,6 +795,56 @@ async def assign_slot_video(
     updated_config = job.config.model_copy(update={"clips": list(existing.values())})
     updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)
 
+    persist_storyboard(temp_dir, updated_storyboard)
+    _invalidate_composite_previews(temp_dir)
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    return _storyboard_response(
+        job_id,
+        updated_storyboard,
+        preview_ready=storyboard_filled_enough(updated_storyboard),
+    )
+
+
+@router.patch("/{job_id}/slots/{slot_id}/crop", response_model=StoryboardResponse)
+def patch_slot_crop(
+    job_id: str,
+    slot_id: str,
+    payload: SlotCropPatchRequest,
+    request: Request,
+) -> StoryboardResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    slot = next((item for item in storyboard.slots if item.id == slot_id), None)
+    if slot is None:
+        raise HTTPException(status_code=404, detail="Slot not found")
+    if slot.assigned_clip_id is None:
+        raise HTTPException(status_code=400, detail="Slot has no assigned clip")
+
+    clip_media = clip_media_for_storyboard(job.config)
+    media = clip_media.get(slot.assigned_clip_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Assigned clip media not found")
+
+    try:
+        updated_storyboard = update_slot_crop(
+            storyboard,
+            slot_id,
+            crop_start_s=payload.crop_start_s,
+            crop_end_s=payload.crop_end_s,
+            media=media,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    updated_config = sync_config_clips_from_storyboard(job.config, updated_storyboard)
     persist_storyboard(temp_dir, updated_storyboard)
     _invalidate_composite_previews(temp_dir)
     store.update_config(job_id, updated_config)

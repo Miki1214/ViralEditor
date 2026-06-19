@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SlotRole, SlotTransition, StoryboardPayload, StorySlot } from "../types";
+import { formatSlotSpeedLabel } from "../utils/slotSpeed";
 import { ClipCropTimeline } from "./ClipCropTimeline";
 
 interface StoryboardPanelProps {
@@ -10,6 +11,11 @@ interface StoryboardPanelProps {
   onAssignClip: (
     slotId: string,
     file: File,
+    cropStartS: number,
+    cropEndS: number,
+  ) => Promise<void>;
+  onUpdateSlotCrop: (
+    slotId: string,
     cropStartS: number,
     cropEndS: number,
   ) => Promise<void>;
@@ -36,12 +42,26 @@ function roleClass(role: SlotRole): string {
   return "border-scope-trace/40 bg-scope-trace/5";
 }
 
+function probeVideoDuration(url: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.src = url;
+    const finish = () => {
+      resolve(Number.isFinite(video.duration) ? video.duration : null);
+    };
+    video.addEventListener("loadedmetadata", finish, { once: true });
+    video.addEventListener("error", () => resolve(null), { once: true });
+  });
+}
+
 export function StoryboardPanel({
   jobId: _jobId,
   storyboard,
   selectedSlotId,
   onSelectSlot,
   onAssignClip,
+  onUpdateSlotCrop,
   onClearClip,
   onPatchStoryboard,
   saving = false,
@@ -64,42 +84,47 @@ export function StoryboardPanel({
   }, [active?.id, onSelectSlot]);
 
   useEffect(() => {
-    if (active?.assigned_clip_id && active.clip_source_url) {
+    if (!active) return;
+
+    if (active.assigned_clip_id && active.clip_source_url && !localFile) {
+      let cancelled = false;
       setPreviewUrl(active.clip_source_url);
-      setLocalFile(null);
-      setDurationS(
-        active.crop_end_s != null && active.crop_start_s != null
-          ? Math.max(active.crop_end_s, active.target_duration_s * 2)
-          : active.target_duration_s * 3,
-      );
       setCropStartS(active.crop_start_s ?? 0);
       setCropEndS(active.crop_end_s ?? active.target_duration_s);
-      return;
+
+      void probeVideoDuration(active.clip_source_url).then((duration) => {
+        if (!cancelled && duration != null) {
+          setDurationS(duration);
+        }
+      });
+
+      return () => {
+        cancelled = true;
+      };
     }
+
     if (!localFile) {
       setPreviewUrl(null);
       setDurationS(null);
       return;
     }
+
     const url = URL.createObjectURL(localFile);
     setPreviewUrl(url);
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.src = url;
-    const apply = () => {
-      const duration = Number.isFinite(video.duration) ? video.duration : null;
+    let cancelled = false;
+
+    void probeVideoDuration(url).then((duration) => {
+      if (cancelled) return;
       setDurationS(duration);
       if (duration != null && active) {
         const span = Math.min(duration, active.target_duration_s);
         setCropStartS(0);
         setCropEndS(span);
       }
-    };
-    video.addEventListener("loadedmetadata", apply);
-    video.addEventListener("error", apply);
+    });
+
     return () => {
-      video.removeEventListener("loadedmetadata", apply);
-      video.removeEventListener("error", apply);
+      cancelled = true;
       URL.revokeObjectURL(url);
     };
   }, [active, localFile]);
@@ -120,12 +145,26 @@ export function StoryboardPanel({
     setLocalFile(null);
   };
 
+  const commitCrop = async (startS: number, endS: number) => {
+    if (!active?.assigned_clip_id || localFile) return;
+    const unchanged =
+      active.crop_start_s === startS && active.crop_end_s === endS;
+    if (unchanged) return;
+    await onUpdateSlotCrop(active.id, startS, endS);
+  };
+
   const toggleTransition = async (slot: StorySlot) => {
     const next: SlotTransition = slot.transition_in === "xfade" ? "cut" : "xfade";
     await onPatchStoryboard({
       slots: [{ id: slot.id, order: slot.order, transition_in: next }],
     });
   };
+
+  const cropSpanS = Math.max(cropEndS - cropStartS, 0);
+  const speedLabel =
+    active != null
+      ? formatSlotSpeedLabel(cropSpanS, active.target_duration_s, active.role)
+      : "";
 
   return (
     <div className="panel space-y-4 p-5">
@@ -135,7 +174,7 @@ export function StoryboardPanel({
             Storyboard
           </h2>
           <p className="mt-1 text-xs text-monitor-muted">
-            Drop a clip into each slot — durations follow the music block.
+            Drop a clip into each slot — we time-stretch your selection to the slot duration.
           </p>
         </div>
         <dl className="font-mono text-xs">
@@ -232,15 +271,20 @@ export function StoryboardPanel({
                 durationS={durationS}
                 cropStartS={cropStartS}
                 cropEndS={cropEndS}
+                targetDurationS={active.target_duration_s}
+                slotRole={active.role}
                 onCropChange={(startS, endS) => {
                   setCropStartS(startS);
                   setCropEndS(endS);
                 }}
+                onCropCommit={(startS, endS) => {
+                  void commitCrop(startS, endS);
+                }}
               />
               <p className="font-mono text-[10px] text-monitor-muted">
-                Selected {(cropEndS - cropStartS).toFixed(2)}s → fits{" "}
-                {active.target_duration_s.toFixed(1)}s slot
-                {active.role === "punch" ? " (slow-mo punch)" : ""}
+                Selected {cropSpanS.toFixed(2)}s → {active.target_duration_s.toFixed(1)}s slot
+                {" · "}
+                <span className="text-scope-dim">{speedLabel}</span>
               </p>
               {localFile && (
                 <button

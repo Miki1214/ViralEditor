@@ -135,6 +135,13 @@ class StorySlotUpdate(BaseModel):
     out_end_s: float | None = Field(default=None, ge=0)
     target_duration_s: float | None = Field(default=None, gt=0)
     transition_in: Literal["cut", "xfade"] | None = None
+    crop_start_s: float | None = Field(default=None, ge=0)
+    crop_end_s: float | None = Field(default=None, gt=0)
+
+
+class SlotCropPatchRequest(BaseModel):
+    crop_start_s: float = Field(ge=0)
+    crop_end_s: float = Field(gt=0)
 
 
 class StoryboardPatchRequest(BaseModel):

@@ -200,6 +200,24 @@ export async function clearSlotClip(
   return res.json();
 }
 
+export async function updateSlotCrop(
+  jobId: string,
+  slotId: string,
+  cropStartS: number,
+  cropEndS: number,
+): Promise<StoryboardPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/slots/${slotId}/crop`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      crop_start_s: cropStartS,
+      crop_end_s: cropEndS,
+    }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
 export function compositePreviewUrl(jobId: string, force = false): string {
   const params = new URLSearchParams();
   if (force) params.set("force", "1");

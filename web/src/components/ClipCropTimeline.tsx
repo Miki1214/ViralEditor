@@ -1,22 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { SlotRole } from "../types";
+import { slotPreviewPlaybackRate } from "../utils/slotSpeed";
 
 interface ClipCropTimelineProps {
   videoUrl: string;
   durationS: number;
   cropStartS: number;
   cropEndS: number;
+  targetDurationS: number;
+  slotRole?: SlotRole;
   onCropChange: (startS: number, endS: number) => void;
+  onCropCommit?: (startS: number, endS: number) => void;
 }
+
+type DragMode = "start" | "end" | "range" | null;
 
 export function ClipCropTimeline({
   videoUrl,
   durationS,
   cropStartS,
   cropEndS,
+  targetDurationS,
+  slotRole = "clip",
   onCropChange,
+  onCropCommit,
 }: ClipCropTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState<"start" | "end" | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const panAnchorRef = useRef<{ anchorTime: number; startS: number; endS: number } | null>(
+    null,
+  );
+  const cropRef = useRef({ startS: cropStartS, endS: cropEndS });
+  const [dragging, setDragging] = useState<DragMode>(null);
+
+  cropRef.current = { startS: cropStartS, endS: cropEndS };
+
+  const cropSpanS = Math.max(cropEndS - cropStartS, 0);
+  const playbackRate = slotPreviewPlaybackRate(cropSpanS, targetDurationS, slotRole);
 
   const clampCrop = useCallback(
     (start: number, end: number) => {
@@ -27,6 +47,15 @@ export function ClipCropTimeline({
         e = Math.min(durationS, s + minSpan);
       }
       return { s, e };
+    },
+    [durationS],
+  );
+
+  const clampPan = useCallback(
+    (start: number, end: number) => {
+      const span = end - start;
+      let s = Math.max(0, Math.min(start, durationS - span));
+      return { s, e: s + span };
     },
     [durationS],
   );
@@ -42,6 +71,43 @@ export function ClipCropTimeline({
     [durationS],
   );
 
+  const previewSegment = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = playbackRate;
+    video.currentTime = cropStartS;
+    void video.play().catch(() => undefined);
+  }, [cropStartS, playbackRate]);
+
+  useEffect(() => {
+    if (dragging) return;
+    previewSegment();
+  }, [dragging, cropStartS, cropEndS, videoUrl, playbackRate, previewSegment]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.playbackRate = playbackRate;
+
+    const onTimeUpdate = () => {
+      if (video.currentTime >= cropEndS - 0.04) {
+        video.currentTime = cropStartS;
+      } else if (video.currentTime < cropStartS - 0.04) {
+        video.currentTime = cropStartS;
+      }
+    };
+
+    const onLoaded = () => previewSegment();
+
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("loadedmetadata", onLoaded);
+    return () => {
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("loadedmetadata", onLoaded);
+    };
+  }, [cropStartS, cropEndS, videoUrl, playbackRate, previewSegment]);
+
   useEffect(() => {
     if (!dragging) return;
 
@@ -50,20 +116,40 @@ export function ClipCropTimeline({
       if (dragging === "start") {
         const { s, e } = clampCrop(t, cropEndS);
         onCropChange(s, e);
-      } else {
+      } else if (dragging === "end") {
         const { s, e } = clampCrop(cropStartS, t);
+        onCropChange(s, e);
+      } else if (dragging === "range" && panAnchorRef.current) {
+        const { anchorTime, startS, endS } = panAnchorRef.current;
+        const delta = t - anchorTime;
+        const { s, e } = clampPan(startS + delta, endS + delta);
         onCropChange(s, e);
       }
     };
 
-    const onUp = () => setDragging(null);
+    const onUp = () => {
+      panAnchorRef.current = null;
+      setDragging(null);
+      const { startS, endS } = cropRef.current;
+      onCropCommit?.(startS, endS);
+    };
+
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [dragging, cropStartS, cropEndS, clampCrop, onCropChange, timeFromClientX]);
+  }, [
+    dragging,
+    clampCrop,
+    clampPan,
+    onCropChange,
+    onCropCommit,
+    timeFromClientX,
+    cropEndS,
+    cropStartS,
+  ]);
 
   const startPct = durationS > 0 ? (cropStartS / durationS) * 100 : 0;
   const endPct = durationS > 0 ? (cropEndS / durationS) * 100 : 100;
@@ -71,6 +157,8 @@ export function ClipCropTimeline({
   return (
     <div className="space-y-2">
       <video
+        ref={videoRef}
+        key={videoUrl}
         src={videoUrl}
         className="monitor-video max-h-28 w-full rounded border border-monitor-border bg-black object-contain"
         muted
@@ -81,10 +169,24 @@ export function ClipCropTimeline({
         <div className="crop-slider-shade left-0" style={{ width: `${startPct}%` }} />
         <div className="crop-slider-shade right-0" style={{ width: `${100 - endPct}%` }} />
         <div
+          role="slider"
+          aria-label="Move crop window"
+          aria-valuemin={0}
+          aria-valuemax={durationS}
+          aria-valuenow={cropStartS}
           className="crop-slider-range"
           style={{
             left: `${startPct}%`,
             width: `${endPct - startPct}%`,
+          }}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            panAnchorRef.current = {
+              anchorTime: timeFromClientX(e.clientX),
+              startS: cropStartS,
+              endS: cropEndS,
+            };
+            setDragging("range");
           }}
         />
         <button
@@ -93,6 +195,7 @@ export function ClipCropTimeline({
           style={{ left: `${startPct}%` }}
           onPointerDown={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             setDragging("start");
           }}
           aria-label="Crop in"
@@ -103,13 +206,18 @@ export function ClipCropTimeline({
           style={{ left: `${endPct}%` }}
           onPointerDown={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             setDragging("end");
           }}
           aria-label="Crop out"
         />
       </div>
       <p className="font-mono text-[11px] text-monitor-muted">
-        {cropStartS.toFixed(2)}s → {cropEndS.toFixed(2)}s ({(cropEndS - cropStartS).toFixed(2)}s)
+        {cropStartS.toFixed(2)}s → {cropEndS.toFixed(2)}s ({cropSpanS.toFixed(2)}s selected)
+        {" · "}
+        <span className="text-scope-dim">
+          preview at {playbackRate.toFixed(2)}× → {targetDurationS.toFixed(1)}s slot
+        </span>
       </p>
     </div>
   );

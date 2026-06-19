@@ -100,6 +100,32 @@ def test_storyboard_to_segments_maps_crops() -> None:
     assert segments[0].src_end_s - segments[0].src_start_s == pytest.approx(4.0)
 
 
+def test_storyboard_to_segments_scales_speed_to_target() -> None:
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    hook = storyboard.slots[0]
+    target = hook.target_duration_s
+    hook = hook.model_copy(
+        update={
+            "assigned_clip_id": "slot_0_clip",
+            "crop_start_s": 0.0,
+            "crop_end_s": target * 1.5,
+        }
+    )
+    storyboard = storyboard.model_copy(update={"slots": [hook, *storyboard.slots[1:]]})
+    media = {
+        "slot_0_clip": MediaInfo(
+            path=__file__,
+            duration_s=20.0,
+            has_video=True,
+        )
+    }
+    segments = storyboard_to_segments(storyboard, media)
+    assert len(segments) == 1
+    assert segments[0].speed_factor == pytest.approx(1.5)
+    assert segments[0].out_end_s - segments[0].out_start_s == pytest.approx(target)
+
+
 def test_storyboard_filled_enough_requires_hook_and_clip() -> None:
     block = _block(12.0)
     storyboard = plan_storyboard(block, features=None, transients=[])

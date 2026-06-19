@@ -111,6 +111,40 @@ def assign_slot_clip(
     return storyboard.model_copy(update={"slots": slots})
 
 
+def update_slot_crop(
+    storyboard: Storyboard,
+    slot_id: str,
+    *,
+    crop_start_s: float,
+    crop_end_s: float,
+    media: MediaInfo,
+) -> Storyboard:
+    clip = ClipInput(
+        id=f"{slot_id}_clip",
+        path=media.path,
+        order=0,
+        crop_start_s=crop_start_s,
+        crop_end_s=crop_end_s,
+    )
+    norm_start, norm_end = normalize_crop_range(clip, media)
+    slots = []
+    for slot in storyboard.slots:
+        if slot.id != slot_id:
+            slots.append(slot)
+            continue
+        if slot.assigned_clip_id is None:
+            raise ValueError(f"Slot {slot_id!r} has no assigned clip")
+        slots.append(
+            slot.model_copy(
+                update={
+                    "crop_start_s": norm_start,
+                    "crop_end_s": norm_end,
+                }
+            )
+        )
+    return storyboard.model_copy(update={"slots": slots})
+
+
 def clear_slot_clip(storyboard: Storyboard, slot_id: str) -> Storyboard:
     slots = []
     for slot in storyboard.slots:

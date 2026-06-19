@@ -13,6 +13,7 @@ import {
   patchStoryboard,
   subscribeJobEvents,
   updateMusicSelection,
+  updateSlotCrop,
 } from "./api/client";
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
@@ -333,6 +334,25 @@ export default function App() {
     }
   };
 
+  const handleUpdateSlotCrop = async (
+    slotId: string,
+    cropStartS: number,
+    cropEndS: number,
+  ) => {
+    if (!activeJobId) return;
+    setStoryboardSaving(true);
+    try {
+      const payload = await updateSlotCrop(activeJobId, slotId, cropStartS, cropEndS);
+      setStoryboard(payload);
+      setPreviewReady(payload.preview_ready);
+      setPreviewVersion((v) => v + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update crop");
+    } finally {
+      setStoryboardSaving(false);
+    }
+  };
+
   const handleClearClip = async (slotId: string) => {
     if (!activeJobId) return;
     setStoryboardSaving(true);
@@ -458,6 +478,7 @@ export default function App() {
                 selectedSlotId={selectedSlotId}
                 onSelectSlot={setSelectedSlotId}
                 onAssignClip={handleAssignClip}
+                onUpdateSlotCrop={handleUpdateSlotCrop}
                 onClearClip={handleClearClip}
                 onPatchStoryboard={handlePatchStoryboard}
                 saving={storyboardSaving}
