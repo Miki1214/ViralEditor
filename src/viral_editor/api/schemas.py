@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from viral_editor.config import JobConfig
+from viral_editor.models import SlotRole
 from viral_editor.pipeline_events import PipelineEvent
 
 JobStatus = Literal["queued", "running", "draft", "completed", "failed"]
@@ -111,7 +112,7 @@ class StorySlotResponse(BaseModel):
     id: str
     order: int
     label: str
-    role: Literal["hook", "clip", "punch"]
+    role: SlotRole
     out_start_s: float
     out_end_s: float
     target_duration_s: float
@@ -173,7 +174,7 @@ class StorySlotUpdate(BaseModel):
     id: str
     order: int = Field(ge=0)
     label: str | None = None
-    role: Literal["hook", "clip", "punch"] | None = None
+    role: SlotRole | None = None
     out_start_s: float | None = Field(default=None, ge=0)
     out_end_s: float | None = Field(default=None, ge=0)
     target_duration_s: float | None = Field(default=None, gt=0)

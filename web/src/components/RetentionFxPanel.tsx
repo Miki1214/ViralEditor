@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import type {
   SpatialFxSettings,
   StoryboardPayload,
@@ -6,6 +6,87 @@ import type {
   Transient,
   WaveformPayload,
 } from "../types";
+
+const SLIDER_DEBOUNCE_MS = 400;
+
+type EffectsPatchPayload = {
+  teaser?: Partial<TeaserSettings>;
+  spatial_fx?: Partial<SpatialFxSettings>;
+};
+
+function useDebouncedPatch(onPatch: (payload: EffectsPatchPayload) => void | Promise<void>) {
+  const onPatchRef = useRef(onPatch);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  onPatchRef.current = onPatch;
+
+  const cancel = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => cancel, [cancel]);
+
+  const schedule = useCallback(
+    (payload: EffectsPatchPayload) => {
+      cancel();
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        void onPatchRef.current(payload);
+      }, SLIDER_DEBOUNCE_MS);
+    },
+    [cancel],
+  );
+
+  return { schedule, cancel };
+}
+
+function useSliderDraft<T>(
+  serverValue: T,
+  { schedule, cancel }: ReturnType<typeof useDebouncedPatch>,
+  toPayload: (value: T) => EffectsPatchPayload,
+) {
+  const [localValue, setLocalValue] = useState(serverValue);
+  const localRef = useRef(serverValue);
+  const toPayloadRef = useRef(toPayload);
+  toPayloadRef.current = toPayload;
+
+  useEffect(() => {
+    localRef.current = serverValue;
+    setLocalValue(serverValue);
+  }, [serverValue]);
+
+  const setValue = useCallback(
+    (value: T) => {
+      cancel();
+      localRef.current = value;
+      setLocalValue(value);
+    },
+    [cancel],
+  );
+
+  const commit = useCallback(() => {
+    schedule(toPayloadRef.current(localRef.current));
+  }, [schedule]);
+
+  return { localValue, setValue, commit, cancelDrag: cancel };
+}
+
+function sliderReleaseHandlers(
+  setValue: (value: number) => void,
+  commit: () => void,
+  cancelDrag: () => void,
+) {
+  return {
+    onChange: (event: ChangeEvent<HTMLInputElement>) => {
+      setValue(Number(event.target.value));
+    },
+    onPointerDown: () => cancelDrag(),
+    onPointerUp: commit,
+    onKeyUp: commit,
+  };
+}
 
 interface RetentionFxPanelProps {
   storyboard: StoryboardPayload;
@@ -87,14 +168,42 @@ export function RetentionFxPanel({
   onPatch,
 }: RetentionFxPanelProps) {
   const { teaser, spatial_fx: spatialFx } = storyboard;
+  const debouncedPatch = useDebouncedPatch(onPatch);
   const hookBudget = useMemo(() => hookBudgetS(storyboard), [storyboard.slots]);
-  const payoffS = Math.min(
+  const payoffMaxS = Math.max(0.75, Math.min(4, hookBudget - 0.25));
+  const serverPayoffS = Math.min(
     teaser.duration_s,
     Math.max(0.5, hookBudget - 0.25),
   );
+
+  const sourceSplit = useSliderDraft(
+    Math.round(teaser.tail_fraction * 100),
+    debouncedPatch,
+    (value) => ({ teaser: { tail_fraction: value / 100 } }),
+  );
+  const payoffSplit = useSliderDraft(
+    serverPayoffS,
+    debouncedPatch,
+    (value) => ({ teaser: { duration_s: value } }),
+  );
+  const intensitySplit = useSliderDraft(
+    Math.round(spatialFx.intensity * 100),
+    debouncedPatch,
+    (value) => ({ spatial_fx: { intensity: value / 100 } }),
+  );
+  const densitySplit = useSliderDraft(
+    spatialFx.max_events_per_second,
+    debouncedPatch,
+    (value) => ({ spatial_fx: { max_events_per_second: value } }),
+  );
+
+  const sourceSplitPct = sourceSplit.localValue;
+  const payoffS = payoffSplit.localValue;
+  const intensityPct = intensitySplit.localValue;
+  const maxEventsPerSecond = densitySplit.localValue;
+
   const buildupS = Math.max(hookBudget - payoffS, 0.25);
   const payoffShare = hookBudget > 0 ? payoffS / hookBudget : 0.5;
-  const sourceSplitPct = Math.round(teaser.tail_fraction * 100);
 
   const fxCounts = useMemo(
     () =>
@@ -150,11 +259,11 @@ export function RetentionFxPanel({
                   disabled={saving || !teaser.enabled}
                   value={sourceSplitPct}
                   className="relative z-[1] w-full"
-                  onChange={(e) =>
-                    void onPatch({
-                      teaser: { tail_fraction: Number(e.target.value) / 100 },
-                    })
-                  }
+                  {...sliderReleaseHandlers(
+                    sourceSplit.setValue,
+                    sourceSplit.commit,
+                    sourceSplit.cancelDrag,
+                  )}
                 />
               </div>
               <span className="w-4 text-right text-scope-trace">2</span>
@@ -172,14 +281,16 @@ export function RetentionFxPanel({
                 <input
                   type="range"
                   min={0.5}
-                  max={Math.max(0.75, Math.min(4, hookBudget - 0.25))}
+                  max={payoffMaxS}
                   step={0.1}
                   disabled={saving || !teaser.enabled || hookBudget <= 0.75}
                   value={payoffS}
                   className="relative z-[1] w-full"
-                  onChange={(e) =>
-                    void onPatch({ teaser: { duration_s: Number(e.target.value) } })
-                  }
+                  {...sliderReleaseHandlers(
+                    payoffSplit.setValue,
+                    payoffSplit.commit,
+                    payoffSplit.cancelDrag,
+                  )}
                 />
               </div>
               <span className="w-8 text-right tabular-nums text-scope-trace">
@@ -226,16 +337,16 @@ export function RetentionFxPanel({
                 max={100}
                 step={5}
                 disabled={saving || !spatialFx.enabled}
-                value={Math.round(spatialFx.intensity * 100)}
+                value={intensityPct}
                 className="flex-1"
-                onChange={(e) =>
-                  void onPatch({
-                    spatial_fx: { intensity: Number(e.target.value) / 100 },
-                  })
-                }
+                {...sliderReleaseHandlers(
+                  intensitySplit.setValue,
+                  intensitySplit.commit,
+                  intensitySplit.cancelDrag,
+                )}
               />
               <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
-                {Math.round(spatialFx.intensity * 100)}%
+                {intensityPct}%
               </span>
             </div>
           </label>
@@ -248,16 +359,16 @@ export function RetentionFxPanel({
                 max={16}
                 step={1}
                 disabled={saving || !spatialFx.enabled}
-                value={spatialFx.max_events_per_second}
+                value={maxEventsPerSecond}
                 className="flex-1"
-                onChange={(e) =>
-                  void onPatch({
-                    spatial_fx: { max_events_per_second: Number(e.target.value) },
-                  })
-                }
+                {...sliderReleaseHandlers(
+                  densitySplit.setValue,
+                  densitySplit.commit,
+                  densitySplit.cancelDrag,
+                )}
               />
               <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
-                {spatialFx.max_events_per_second}/s
+                {maxEventsPerSecond}/s
               </span>
             </div>
           </label>

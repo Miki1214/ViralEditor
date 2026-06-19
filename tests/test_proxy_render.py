@@ -180,6 +180,7 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
         hook_text="Hook",
         segment_roles=["hook_start", "clip"],
         hook_start_mask="vignette",
+        segment_transforms=[(0, "contain", None), (90, "cover", None)],
         fx_events=fx_events,
         fx_seed=7,
         fx_intensity=1.0,

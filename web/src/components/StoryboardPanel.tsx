@@ -402,13 +402,6 @@ export function StoryboardPanel({
         )}
       </div>
 
-      <RetentionFxPanel
-        storyboard={storyboard}
-        waveform={waveform}
-        saving={saving}
-        onPatch={onPatchEffects}
-      />
-
       {active && (
         <div className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-3">
           <input
@@ -519,6 +512,13 @@ export function StoryboardPanel({
           )}
         </div>
       )}
+
+      <RetentionFxPanel
+        storyboard={storyboard}
+        waveform={waveform}
+        saving={saving}
+        onPatch={onPatchEffects}
+      />
 
       {active?.assigned_clip_id && active.clip_source_url && (
         <SpatialCropModal

@@ -96,9 +96,10 @@ def test_storyboard_to_segments_maps_crops() -> None:
             has_video=True,
         )
     }
-    segments, roles = storyboard_to_segments(storyboard, media)
+    segments, roles, slot_ids = storyboard_to_segments(storyboard, media)
     assert len(segments) == 1
     assert roles == ["hook"]
+    assert slot_ids == [hook.id]
     assert segments[0].source_id == "slot_0_clip"
     assert segments[0].src_end_s - segments[0].src_start_s == pytest.approx(4.0)
 
@@ -196,6 +197,37 @@ def test_relayout_beat_aligned_timeline_preserves_total_duration() -> None:
         assert left.out_end_s == pytest.approx(right.out_start_s)
 
 
+def test_storyboard_to_segments_keeps_distinct_clip_per_slot() -> None:
+    block = _block(16.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    slots = []
+    for index, slot in enumerate(storyboard.slots[:3]):
+        slots.append(
+            slot.model_copy(
+                update={
+                    "assigned_clip_id": f"{slot.id}_clip",
+                    "crop_start_s": 0.0,
+                    "crop_end_s": 2.0,
+                }
+            )
+        )
+    storyboard = storyboard.model_copy(update={"slots": slots + storyboard.slots[3:]})
+    media = {
+        f"slot_{index}_clip": MediaInfo(
+            path=__file__,
+            duration_s=10.0,
+            has_video=True,
+        )
+        for index in range(3)
+    }
+    segments, roles, slot_ids = storyboard_to_segments(storyboard, media)
+    assert len(segments) == 3
+    assert segments[0].source_id == "slot_0_clip"
+    assert segments[1].source_id == "slot_1_clip"
+    assert segments[2].source_id == "slot_2_clip"
+    assert slot_ids == ["slot_0", "slot_1", "slot_2"]
+
+
 def test_storyboard_to_segments_scales_speed_to_target() -> None:
     block = _block(12.0)
     storyboard = plan_storyboard(block, features=None, transients=[])
@@ -216,8 +248,9 @@ def test_storyboard_to_segments_scales_speed_to_target() -> None:
             has_video=True,
         )
     }
-    segments, _roles = storyboard_to_segments(storyboard, media)
+    segments, _roles, slot_ids = storyboard_to_segments(storyboard, media)
     assert len(segments) == 1
+    assert slot_ids == [hook.id]
     assert segments[0].speed_factor == pytest.approx(1.5)
     assert segments[0].out_end_s - segments[0].out_start_s == pytest.approx(target)
 

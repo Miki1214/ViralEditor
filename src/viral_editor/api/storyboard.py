@@ -99,6 +99,14 @@ def _is_hook_family_role(role: str) -> bool:
     return role in ("hook", "hook_start", "hook_end")
 
 
+def hook_clip_id_for_slot(slot_id: str, role: str) -> str:
+    """Stable clip id shared by hook / hook_start / hook_end slots."""
+    if _is_hook_family_role(role):
+        root = slot_id.replace("_hook_start", "").replace("_hook_end", "")
+        return f"{root}_clip"
+    return f"{slot_id}_clip"
+
+
 def persist_storyboard_for_job(
     config: JobConfig,
     temp_dir: Path,
@@ -318,11 +326,25 @@ def clear_slot_clip(storyboard: Storyboard, slot_id: str) -> Storyboard:
     return storyboard.model_copy(update={"slots": slots})
 
 
-def clip_media_for_storyboard(config: JobConfig) -> dict[str, MediaInfo]:
+def clip_media_for_storyboard(
+    config: JobConfig,
+    storyboard: Storyboard | None = None,
+) -> dict[str, MediaInfo]:
+    """Probe media for every clip referenced by config and/or storyboard slots."""
+    clips_by_id = {clip.id: clip for clip in config.clips}
+    clip_ids: set[str] = set(clips_by_id)
+    if storyboard is not None:
+        clip_ids.update(
+            slot.assigned_clip_id
+            for slot in storyboard.slots
+            if slot.assigned_clip_id
+        )
     media: dict[str, MediaInfo] = {}
-    for clip in config.clips:
-        if clip.path.is_file():
-            media[clip.id] = probe_media(clip.path)
+    for clip_id in sorted(clip_ids):
+        clip = clips_by_id.get(clip_id)
+        if clip is None or not clip.path.is_file():
+            continue
+        media[clip_id] = probe_media(clip.path)
     return media
 
 

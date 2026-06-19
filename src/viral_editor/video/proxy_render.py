@@ -382,6 +382,7 @@ def build_composite_filtergraph(
     clip_input_index: dict[str, int] | None = None,
     clip_durations: dict[str, float] | None = None,
     clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
+    segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     hook_text: str | None = None,
     xfade_s: float = 0.25,
     segment_roles: list[str] | None = None,
@@ -403,16 +404,21 @@ def build_composite_filtergraph(
         label = f"slot{index}"
         input_idx = 0
         src_dur = segment.src_end_s - segment.src_start_s
-        if segment.source_id and clip_input_index is not None:
-            input_idx = clip_input_index.get(segment.source_id, 0)
-        if segment.source_id and clip_durations is not None:
-            src_dur = clip_durations.get(segment.source_id, src_dur)
+        clip_id = segment.source_id
+        if clip_id and clip_input_index is not None:
+            if clip_id not in clip_input_index:
+                raise ValueError(f"Composite preview missing ffmpeg input for clip {clip_id!r}")
+            input_idx = clip_input_index[clip_id]
+        if clip_id and clip_durations is not None:
+            src_dur = clip_durations.get(clip_id, src_dur)
         rotation_deg = 0
         fit_mode = "contain"
         spatial_crop = None
-        if segment.source_id and clip_transforms is not None:
+        if segment_transforms is not None and index < len(segment_transforms):
+            rotation_deg, fit_mode, spatial_crop = segment_transforms[index]
+        elif clip_id and clip_transforms is not None:
             rotation_deg, fit_mode, spatial_crop = clip_transforms.get(
-                segment.source_id,
+                clip_id,
                 (0, "contain", None),
             )
         chains, concat_ref = _segment_filter_chains(
@@ -512,6 +518,7 @@ def render_composite(
     clip_paths: dict[str, Path],
     clip_durations: dict[str, float],
     clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
+    segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     music_start_s: float | None,
     music_end_s: float | None,
     out_path: Path,
@@ -541,6 +548,7 @@ def render_composite(
         clip_input_index=clip_input_index,
         clip_durations=clip_durations,
         clip_transforms=clip_transforms,
+        segment_transforms=segment_transforms,
         hook_text=hook_text,
         segment_roles=segment_roles,
         hook_start_mask=hook_start_mask,

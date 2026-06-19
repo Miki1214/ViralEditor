@@ -452,10 +452,11 @@ def apply_hook_inversion_layout(
 def storyboard_to_segments(
     storyboard: Storyboard,
     clip_media: dict[str, MediaInfo],
-) -> tuple[list[SpeedSegment], list[str]]:
-    """Map assigned slots to speed segments and parallel slot roles."""
+) -> tuple[list[SpeedSegment], list[str], list[str]]:
+    """Map assigned slots to speed segments, roles, and parallel slot ids."""
     segments: list[SpeedSegment] = []
     roles: list[str] = []
+    slot_ids: list[str] = []
     out_cursor = 0.0
     for slot in sorted(storyboard.slots, key=lambda item: item.order):
         if slot.assigned_clip_id is None:
@@ -486,8 +487,18 @@ def storyboard_to_segments(
             )
         )
         roles.append(slot.role)
+        slot_ids.append(slot.id)
         out_cursor += out_duration
-    return segments, roles
+    return segments, roles, slot_ids
+
+
+def assigned_storyboard_slots(storyboard: Storyboard) -> list[StorySlot]:
+    """Slots with clips in storyboard playback order."""
+    return [
+        slot
+        for slot in sorted(storyboard.slots, key=lambda item: item.order)
+        if slot.assigned_clip_id
+    ]
 
 
 def storyboard_filled_enough(storyboard: Storyboard) -> bool:
