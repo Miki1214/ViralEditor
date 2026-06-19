@@ -24,17 +24,21 @@ interface ClipReelPanelProps {
   onSelectClip?: (id: string) => void;
   onReorder?: (clips: LocalClipDraft[] | ClipInfo[]) => void;
   onPatchClip?: (id: string, patch: Partial<ClipInfo>) => void;
-  onLocalChange?: (clips: LocalClipDraft[]) => void;
+  onLocalChange?: (update: import("../hooks/useLocalClipDrafts").LocalClipsUpdater) => void;
   saving?: boolean;
 }
 
-function isLocal(clips: LocalClipDraft[] | ClipInfo[]): clips is LocalClipDraft[] {
-  return clips.length > 0 && "file" in clips[0];
-}
-
 function cropDuration(clip: LocalClipDraft | ClipInfo): number {
-  const start = clip.cropStartS ?? 0;
-  const end = clip.cropEndS ?? clip.durationS ?? 0;
+  const start =
+    clip.cropStartS ??
+    ("crop_start_s" in clip ? clip.crop_start_s : null) ??
+    0;
+  const end =
+    clip.cropEndS ??
+    ("crop_end_s" in clip ? clip.crop_end_s : null) ??
+    clip.durationS ??
+    ("duration_s" in clip ? clip.duration_s : null) ??
+    0;
   return Math.max(0, end - start);
 }
 
@@ -75,19 +79,19 @@ export function ClipReelPanel({
     const [item] = next.splice(index, 1);
     next.splice(target, 0, item);
     const reordered = next.map((clip, order) => ({ ...clip, order }));
-    if (isLocal(reordered)) {
-      onLocalChange?.(reordered);
+    if (mode === "local") {
+      onLocalChange?.(reordered as LocalClipDraft[]);
     } else {
-      onReorder?.(reordered);
+      onReorder?.(reordered as ClipInfo[]);
     }
   };
 
-  const patch = (id: string, partial: Partial<ClipInfo>) => {
-    if (mode === "local" && isLocal(ordered)) {
+  const patch = (id: string, partial: Partial<ClipInfo & LocalClipDraft>) => {
+    if (mode === "local") {
       const next = ordered.map((clip) =>
         clip.id === id ? { ...clip, ...partial } : clip,
       );
-      onLocalChange?.(next);
+      onLocalChange?.(next as LocalClipDraft[]);
       return;
     }
     onPatchClip?.(id, partial);

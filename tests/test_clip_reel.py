@@ -104,6 +104,24 @@ def test_localize_segments_splits_at_clip_boundaries() -> None:
     assert localized[1].src_end_s == pytest.approx(4.0)
 
 
+def test_localize_segments_stops_at_reel_end() -> None:
+    clips = [_clip("a", order=0)]
+    media = {"a": _media(30.0, "a")}
+    reel = build_reel(clips, media, body_output_duration_s=50.0, speed_config=SpeedRampConfig())
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=50.0,
+            src_start_s=0.0,
+            src_end_s=50.0,
+            speed_factor=1.0,
+        )
+    ]
+    localized = localize_segments(segments, reel)
+    assert localized
+    assert localized[-1].src_end_s <= reel.reel_duration_s + 1e-6
+
+
 def test_build_reel_is_deterministic() -> None:
     clips = [_clip("a", order=0), _clip("b", order=1)]
     media = {"a": _media(6.0), "b": _media(6.0)}

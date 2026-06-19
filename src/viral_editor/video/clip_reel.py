@@ -146,7 +146,10 @@ def localize_segments(segments: list[SpeedSegment], reel: ClipReel) -> list[Spee
             chunk_reel_end = min(segment.src_end_s, entry.reel_end_s)
             chunk_reel_len = chunk_reel_end - reel_pos
             if chunk_reel_len <= 1e-9:
-                reel_pos = chunk_reel_end
+                next_reel_pos = min(segment.src_end_s, entry.reel_end_s)
+                if next_reel_pos <= reel_pos + 1e-9:
+                    break
+                reel_pos = next_reel_pos
                 continue
             chunk_out_len = chunk_reel_len / segment.speed_factor
             chunk_out_end = min(segment.out_end_s, out_pos + chunk_out_len)

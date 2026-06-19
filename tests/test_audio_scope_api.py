@@ -143,9 +143,14 @@ def _fake_video_probe(path):
     )
 
 
+def _noop_start_job(store, job_id, *, verbose=False):
+    del store, job_id, verbose
+
+
 def test_speed_ramp_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", _noop_start_job)
     monkeypatch.setattr(
         "viral_editor.api.speed.probe_clip_media",
         lambda config: {"clip_primary": _fake_video_probe("clip.mp4")},
@@ -174,6 +179,7 @@ def test_speed_ramp_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch
 def test_speed_selection_patch(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", _noop_start_job)
     monkeypatch.setattr(
         "viral_editor.api.speed.probe_clip_media",
         lambda config: {"clip_primary": _fake_video_probe("clip.mp4")},

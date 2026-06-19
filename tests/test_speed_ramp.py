@@ -8,7 +8,8 @@ import numpy as np
 import pytest
 
 from viral_editor.config import SpeedRampConfig
-from viral_editor.models import AudioTimeline, MediaInfo, MusicSection, SpeedRampPlan, Transient
+from viral_editor.models import AudioTimeline, ClipInput, MediaInfo, MusicSection, SpeedRampPlan, Transient
+from viral_editor.video.clip_reel import build_reel
 from viral_editor.video.speed_presets import SpeedPreset
 from viral_editor.video.speed_ramp import (
     _plan_with_preset,
@@ -266,6 +267,34 @@ def test_speed_ramp_plan_round_trip_artifact(temp_artifacts_dir: Path) -> None:
     path = write_artifact(plan, "speed_segments", temp_artifacts_dir)
     restored = read_artifact(SpeedRampPlan, path)
     assert restored == plan
+
+
+def test_plan_speed_segments_with_reel_localizes_source_ids() -> None:
+    clips = [
+        ClipInput(id="a", path=Path("a.mp4"), order=0),
+        ClipInput(id="b", path=Path("b.mp4"), order=1),
+    ]
+    media = {
+        "a": MediaInfo(path=Path("a.mp4"), duration_s=10.0, has_video=True, fps=30.0),
+        "b": MediaInfo(path=Path("b.mp4"), duration_s=8.0, has_video=True, fps=30.0),
+    }
+    reel = build_reel(
+        clips,
+        media,
+        body_output_duration_s=12.0,
+        speed_config=SpeedRampConfig(),
+    )
+    plan = plan_speed_segments(
+        _timeline(12.0),
+        _flat_envelope(300, 0.4),
+        _video(18.0),
+        output_duration_s=12.0,
+        config=SpeedRampConfig(style="steady_flow"),
+        reel=reel,
+    )
+    assert plan.src_duration_s == pytest.approx(reel.reel_duration_s)
+    source_ids = {segment.source_id for segment in plan.segments}
+    assert source_ids <= {"a", "b", None}
 
 
 def test_plan_speed_options_is_deterministic() -> None:

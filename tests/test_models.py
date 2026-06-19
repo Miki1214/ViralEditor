@@ -10,9 +10,12 @@ from pydantic import ValidationError
 from viral_editor.models import (
     AudioTimeline,
     BoxSpec,
+    ClipInput,
+    ClipReel,
     EmphasisSpec,
     FxEvent,
     MediaInfo,
+    ReelEntry,
     RenderPlan,
     SafeRect,
     SpeedSegment,
@@ -55,6 +58,37 @@ def test_audio_timeline_round_trip() -> None:
     assert restored == original
 
 
+def test_clip_models_round_trip() -> None:
+    clip = ClipInput(
+        id="clip_0",
+        path=Path("input/a.mp4"),
+        order=0,
+        role="hook",
+        crop_start_s=1.0,
+        crop_end_s=4.0,
+    )
+    restored_clip = ClipInput.model_validate_json(clip.model_dump_json())
+    assert restored_clip == clip
+
+    reel = ClipReel(
+        entries=[
+            ReelEntry(
+                clip_id="clip_0",
+                path=Path("input/a.mp4"),
+                reel_start_s=0.0,
+                reel_end_s=3.0,
+                src_start_s=1.0,
+                src_end_s=4.0,
+                is_hook_loop=False,
+            )
+        ],
+        reel_duration_s=3.0,
+    )
+    assert reel.clip_boundaries_s() == []
+    restored_reel = ClipReel.model_validate_json(reel.model_dump_json())
+    assert restored_reel == reel
+
+
 def test_speed_segment_round_trip() -> None:
     original = SpeedSegment(
         out_start_s=4.5,
@@ -62,6 +96,7 @@ def test_speed_segment_round_trip() -> None:
         src_start_s=30.1,
         src_end_s=30.5,
         speed_factor=1.0,
+        source_id="clip_0",
     )
     restored = SpeedSegment.model_validate_json(original.model_dump_json())
     assert restored == original

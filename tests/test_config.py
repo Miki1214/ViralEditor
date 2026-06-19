@@ -129,6 +129,49 @@ def test_resolve_path_absolute_unchanged(tmp_path: Path) -> None:
     assert resolve_path(absolute) == absolute
 
 
+def test_effective_clips_wraps_lone_video_path(tmp_path: Path) -> None:
+    video = tmp_path / "video.mp4"
+    audio = tmp_path / "track.mp3"
+    output = tmp_path / "out.mp4"
+    cfg = JobConfig(
+        video_path=video,
+        audio_path=audio,
+        output_path=output,
+        hook={"text": "Hook"},
+    )
+    clips = cfg.effective_clips()
+    assert len(clips) == 1
+    assert clips[0].id == "clip_primary"
+    assert clips[0].path == video
+    assert clips[0].role == "clip"
+
+
+def test_job_config_accepts_clips_without_video_path(tmp_path: Path) -> None:
+    video_a = tmp_path / "a.mp4"
+    video_b = tmp_path / "b.mp4"
+    cfg = JobConfig(
+        audio_path=tmp_path / "track.mp3",
+        output_path=tmp_path / "out.mp4",
+        hook={"text": "Hook"},
+        clips=[
+            {
+                "id": "clip_0",
+                "path": str(video_a),
+                "order": 0,
+                "role": "hook",
+            },
+            {
+                "id": "clip_1",
+                "path": str(video_b),
+                "order": 1,
+                "role": "clip",
+            },
+        ],
+    )
+    assert len(cfg.clips) == 2
+    assert cfg.video_path is None
+
+
 def test_absolute_paths_in_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     video = tmp_path / "video.mp4"

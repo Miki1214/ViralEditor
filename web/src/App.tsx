@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClipInfo, ClipReelResponse, JobSummary, MusicBlock, PipelineEvent, StageInfo, WaveformPayload } from "./types";
 import {
   createJob,
@@ -21,6 +21,10 @@ import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { PhonePreview } from "./components/PhonePreview";
 import { StageTelemetry } from "./components/StageTelemetry";
+import {
+  useProbeClipDurations,
+  useUpdateLocalClips,
+} from "./hooks/useLocalClipDrafts";
 
 const initialForm: FormState = {
   hookText: "I built this in 30 days",
@@ -70,11 +74,61 @@ export default function App() {
     return hook?.previewUrl ?? null;
   }, [form.localClips]);
 
+  const clipPreviewUrlsRef = useRef<string[]>([]);
+
+  const patchForm = useCallback((partial: Partial<FormState>) => {
+    setForm((prev) => ({ ...prev, ...partial }));
+  }, []);
+
+  const resetJobDraft = useCallback(() => {
+    if (!activeJobId || submitting) return;
+    setActiveJobId(null);
+    setJobStatus(null);
+    setJobArtifacts([]);
+    setHasOutput(false);
+    setWaveform(null);
+    setSelectedBlockId(null);
+    setMusicStartS(null);
+    setMusicEndS(null);
+    setEvents([]);
+    setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
+    setRemoteReel(null);
+    setRemoteClips([]);
+  }, [activeJobId, submitting]);
+
+  const updateLocalClips = useUpdateLocalClips(setForm, resetJobDraft);
+  useProbeClipDurations(form.localClips, updateLocalClips);
+
+  useEffect(() => {
+    if (form.localClips.length === 0) {
+      setSelectedClipId(null);
+      return;
+    }
+    setSelectedClipId((current) =>
+      current && form.localClips.some((clip) => clip.id === current)
+        ? current
+        : form.localClips[0]?.id ?? null,
+    );
+  }, [form.localClips]);
+
+  useEffect(() => {
+    const currentUrls = new Set(form.localClips.map((clip) => clip.previewUrl));
+    for (const url of clipPreviewUrlsRef.current) {
+      if (!currentUrls.has(url)) {
+        URL.revokeObjectURL(url);
+      }
+    }
+    clipPreviewUrlsRef.current = form.localClips.map((clip) => clip.previewUrl);
+  }, [form.localClips]);
+
   useEffect(() => {
     return () => {
-      form.localClips.forEach((clip) => URL.revokeObjectURL(clip.previewUrl));
+      for (const url of clipPreviewUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+      clipPreviewUrlsRef.current = [];
     };
-  }, [form.localClips]);
+  }, []);
 
   const loadHealth = () => {
     fetchHealth()
@@ -143,28 +197,6 @@ export default function App() {
         setSelectedClipId(payload.clips[0]?.id ?? null);
       })
       .catch(() => undefined);
-  };
-
-  const handleFormChange = (next: FormState) => {
-    const assetsChanged =
-      next.audio !== form.audio ||
-      next.localClips.length !== form.localClips.length ||
-      next.localClips.some((clip, index) => clip.file !== form.localClips[index]?.file);
-    if (assetsChanged && activeJobId && !submitting) {
-      setActiveJobId(null);
-      setJobStatus(null);
-      setJobArtifacts([]);
-      setHasOutput(false);
-      setWaveform(null);
-      setSelectedBlockId(null);
-      setMusicStartS(null);
-      setMusicEndS(null);
-      setEvents([]);
-      setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
-      setRemoteReel(null);
-      setRemoteClips([]);
-    }
-    setForm(next);
   };
 
   const persistRemoteClips = async (clips: ClipInfo[]) => {
@@ -427,11 +459,11 @@ export default function App() {
             </>
           )}
 
-          {form.localClips.length > 0 && !activeJobId && (
+          {form.localClips.length > 0 && (
             <ClipReelPanel
               mode="local"
               clips={form.localClips}
-              onLocalChange={(localClips) => setForm((prev) => ({ ...prev, localClips }))}
+              onLocalChange={updateLocalClips}
               selectedClipId={selectedClipId}
               onSelectClip={setSelectedClipId}
             />
@@ -471,7 +503,8 @@ export default function App() {
 
           <JobForm
             form={form}
-            onChange={handleFormChange}
+            onPatch={patchForm}
+            onLocalClipsChange={updateLocalClips}
             onSubmit={handleSubmit}
             submitting={submitting}
             disabled={apiOnline === false || ffmpegOk === false}

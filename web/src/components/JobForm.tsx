@@ -1,3 +1,4 @@
+import { useId, useRef } from "react";
 import { DEFAULT_HOOK_FONT, HOOK_FONT_OPTIONS } from "../constants/fonts";
 import type { LocalClipDraft } from "./ClipReelPanel";
 
@@ -16,11 +17,19 @@ type FormState = {
 
 interface JobFormProps {
   form: FormState;
-  onChange: (next: FormState) => void;
+  onPatch: (partial: Partial<FormState>) => void;
+  onLocalClipsChange: (update: ClipsUpdater) => void;
   onSubmit: () => void;
   submitting: boolean;
   disabled?: boolean;
   disabledReason?: string | null;
+}
+
+type ClipsUpdater = import("../hooks/useLocalClipDrafts").LocalClipsUpdater;
+
+function isVideoFile(file: File): boolean {
+  if (file.type.startsWith("video/")) return true;
+  return /\.(mp4|mov|webm|mkv|avi|m4v)$/i.test(file.name);
 }
 
 function MultiVideoField({
@@ -28,84 +37,89 @@ function MultiVideoField({
   onClips,
 }: {
   clips: LocalClipDraft[];
-  onClips: (clips: LocalClipDraft[]) => void;
+  onClips: (update: ClipsUpdater) => void;
 }) {
-  const probeDuration = (clipId: string, file: File) => {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.src = URL.createObjectURL(file);
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src);
-      const duration = Number.isFinite(video.duration) ? video.duration : null;
-      onClips(
-        clips.map((item) =>
-          item.id === clipId
-            ? {
-                ...item,
-                durationS: duration,
-                cropEndS: duration,
-              }
-            : item,
-        ),
-      );
-    };
-  };
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
 
-  const addFiles = (files: FileList | null) => {
+  const addFiles = (files: FileList | File[] | null) => {
     if (!files?.length) return;
-    const startOrder = clips.length;
-    const added: LocalClipDraft[] = Array.from(files).map((file, offset) => {
-      const id = `clip_${startOrder + offset}`;
-      const draft: LocalClipDraft = {
-        id,
+    const picked = Array.from(files).filter(isVideoFile);
+    if (picked.length === 0) return;
+
+    onClips((current) => {
+      const startOrder = current.length;
+      const added: LocalClipDraft[] = picked.map((file, offset) => ({
+        id: `clip_${startOrder + offset}`,
         file,
         order: startOrder + offset,
         included: true,
-        role: startOrder + offset === 0 && clips.length === 0 ? "hook" : "clip",
+        role: startOrder + offset === 0 && current.length === 0 ? "hook" : "clip",
         cropStartS: null,
         cropEndS: null,
         durationS: null,
         previewUrl: URL.createObjectURL(file),
-      };
-      return draft;
+      }));
+      return [...current, ...added];
     });
-    const merged = [...clips, ...added];
-    onClips(merged);
-    added.forEach((draft) => probeDuration(draft.id, draft.file));
   };
 
   return (
-    <label className="block sm:col-span-2">
+    <div className="block sm:col-span-2">
       <span className="field-label">Timelapse clips (multi-drop)</span>
-      <div
+      <label
+        htmlFor={inputId}
         className="mt-1 flex min-h-[88px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border bg-monitor-bg/50 px-4 py-5 text-center transition hover:border-scope-dim"
-        onDragOver={(e) => e.preventDefault()}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = "copy";
+        }}
         onDrop={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           addFiles(e.dataTransfer.files);
         }}
       >
         <input
+          ref={inputRef}
+          id={inputId}
           type="file"
-          accept="video/*"
+          accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v"
           multiple
           className="sr-only"
-          id="video-clips-input"
           onChange={(e) => {
             addFiles(e.target.files);
             e.target.value = "";
           }}
         />
-        <label htmlFor="video-clips-input" className="cursor-pointer text-xs text-monitor-muted">
+        <span className="pointer-events-none text-xs text-monitor-muted">
           Drop clips here or click to browse
-        </label>
+        </span>
         {clips.length > 0 && (
-          <p className="mt-2 font-mono text-[11px] text-scope-trace">
+          <p className="pointer-events-none mt-2 font-mono text-[11px] text-scope-trace">
             {clips.length} clip{clips.length === 1 ? "" : "s"} queued
           </p>
         )}
-      </div>
-    </label>
+      </label>
+      {clips.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {clips.map((clip) => (
+            <li
+              key={clip.id}
+              className="truncate rounded border border-monitor-border bg-monitor-bg px-2 py-1 font-mono text-[11px] text-monitor-muted"
+            >
+              {clip.file.name}
+              {clip.role === "hook" ? " · hook" : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -136,13 +150,13 @@ const TARGET_PRESETS = [15, 30, 45, 60] as const;
 
 export function JobForm({
   form,
-  onChange,
+  onPatch,
+  onLocalClipsChange,
   onSubmit,
   submitting,
   disabled,
   disabledReason,
 }: JobFormProps) {
-  const patch = (partial: Partial<FormState>) => onChange({ ...form, ...partial });
   const missingAssets = form.localClips.length === 0 || !form.audio;
 
   return (
@@ -158,11 +172,8 @@ export function JobForm({
           Assets
         </h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <MultiVideoField
-            clips={form.localClips}
-            onClips={(localClips) => patch({ localClips })}
-          />
-          <AudioField file={form.audio} onFile={(audio) => patch({ audio })} />
+          <MultiVideoField clips={form.localClips} onClips={onLocalClipsChange} />
+          <AudioField file={form.audio} onFile={(audio) => onPatch({ audio })} />
         </div>
       </div>
 
@@ -176,7 +187,7 @@ export function JobForm({
             <input
               className="field-input"
               value={form.hookText}
-              onChange={(e) => patch({ hookText: e.target.value })}
+              onChange={(e) => onPatch({ hookText: e.target.value })}
               required
             />
           </label>
@@ -185,7 +196,7 @@ export function JobForm({
             <input
               className="field-input font-mono text-xs"
               value={form.emphasisWords}
-              onChange={(e) => patch({ emphasisWords: e.target.value })}
+              onChange={(e) => onPatch({ emphasisWords: e.target.value })}
             />
           </label>
         </div>
@@ -202,7 +213,7 @@ export function JobForm({
               type="color"
               className="h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
               value={form.fillColor}
-              onChange={(e) => patch({ fillColor: e.target.value })}
+              onChange={(e) => onPatch({ fillColor: e.target.value })}
             />
           </label>
           <label className="block">
@@ -211,7 +222,7 @@ export function JobForm({
               type="color"
               className="h-10 w-full cursor-pointer rounded border border-monitor-border bg-monitor-bg"
               value={form.emphasisColor}
-              onChange={(e) => patch({ emphasisColor: e.target.value })}
+              onChange={(e) => onPatch({ emphasisColor: e.target.value })}
             />
           </label>
           <label className="block sm:col-span-2">
@@ -223,7 +234,7 @@ export function JobForm({
                   ? form.fontFamily
                   : DEFAULT_HOOK_FONT
               }
-              onChange={(e) => patch({ fontFamily: e.target.value })}
+              onChange={(e) => onPatch({ fontFamily: e.target.value })}
             >
               {HOOK_FONT_OPTIONS.map((font) => (
                 <option key={font.value} value={font.value}>
@@ -239,7 +250,7 @@ export function JobForm({
               min={5}
               max={20}
               value={form.safePaddingPct}
-              onChange={(e) => patch({ safePaddingPct: Number(e.target.value) })}
+              onChange={(e) => onPatch({ safePaddingPct: Number(e.target.value) })}
               className="w-full accent-scope-trace"
             />
           </label>
@@ -263,7 +274,7 @@ export function JobForm({
                   ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
                   : "border-monitor-border text-monitor-muted hover:border-scope-dim"
               }`}
-              onClick={() => patch({ targetDurationS: seconds, useFullTrack: false })}
+              onClick={() => onPatch({ targetDurationS: seconds, useFullTrack: false })}
             >
               {seconds}s
             </button>
@@ -275,7 +286,7 @@ export function JobForm({
                 ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
                 : "border-monitor-border text-monitor-muted hover:border-scope-dim"
             }`}
-            onClick={() => patch({ useFullTrack: true })}
+            onClick={() => onPatch({ useFullTrack: true })}
           >
             Full track
           </button>
