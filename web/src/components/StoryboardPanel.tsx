@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SlotFitMode, SlotTransition, SpatialCrop, StoryboardPayload, StorySlot, WaveformPayload } from "../types";
 import { slotColorForIndex } from "../utils/slotColors";
-import { formatSlotSpeedLabel } from "../utils/slotSpeed";
 import { ClipCropTimeline } from "./ClipCropTimeline";
 import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer } from "./StoryboardBlockPlayer";
@@ -103,7 +102,6 @@ export function StoryboardPanel({
   const active =
     ordered.find((slot) => slot.id === selectedSlotId) ?? ordered[0] ?? null;
 
-  const [localFile, setLocalFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [durationS, setDurationS] = useState<number | null>(null);
   const [cropStartS, setCropStartS] = useState(0);
@@ -112,6 +110,7 @@ export function StoryboardPanel({
   const [spatialCropOpen, setSpatialCropOpen] = useState(false);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const assignTargetRef = useRef<StorySlot | null>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -119,81 +118,86 @@ export function StoryboardPanel({
   }, [active?.id, onSelectSlot]);
 
   useEffect(() => {
-    if (!active) return;
-
-    if (active.assigned_clip_id && active.clip_source_url && !localFile) {
-      let cancelled = false;
-      setPreviewUrl(active.clip_source_url);
-      setCropStartS(active.crop_start_s ?? 0);
-      setCropEndS(active.crop_end_s ?? active.target_duration_s);
-
-      void probeVideoDuration(active.clip_source_url).then((duration) => {
-        if (!cancelled && duration != null) {
-          setDurationS(duration);
-        }
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (!localFile) {
+    if (!active?.assigned_clip_id || !active.clip_source_url) {
       setPreviewUrl(null);
       setDurationS(null);
       return;
     }
 
-    const url = URL.createObjectURL(localFile);
-    setPreviewUrl(url);
     let cancelled = false;
+    setPreviewUrl(active.clip_source_url);
+    setCropStartS(active.crop_start_s ?? 0);
+    setCropEndS(active.crop_end_s ?? active.target_duration_s);
 
-    void probeVideoDuration(url).then((duration) => {
-      if (cancelled) return;
-      setDurationS(duration);
-      if (duration != null && active) {
-        const span = Math.min(duration, active.target_duration_s);
-        setCropStartS(0);
-        setCropEndS(span);
+    void probeVideoDuration(active.clip_source_url).then((duration) => {
+      if (!cancelled && duration != null) {
+        setDurationS(duration);
       }
     });
 
     return () => {
       cancelled = true;
-      URL.revokeObjectURL(url);
     };
-  }, [active, localFile]);
+  }, [active]);
 
-  const pickFile = useCallback(
-    (files: FileList | File[] | null) => {
-      if (!files?.length || !active) return;
-      const file = Array.from(files).find(isVideoFile);
-      if (!file) return;
-      setLocalFile(file);
+  const assignFileToSlot = useCallback(
+    async (file: File, slot: StorySlot) => {
+      if (saving) return;
+      assignTargetRef.current = slot;
+      const objectUrl = URL.createObjectURL(file);
+      let endS = slot.target_duration_s;
+      try {
+        const duration = await probeVideoDuration(objectUrl);
+        if (duration != null) {
+          endS = Math.min(duration, slot.target_duration_s);
+        }
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+      }
+      const draft = draftTransforms[slot.id];
+      const transform =
+        draft && transformNeedsSync(draft)
+          ? { rotation_deg: draft.rotation_deg, spatial_crop: draft.spatial_crop }
+          : undefined;
+      await onAssignClip(slot.id, file, 0, endS, transform);
+      if (assignTargetRef.current?.id === slot.id) {
+        setDraftTransforms((prev) => {
+          const next = { ...prev };
+          delete next[slot.id];
+          return next;
+        });
+      }
     },
-    [active],
+    [draftTransforms, onAssignClip, saving],
   );
 
-  const commitClip = async () => {
-    if (!active || !localFile || durationS == null) return;
-    const transform = slotTransform(active);
-    await onAssignClip(
-      active.id,
-      localFile,
-      cropStartS,
-      cropEndS,
-      transformNeedsSync(transform) ? transform : undefined,
-    );
-    setLocalFile(null);
-    setDraftTransforms((prev) => {
-      const next = { ...prev };
-      delete next[active.id];
-      return next;
-    });
-  };
+  const pickFile = useCallback(
+    (files: FileList | File[] | null, slot: StorySlot | null = active) => {
+      if (!files?.length || !slot) return;
+      const file = Array.from(files).find(isVideoFile);
+      if (!file) return;
+      void assignFileToSlot(file, slot);
+    },
+    [active, assignFileToSlot],
+  );
+
+  const handleFileInput = useCallback(
+    (files: FileList | null) => {
+      pickFile(files);
+    },
+    [pickFile],
+  );
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent, slot: StorySlot | null = active) => {
+      event.preventDefault();
+      pickFile(event.dataTransfer.files, slot);
+    },
+    [active, pickFile],
+  );
 
   const commitCrop = async (startS: number, endS: number) => {
-    if (!active?.assigned_clip_id || localFile) return;
+    if (!active?.assigned_clip_id) return;
     const unchanged =
       active.crop_start_s === startS && active.crop_end_s === endS;
     if (unchanged) return;
@@ -207,17 +211,12 @@ export function StoryboardPanel({
     });
   };
 
-  const cropSpanS = Math.max(cropEndS - cropStartS, 0);
-  const speedLabel =
-    active != null
-      ? formatSlotSpeedLabel(cropSpanS, active.target_duration_s, active.role)
-      : "";
   const activeSlotIndex = active ? ordered.findIndex((slot) => slot.id === active.id) : -1;
   const activeSlotColor = activeSlotIndex >= 0 ? slotColorForIndex(activeSlotIndex) : null;
 
   const slotTransform = useCallback(
     (slot: StorySlot): SlotTransformDraft => {
-      if (slot.assigned_clip_id && !localFile) {
+      if (slot.assigned_clip_id) {
         return {
           rotation_deg: slot.rotation_deg ?? 0,
           spatial_crop: slot.spatial_crop ?? null,
@@ -225,12 +224,12 @@ export function StoryboardPanel({
       }
       return (
         draftTransforms[slot.id] ?? {
-          rotation_deg: slot.rotation_deg ?? 0,
-          spatial_crop: slot.spatial_crop ?? null,
+          rotation_deg: 0,
+          spatial_crop: null,
         }
       );
     },
-    [draftTransforms, localFile],
+    [draftTransforms],
   );
 
   const applySlotTransform = useCallback(
@@ -246,31 +245,22 @@ export function StoryboardPanel({
         rotation_deg: update.rotation_deg ?? current.rotation_deg,
         spatial_crop: update.spatial_crop !== undefined ? update.spatial_crop : current.spatial_crop,
       };
-      if (slot.assigned_clip_id && !localFile) {
+      if (slot.assigned_clip_id) {
         void onUpdateSlotTransform(slot.id, update);
         return;
       }
       setDraftTransforms((prev) => ({ ...prev, [slot.id]: next }));
     },
-    [localFile, onUpdateSlotTransform, slotTransform],
+    [onUpdateSlotTransform, slotTransform],
   );
 
   const clearActiveClip = useCallback(() => {
-    if (!active) return;
-    if (localFile) {
-      setLocalFile(null);
-      setDraftTransforms((prev) => {
-        const next = { ...prev };
-        delete next[active.id];
-        return next;
-      });
-      return;
-    }
+    if (!active?.assigned_clip_id) return;
     void onClearClip(active.id);
-  }, [active, localFile, onClearClip]);
+  }, [active, onClearClip]);
 
   const activeTransform = active ? slotTransform(active) : null;
-  const canClearClip = Boolean(active?.assigned_clip_id || localFile);
+  const canClearClip = Boolean(active?.assigned_clip_id);
 
   return (
     <div className="panel space-y-4 p-5">
@@ -280,7 +270,7 @@ export function StoryboardPanel({
             Storyboard
           </h2>
           <p className="mt-1 text-xs text-monitor-muted">
-            Drop a clip into each slot — we time-stretch your selection to the slot duration.
+            Drop a clip into each slot — it uploads and assigns automatically.
           </p>
         </div>
         <dl className="font-mono text-xs">
@@ -373,6 +363,18 @@ export function StoryboardPanel({
 
       {active && (
         <div className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-3">
+          <input
+            ref={inputRef}
+            id={inputId}
+            type="file"
+            accept="video/*,.mp4,.mov,.webm,.mkv"
+            className="sr-only"
+            disabled={saving}
+            onChange={(e) => {
+              handleFileInput(e.target.files);
+              e.target.value = "";
+            }}
+          />
           <div className="flex items-center justify-between gap-2">
             <p
               className="font-mono text-[10px] uppercase tracking-[0.18em]"
@@ -424,35 +426,26 @@ export function StoryboardPanel({
             <label
               htmlFor={inputId}
               className="flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border px-4 py-4 text-center hover:border-scope-dim"
+              onDrop={(event) => handleDrop(event)}
+              onDragOver={(event) => event.preventDefault()}
             >
-              <input
-                ref={inputRef}
-                id={inputId}
-                type="file"
-                accept="video/*,.mp4,.mov,.webm,.mkv"
-                className="sr-only"
-                onChange={(e) => {
-                  pickFile(e.target.files);
-                  e.target.value = "";
-                }}
-              />
               <span className="text-xs text-monitor-muted">
-                Drop video for this slot or click to browse
+                {saving ? "Uploading clip…" : "Drop video for this slot or click to browse"}
               </span>
             </label>
           )}
 
           {previewUrl && durationS != null && durationS > 0 && (
-            <>
+            <div
+              onDrop={(event) => handleDrop(event)}
+              onDragOver={(event) => event.preventDefault()}
+            >
               <ClipCropTimeline
-                videoUrl={previewUrl}
                 durationS={durationS}
                 cropStartS={cropStartS}
                 cropEndS={cropEndS}
                 targetDurationS={active.target_duration_s}
                 slotRole={active.role}
-                rotationDeg={activeTransform?.rotation_deg ?? 0}
-                spatialCrop={activeTransform?.spatial_crop ?? null}
                 onCropChange={(startS, endS) => {
                   setCropStartS(startS);
                   setCropEndS(endS);
@@ -461,32 +454,7 @@ export function StoryboardPanel({
                   void commitCrop(startS, endS);
                 }}
               />
-              <p className="font-mono text-[10px] text-monitor-muted">
-                Selected {cropSpanS.toFixed(2)}s → {active.target_duration_s.toFixed(1)}s slot
-                {" · "}
-                <span className="text-scope-dim">{speedLabel}</span>
-              </p>
-              {localFile && (
-                <button
-                  type="button"
-                  className="btn-primary text-xs"
-                  disabled={saving}
-                  onClick={() => void commitClip()}
-                >
-                  Assign to slot
-                </button>
-              )}
-              {active.assigned_clip_id && localFile == null && (
-                <button
-                  type="button"
-                  className="btn-primary text-xs"
-                  disabled={saving}
-                  onClick={() => inputRef.current?.click()}
-                >
-                  Replace clip
-                </button>
-              )}
-            </>
+            </div>
           )}
         </div>
       )}

@@ -8,6 +8,16 @@ from viral_editor.audio.preview import ensure_loop_seam_audio
 from viral_editor.models import SpeedRampPlan, SpeedSegment
 from viral_editor.utils.ffmpeg import FFmpegError, resolve_drawtext_fontfile, run_ffmpeg
 
+COMPOSITE_FPS = 30
+
+
+def _normalize_segment_timeline(parts: list[str], input_ref: str, label: str) -> str:
+    """Force a common fps/timebase so xfade/concat inputs match."""
+    parts.append(
+        f"{input_ref}fps={COMPOSITE_FPS},format=yuv420p,settb=1/{COMPOSITE_FPS}[{label}]"
+    )
+    return f"[{label}]"
+
 
 def _append_looped_music_input(
     command: list[str],
@@ -265,6 +275,12 @@ def build_composite_filtergraph(
                 )
                 concat_ref = f"[{titled}]"
         segment_labels.append(concat_ref)
+
+    normalized_labels: list[str] = []
+    for index, ref in enumerate(segment_labels):
+        norm = f"slot{index}norm"
+        normalized_labels.append(_normalize_segment_timeline(parts, ref, norm))
+    segment_labels = normalized_labels
 
     if len(segment_labels) == 1:
         parts.append(f"{segment_labels[0]}copy[outv]")

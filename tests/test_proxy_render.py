@@ -112,6 +112,7 @@ def test_build_composite_filtergraph_xfade_and_drawtext(monkeypatch) -> None:
     assert "drawtext" in graph
     assert "fontfile='C\\:/Windows/Fonts/arial.ttf'" in graph
     assert "xfade=transition=fade" in graph
+    assert "fps=30" in graph
     assert "[outv]" in graph
     graph = build_proxy_filtergraph(
         SpeedRampPlan(output_duration_s=0.0, src_duration_s=1.0),
