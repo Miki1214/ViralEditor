@@ -144,9 +144,8 @@ export function StoryboardPanel({
   const assignTargetRef = useRef<StorySlot | null>(null);
 
   useEffect(() => {
-    if (!active) return;
-    onSelectSlot(active.id);
-  }, [active?.id, onSelectSlot]);
+    setSpatialCropOpen(false);
+  }, [active?.id]);
 
   useEffect(() => {
     if (!active?.assigned_clip_id || !active.clip_source_url) {
@@ -424,6 +423,19 @@ export function StoryboardPanel({
                   type="button"
                   className="btn-ghost px-2 py-1 font-mono text-[10px]"
                   disabled={saving}
+                  title="Rotate clip 90° counter-clockwise"
+                  onClick={() =>
+                    applySlotTransform(active, {
+                      rotation_deg: (activeTransform.rotation_deg - 90 + 360) % 360,
+                    })
+                  }
+                >
+                  ↺ 90°
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost px-2 py-1 font-mono text-[10px]"
+                  disabled={saving}
                   title="Rotate clip 90° clockwise"
                   onClick={() =>
                     applySlotTransform(active, {
@@ -438,7 +450,7 @@ export function StoryboardPanel({
                   className={`btn-ghost px-2 py-1 font-mono text-[10px] ${
                     activeTransform.spatial_crop ? "text-scope-trace" : ""
                   }`}
-                  disabled={saving || !previewUrl}
+                  disabled={saving || !active?.clip_source_url}
                   title="Open frame crop editor (9:16)"
                   onClick={() => setSpatialCropOpen(true)}
                 >
@@ -495,10 +507,12 @@ export function StoryboardPanel({
         </div>
       )}
 
-      {active && previewUrl && (
+      {active?.assigned_clip_id && active.clip_source_url && (
         <SpatialCropModal
+          key={active.id}
+          slotId={active.id}
           open={spatialCropOpen}
-          videoUrl={previewUrl}
+          videoUrl={active.clip_source_url}
           rotationDeg={activeTransform?.rotation_deg ?? 0}
           initialCrop={activeTransform?.spatial_crop ?? null}
           onClose={() => setSpatialCropOpen(false)}

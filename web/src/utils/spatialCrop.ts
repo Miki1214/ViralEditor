@@ -73,10 +73,10 @@ export function normalizedToPixelRect(norm: NormalizedRect, bounds: PixelRect): 
 }
 
 export function pixelRectToNormalized(box: PixelRect, bounds: PixelRect): NormalizedRect {
-  const x = clamp01((box.x - bounds.x) / bounds.w);
-  const y = clamp01((box.y - bounds.y) / bounds.h);
-  const right = clamp01((box.x + box.w - bounds.x) / bounds.w);
-  const bottom = clamp01((box.y + box.h - bounds.y) / bounds.h);
+  const x = (box.x - bounds.x) / bounds.w;
+  const y = (box.y - bounds.y) / bounds.h;
+  const right = (box.x + box.w - bounds.x) / bounds.w;
+  const bottom = (box.y + box.h - bounds.y) / bounds.h;
   return {
     x,
     y,
@@ -85,6 +85,143 @@ export function pixelRectToNormalized(box: PixelRect, bounds: PixelRect): Normal
   };
 }
 
+/** Keep 9:16 aspect and minimum size; allow extending beyond the video bounds. */
+export function clampCropBoxFree(
+  box: PixelRect,
+  stage: PixelRect,
+  minW = 48,
+): PixelRect {
+  const aspect = PORTRAIT_ASPECT;
+  let w = Math.max(minW, box.w);
+  let h = w / aspect;
+  if (h > stage.h) {
+    h = stage.h;
+    w = h * aspect;
+  }
+  if (w > stage.w) {
+    w = stage.w;
+    h = w / aspect;
+  }
+  w = Math.max(minW, w);
+  h = w / aspect;
+
+  let x = box.x;
+  let y = box.y;
+  x = Math.max(stage.x, Math.min(x, stage.x + stage.w - w));
+  y = Math.max(stage.y, Math.min(y, stage.y + stage.h - h));
+  return { x, y, w, h };
+}
+
+export function clampCropBoxSeFree(
+  anchorX: number,
+  anchorY: number,
+  w: number,
+  stage: PixelRect,
+  minW = 48,
+): PixelRect {
+  const aspect = PORTRAIT_ASPECT;
+  const maxWByStage = stage.x + stage.w - anchorX;
+  const maxHByStage = stage.y + stage.h - anchorY;
+
+  let width = Math.max(minW, Math.min(w, maxWByStage));
+  let height = width / aspect;
+  if (height > maxHByStage) {
+    height = maxHByStage;
+    width = height * aspect;
+  }
+  width = Math.max(minW, width);
+  height = width / aspect;
+  return { x: anchorX, y: anchorY, w: width, h: height };
+}
+
+export function clampCropBoxNwFree(
+  fixedRight: number,
+  fixedBottom: number,
+  w: number,
+  stage: PixelRect,
+  minW = 48,
+): PixelRect {
+  const aspect = PORTRAIT_ASPECT;
+  const maxWByStage = fixedRight - stage.x;
+  const maxHByStage = fixedBottom - stage.y;
+
+  let width = Math.max(minW, Math.min(w, maxWByStage));
+  let height = width / aspect;
+  if (height > maxHByStage) {
+    height = maxHByStage;
+    width = height * aspect;
+  }
+  width = Math.max(minW, width);
+  height = width / aspect;
+
+  const x = fixedRight - width;
+  const y = fixedBottom - height;
+  return { x, y, w: width, h: height };
+}
+
+export function resizeCropByDeltaFree(
+  startBox: PixelRect,
+  dx: number,
+  dy: number,
+  stage: PixelRect,
+  corner: "se" | "nw",
+  minW = 48,
+): PixelRect {
+  const aspect = PORTRAIT_ASPECT;
+  const fixedRight = startBox.x + startBox.w;
+  const fixedBottom = startBox.y + startBox.h;
+
+  if (corner === "se") {
+    const wFromX = startBox.w + dx;
+    const wFromY = (startBox.h + dy) * aspect;
+    const w = Math.max(wFromX, wFromY, minW);
+    return clampCropBoxSeFree(startBox.x, startBox.y, w, stage, minW);
+  }
+
+  const wFromX = startBox.w - dx;
+  const wFromY = (startBox.h - dy) * aspect;
+  const w = Math.max(wFromX, wFromY, minW);
+  return clampCropBoxNwFree(fixedRight, fixedBottom, w, stage, minW);
+}
+
+export interface LetterboxStrip {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Black bars inside the crop window that fall outside the video bounds. */
+export function letterboxStrips(crop: PixelRect, video: PixelRect): LetterboxStrip[] {
+  const ix = Math.max(crop.x, video.x);
+  const iy = Math.max(crop.y, video.y);
+  const ir = Math.min(crop.x + crop.w, video.x + video.w);
+  const ib = Math.min(crop.y + crop.h, video.y + video.h);
+
+  if (ir <= ix || ib <= iy) {
+    return [{ x: crop.x, y: crop.y, w: crop.w, h: crop.h }];
+  }
+
+  const strips: LetterboxStrip[] = [];
+  const cropR = crop.x + crop.w;
+  const cropB = crop.y + crop.h;
+
+  if (iy > crop.y) {
+    strips.push({ x: crop.x, y: crop.y, w: crop.w, h: iy - crop.y });
+  }
+  if (cropB > ib) {
+    strips.push({ x: crop.x, y: ib, w: crop.w, h: cropB - ib });
+  }
+  if (ix > crop.x) {
+    strips.push({ x: crop.x, y: iy, w: ix - crop.x, h: ib - iy });
+  }
+  if (cropR > ir) {
+    strips.push({ x: ir, y: iy, w: cropR - ir, h: ib - iy });
+  }
+  return strips;
+}
+
+/** @deprecated Use clampCropBoxFree for crop UI that may extend past the video. */
 export function clampCropBox(box: PixelRect, bounds: PixelRect, minW = 48): PixelRect {
   const aspect = PORTRAIT_ASPECT;
   let w = Math.max(minW, Math.min(box.w, bounds.w));
@@ -179,6 +316,29 @@ export function resizeCropByDelta(
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
+}
+
+/** Size/position video so the full rotated frame fits inside bounds without clipping. */
+export function rotatedVideoDisplayStyle(
+  bounds: PixelRect,
+  rotationDeg: number,
+): {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  transform: string;
+} {
+  const sideways = rotationDeg % 180 !== 0;
+  const width = sideways ? bounds.h : bounds.w;
+  const height = sideways ? bounds.w : bounds.h;
+  return {
+    left: bounds.x + bounds.w / 2,
+    top: bounds.y + bounds.h / 2,
+    width,
+    height,
+    transform: `translate(-50%, -50%) rotate(${rotationDeg}deg)`,
+  };
 }
 
 /** CSS for previewing a normalized spatial crop in a 9:16 viewport. */

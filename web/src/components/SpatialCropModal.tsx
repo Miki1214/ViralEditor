@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SpatialCrop } from "../types";
 import {
-  clampCropBox,
+  clampCropBoxFree,
   defaultPortraitCrop,
   effectiveVideoSize,
+  letterboxStrips,
   normalizedToPixelRect,
   objectContainRect,
   pixelRectToNormalized,
-  resizeCropByDelta,
+  rotatedVideoDisplayStyle,
+  resizeCropByDeltaFree,
   type PixelRect,
 } from "../utils/spatialCrop";
 
 interface SpatialCropModalProps {
   open: boolean;
+  slotId: string;
   videoUrl: string;
   rotationDeg: number;
   initialCrop: SpatialCrop | null;
@@ -22,8 +25,18 @@ interface SpatialCropModalProps {
 
 type DragMode = "move" | "resize-se" | "resize-nw" | null;
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.25;
+
+function clampZoom(value: number): number {
+  const stepped = Math.round(value / ZOOM_STEP) * ZOOM_STEP;
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, stepped));
+}
+
 export function SpatialCropModal({
   open,
+  slotId,
   videoUrl,
   rotationDeg,
   initialCrop,
@@ -31,6 +44,7 @@ export function SpatialCropModal({
   onClose,
 }: SpatialCropModalProps) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const dragAnchorRef = useRef<{ mode: DragMode; startX: number; startY: number; box: PixelRect }>(
     null,
@@ -40,20 +54,24 @@ export function SpatialCropModal({
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [cropBox, setCropBox] = useState<PixelRect | null>(null);
   const [dragging, setDragging] = useState<DragMode>(null);
+  const [zoom, setZoom] = useState(1);
   const videoBoundsRef = useRef<PixelRect>({ x: 0, y: 0, w: 0, h: 0 });
-  const prevBoundsRef = useRef<PixelRect>({ x: 0, y: 0, w: 0, h: 0 });
-  const openSessionRef = useRef<string | null>(null);
+  const prevStageSizeRef = useRef({ width: 0, height: 0 });
+  const sessionRef = useRef<string | null>(null);
+  const cropInitializedRef = useRef(false);
+
+  const sessionKey = `${slotId}|${videoUrl}|${rotationDeg}|${JSON.stringify(initialCrop)}`;
 
   const frame = effectiveVideoSize(videoSize.width, videoSize.height, rotationDeg);
   const videoBounds = objectContainRect(stageSize.width, stageSize.height, frame.width, frame.height);
+  const stageBounds: PixelRect = { x: 0, y: 0, w: stageSize.width, h: stageSize.height };
   videoBoundsRef.current = videoBounds;
 
   const syncLayout = useCallback(() => {
     const stage = stageRef.current;
     const video = videoRef.current;
     if (!stage) return;
-    const rect = stage.getBoundingClientRect();
-    setStageSize({ width: rect.width, height: rect.height });
+    setStageSize({ width: stage.offsetWidth, height: stage.offsetHeight });
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
       setVideoSize({ width: video.videoWidth, height: video.videoHeight });
     }
@@ -71,50 +89,84 @@ export function SpatialCropModal({
 
   useEffect(() => {
     if (!open) {
-      openSessionRef.current = null;
+      sessionRef.current = null;
+      cropInitializedRef.current = false;
       setCropBox(null);
+      setVideoSize({ width: 0, height: 0 });
+      setZoom(1);
       return;
     }
-    const session = `${videoUrl}|${rotationDeg}|${JSON.stringify(initialCrop)}`;
-    if (openSessionRef.current === session) return;
-    openSessionRef.current = session;
+    if (sessionRef.current === sessionKey) return;
+    sessionRef.current = sessionKey;
+    cropInitializedRef.current = false;
     setCropBox(null);
-  }, [open, videoUrl, rotationDeg, initialCrop]);
+    setVideoSize({ width: 0, height: 0 });
+    setZoom(1);
+    prevStageSizeRef.current = { width: 0, height: 0 };
+  }, [open, sessionKey]);
 
   useEffect(() => {
-    if (!open || dragging || videoBounds.w <= 0 || videoBounds.h <= 0) return;
-
-    setCropBox((prev) => {
-      if (prev != null) return prev;
-      return initialCrop
-        ? normalizedToPixelRect(initialCrop, videoBounds)
-        : defaultPortraitCrop(videoBounds);
-    });
-  }, [open, dragging, initialCrop, videoBounds.x, videoBounds.y, videoBounds.w, videoBounds.h]);
-
-  useEffect(() => {
-    if (!open || dragging || videoBounds.w <= 0 || videoBounds.h <= 0) {
-      prevBoundsRef.current = videoBounds;
+    if (
+      !open ||
+      dragging ||
+      cropInitializedRef.current ||
+      sessionRef.current !== sessionKey ||
+      videoSize.width <= 0 ||
+      videoBounds.w <= 0 ||
+      videoBounds.h <= 0
+    ) {
       return;
     }
 
-    const prev = prevBoundsRef.current;
-    const boundsChanged =
-      prev.w > 0 &&
-      (prev.x !== videoBounds.x ||
-        prev.y !== videoBounds.y ||
-        prev.w !== videoBounds.w ||
-        prev.h !== videoBounds.h);
+    cropInitializedRef.current = true;
+    setCropBox(
+      initialCrop
+        ? normalizedToPixelRect(initialCrop, videoBounds)
+        : defaultPortraitCrop(stageBounds),
+    );
+    prevStageSizeRef.current = { width: stageSize.width, height: stageSize.height };
+  }, [
+    open,
+    dragging,
+    sessionKey,
+    initialCrop,
+    videoSize.width,
+    videoSize.height,
+    stageSize.width,
+    stageSize.height,
+    videoBounds.x,
+    videoBounds.y,
+    videoBounds.w,
+    videoBounds.h,
+  ]);
 
-    if (boundsChanged) {
+  useEffect(() => {
+    if (
+      !open ||
+      dragging ||
+      !cropInitializedRef.current ||
+      sessionRef.current !== sessionKey ||
+      stageSize.width <= 0 ||
+      stageSize.height <= 0
+    ) {
+      return;
+    }
+
+    const prev = prevStageSizeRef.current;
+    const stageResized =
+      prev.width > 0 &&
+      (prev.width !== stageSize.width || prev.height !== stageSize.height);
+
+    if (stageResized) {
+      const prevStage: PixelRect = { x: 0, y: 0, w: prev.width, h: prev.height };
       setCropBox((current) => {
         if (current == null) return current;
-        const norm = pixelRectToNormalized(current, prev);
-        return normalizedToPixelRect(norm, videoBounds);
+        const norm = pixelRectToNormalized(current, prevStage);
+        return normalizedToPixelRect(norm, stageBounds);
       });
     }
-    prevBoundsRef.current = videoBounds;
-  }, [open, dragging, videoBounds.x, videoBounds.y, videoBounds.w, videoBounds.h]);
+    prevStageSizeRef.current = { width: stageSize.width, height: stageSize.height };
+  }, [open, dragging, sessionKey, stageSize.width, stageSize.height, stageBounds.w, stageBounds.h]);
 
   useEffect(() => {
     if (!open) return;
@@ -130,28 +182,28 @@ export function SpatialCropModal({
 
     const onMove = (event: PointerEvent) => {
       const anchor = dragAnchorRef.current;
-      const bounds = videoBoundsRef.current;
-      if (!anchor || bounds.w <= 0) return;
+      const stage = { x: 0, y: 0, w: stageSize.width, h: stageSize.height };
+      if (!anchor || stage.w <= 0) return;
 
-      const dx = event.clientX - anchor.startX;
-      const dy = event.clientY - anchor.startY;
+      const dx = (event.clientX - anchor.startX) / zoom;
+      const dy = (event.clientY - anchor.startY) / zoom;
 
       if (anchor.mode === "move") {
         setCropBox(
-          clampCropBox(
+          clampCropBoxFree(
             {
               x: anchor.box.x + dx,
               y: anchor.box.y + dy,
               w: anchor.box.w,
               h: anchor.box.h,
             },
-            bounds,
+            stage,
           ),
         );
       } else if (anchor.mode === "resize-se") {
-        setCropBox(resizeCropByDelta(anchor.box, dx, dy, bounds, "se"));
+        setCropBox(resizeCropByDeltaFree(anchor.box, dx, dy, stage, "se"));
       } else if (anchor.mode === "resize-nw") {
-        setCropBox(resizeCropByDelta(anchor.box, dx, dy, bounds, "nw"));
+        setCropBox(resizeCropByDeltaFree(anchor.box, dx, dy, stage, "nw"));
       }
     };
 
@@ -168,7 +220,17 @@ export function SpatialCropModal({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [dragging]);
+  }, [dragging, stageSize.width, stageSize.height, zoom]);
+
+  const adjustZoom = (delta: number) => {
+    setZoom((current) => clampZoom(current + delta));
+  };
+
+  const handleViewportWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    adjustZoom(event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+  };
 
   const startDrag = (mode: DragMode, event: React.PointerEvent) => {
     if (!cropBox) return;
@@ -194,6 +256,12 @@ export function SpatialCropModal({
   };
 
   if (!open) return null;
+
+  const stageAspect = "9 / 16";
+  const videoStyle =
+    videoBounds.w > 0 && frame.width > 0
+      ? rotatedVideoDisplayStyle(videoBounds, rotationDeg)
+      : null;
 
   const shade = cropBox
     ? {
@@ -224,7 +292,8 @@ export function SpatialCropModal({
               Frame crop
             </h2>
             <p className="mt-1 text-xs text-monitor-muted">
-              Drag the 9:16 window or resize from corners. Only the area inside the frame is kept.
+              Drag or resize the 9:16 window. Extend past the video to add black bars in the output. Use
+              zoom controls or Ctrl+scroll for fine adjustments.
             </p>
           </div>
           <button type="button" className="btn-ghost text-xs" onClick={onClose}>
@@ -233,15 +302,52 @@ export function SpatialCropModal({
         </div>
 
         <div
-          ref={stageRef}
-          className="relative mx-auto aspect-[9/16] w-full max-h-[min(72vh,720px)] overflow-hidden rounded border border-monitor-border bg-black"
+          ref={viewportRef}
+          className="mx-auto max-h-[min(72vh,720px)] max-w-full overflow-auto rounded border border-monitor-border bg-black"
+          onWheel={handleViewportWheel}
         >
+          <div
+            className="relative"
+            style={
+              stageSize.width > 0 && stageSize.height > 0
+                ? {
+                    width: stageSize.width * zoom,
+                    height: stageSize.height * zoom,
+                  }
+                : undefined
+            }
+          >
+            <div
+              ref={stageRef}
+              className="relative h-[min(72vh,720px)] w-auto overflow-hidden bg-black"
+              style={{
+                aspectRatio: stageAspect,
+                transform: `scale(${zoom})`,
+                transformOrigin: "0 0",
+              }}
+            >
           <video
             ref={videoRef}
             key={videoUrl}
             src={videoUrl}
-            className="pointer-events-none absolute inset-0 h-full w-full object-contain"
-            style={{ transform: `rotate(${rotationDeg}deg)` }}
+            className="pointer-events-none absolute object-fill"
+            style={
+              videoStyle
+                ? {
+                    left: videoStyle.left,
+                    top: videoStyle.top,
+                    width: videoStyle.width,
+                    height: videoStyle.height,
+                    transform: videoStyle.transform,
+                  }
+                : {
+                    opacity: 0,
+                    width: 1,
+                    height: 1,
+                    left: 0,
+                    top: 0,
+                  }
+            }
             muted
             playsInline
             onLoadedMetadata={(event) => {
@@ -279,6 +385,21 @@ export function SpatialCropModal({
                   height: shade.height,
                 }}
               />
+              {letterboxStrips(
+                { x: shade.left, y: shade.top, w: shade.width, h: shade.height },
+                videoBounds,
+              ).map((strip, index) => (
+                <div
+                  key={`letterbox-${index}`}
+                  className="pointer-events-none absolute bg-black"
+                  style={{
+                    left: strip.x,
+                    top: strip.y,
+                    width: strip.w,
+                    height: strip.h,
+                  }}
+                />
+              ))}
               <div
                 className="absolute cursor-move border-2 border-scope-trace shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
                 style={{
@@ -313,16 +434,60 @@ export function SpatialCropModal({
               </div>
             </>
           )}
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            className="btn-ghost text-xs"
-            onClick={() => setCropBox(defaultPortraitCrop(videoBounds))}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn-ghost text-xs"
+              onClick={() => setCropBox(defaultPortraitCrop(stageBounds))}
+            >
+              Reset crop
+            </button>
+            <button
+              type="button"
+              className="btn-ghost text-xs"
+              disabled={videoBounds.w <= 0 || videoBounds.h <= 0}
+              onClick={() => setCropBox(defaultPortraitCrop(videoBounds))}
+            >
+              Fit to video
+            </button>
+          </div>
+          <div
+            className="flex items-center gap-1 rounded border border-monitor-border bg-monitor-bg/40 px-1"
+            role="group"
+            aria-label="Preview zoom"
           >
-            Reset crop
-          </button>
+            <button
+              type="button"
+              className="btn-ghost px-2 py-1 font-mono text-xs"
+              aria-label="Zoom out"
+              disabled={zoom <= ZOOM_MIN}
+              onClick={() => adjustZoom(-ZOOM_STEP)}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="btn-ghost min-w-[3.25rem] px-2 py-1 font-mono text-[10px] tabular-nums"
+              aria-label="Reset zoom to 100%"
+              onClick={() => setZoom(1)}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              className="btn-ghost px-2 py-1 font-mono text-xs"
+              aria-label="Zoom in"
+              disabled={zoom >= ZOOM_MAX}
+              onClick={() => adjustZoom(ZOOM_STEP)}
+            >
+              +
+            </button>
+          </div>
           <div className="flex gap-2">
             <button
               type="button"

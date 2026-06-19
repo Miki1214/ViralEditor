@@ -67,6 +67,50 @@ def _source_trim_spans(
     return spans
 
 
+def _spatial_crop_filter(
+    crop_x: float,
+    crop_y: float,
+    crop_w: float,
+    crop_h: float,
+) -> str:
+    """Crop/pad chain for normalized spatial crop; may letterbox when extending outside the frame."""
+    eps = 1e-6
+    within = (
+        crop_x >= -eps
+        and crop_y >= -eps
+        and crop_x + crop_w <= 1.0 + eps
+        and crop_y + crop_h <= 1.0 + eps
+    )
+    if within:
+        return (
+            f"crop=iw*{crop_w:.6f}:ih*{crop_h:.6f}:"
+            f"iw*{crop_x:.6f}:ih*{crop_y:.6f}"
+        )
+
+    pad_left = max(0.0, -crop_x)
+    pad_top = max(0.0, -crop_y)
+    pad_right = max(0.0, crop_x + crop_w - 1.0)
+    pad_bottom = max(0.0, crop_y + crop_h - 1.0)
+    denom_w = 1.0 + pad_left + pad_right
+    denom_h = 1.0 + pad_top + pad_bottom
+
+    pad_filter = (
+        f"pad="
+        f"w=iw+max(0\\,-trunc(iw*{crop_x:.6f}))+max(0\\,trunc(iw*{crop_x:.6f}+iw*{crop_w:.6f})-iw):"
+        f"h=ih+max(0\\,-trunc(ih*{crop_y:.6f}))+max(0\\,trunc(ih*{crop_y:.6f}+ih*{crop_h:.6f})-ih):"
+        f"x=max(0\\,-trunc(iw*{crop_x:.6f})):"
+        f"y=max(0\\,-trunc(ih*{crop_y:.6f})):color=black"
+    )
+    crop_filter = (
+        f"crop="
+        f"w=trunc(iw*{crop_w:.6f}/{denom_w:.6f}):"
+        f"h=trunc(ih*{crop_h:.6f}/{denom_h:.6f}):"
+        f"x=trunc(max(0\\,-trunc(iw*{crop_x:.6f}/{denom_w:.6f}))+trunc(iw*{crop_x:.6f}/{denom_w:.6f})):"
+        f"y=trunc(max(0\\,-trunc(ih*{crop_y:.6f}/{denom_h:.6f}))+trunc(ih*{crop_y:.6f}/{denom_h:.6f}))"
+    )
+    return f"{pad_filter},{crop_filter}"
+
+
 def _visual_filters(
     width: int,
     height: int,
@@ -86,10 +130,7 @@ def _visual_filters(
         parts.append("transpose=2")
     if spatial_crop is not None:
         crop_x, crop_y, crop_w, crop_h = spatial_crop
-        parts.append(
-            f"crop=iw*{crop_w:.6f}:ih*{crop_h:.6f}:"
-            f"iw*{crop_x:.6f}:ih*{crop_y:.6f}"
-        )
+        parts.append(_spatial_crop_filter(crop_x, crop_y, crop_w, crop_h))
         parts.append(f"scale={width}:{height},setsar=1")
     elif fit_mode == "cover":
         parts.append(

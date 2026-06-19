@@ -164,6 +164,29 @@ def test_build_composite_filtergraph_spatial_crop() -> None:
     assert "crop=iw*0.562500:ih*1.000000:iw*0.000000:ih*0.000000" in graph
 
 
+def test_build_composite_filtergraph_spatial_crop_letterbox() -> None:
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=4.0,
+            speed_factor=2.0,
+            source_id="clip_a",
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        clip_transforms={"clip_a": (0, "contain", (0.0, -0.1, 1.0, 1.2))},
+    )
+    assert "pad=" in graph
+    assert "color=black" in graph
+    assert "scale=360:640" in graph
+
+
 def test_render_composite_uses_looped_seam_audio(tmp_path, monkeypatch) -> None:
     from viral_editor.video.proxy_render import render_composite
 

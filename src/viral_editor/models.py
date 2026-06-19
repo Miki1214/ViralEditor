@@ -27,12 +27,12 @@ class DomainModel(BaseModel):
 
 
 class SpatialCrop(DomainModel):
-    """Normalized crop rectangle on the post-rotation source frame (0–1)."""
+    """Normalized crop window on the post-rotation source frame; may extend outside 0–1 for letterboxing."""
 
-    x: float = Field(ge=0, le=1)
-    y: float = Field(ge=0, le=1)
-    w: float = Field(gt=0, le=1)
-    h: float = Field(gt=0, le=1)
+    x: float = Field(ge=-2, le=2)
+    y: float = Field(ge=-2, le=2)
+    w: float = Field(gt=0, le=4)
+    h: float = Field(gt=0, le=4)
 
 
 class MediaInfo(DomainModel):

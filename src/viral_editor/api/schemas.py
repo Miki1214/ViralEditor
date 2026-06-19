@@ -101,10 +101,10 @@ class ClipReelResponse(BaseModel):
 
 
 class SpatialCropInput(BaseModel):
-    x: float = Field(ge=0, le=1)
-    y: float = Field(ge=0, le=1)
-    w: float = Field(gt=0, le=1)
-    h: float = Field(gt=0, le=1)
+    x: float = Field(ge=-2, le=2)
+    y: float = Field(ge=-2, le=2)
+    w: float = Field(gt=0, le=4)
+    h: float = Field(gt=0, le=4)
 
 
 class StorySlotResponse(BaseModel):
