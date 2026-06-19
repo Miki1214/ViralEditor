@@ -63,3 +63,38 @@ class SpeedSelectionUpdate(BaseModel):
     s_max: float | None = Field(default=None, gt=0)
     drop_window_ms: int | None = Field(default=None, ge=50, le=2000)
     bass_accent: float | None = Field(default=None, ge=0, le=1)
+
+
+class ClipUpdate(BaseModel):
+    id: str
+    order: int = Field(ge=0)
+    included: bool = True
+    role: Literal["clip", "hook", "filler"] = "clip"
+    crop_start_s: float | None = Field(default=None, ge=0)
+    crop_end_s: float | None = Field(default=None, ge=0)
+
+
+class ClipsPatchRequest(BaseModel):
+    clips: list[ClipUpdate]
+
+
+class ClipInfoResponse(BaseModel):
+    id: str
+    filename: str
+    order: int
+    included: bool
+    role: Literal["clip", "hook", "filler"]
+    crop_start_s: float | None
+    crop_end_s: float | None
+    duration_s: float
+    crop_duration_s: float
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+
+
+class ClipReelResponse(BaseModel):
+    clips: list[ClipInfoResponse]
+    reel_duration_s: float
+    target_body_duration_s: float | None = None
+    entries: list[dict] = Field(default_factory=list)

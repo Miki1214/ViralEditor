@@ -14,6 +14,7 @@ TransientType = Literal["percussive", "bass", "drop"]
 BudgetPolicy = Literal["scale", "loop", "trim"]
 FxKind = Literal["zoom", "rotate"]
 TeaserMask = Literal["vignette", "dir_blur"]
+ClipRole = Literal["clip", "hook", "filler"]
 
 
 class DomainModel(BaseModel):
@@ -129,6 +130,43 @@ class WaveformPayload(DomainModel):
     selected_block_id: str | None = None
 
 
+class ClipInput(DomainModel):
+    """User-provided source clip with optional crop and reel role."""
+
+    id: str
+    path: Path
+    order: int = Field(ge=0)
+    included: bool = True
+    role: ClipRole = "clip"
+    crop_start_s: float | None = Field(default=None, ge=0)
+    crop_end_s: float | None = Field(default=None, ge=0)
+
+
+class ReelEntry(DomainModel):
+    """One contiguous span on the virtual reel timeline."""
+
+    clip_id: str
+    path: Path
+    reel_start_s: float = Field(ge=0)
+    reel_end_s: float = Field(ge=0)
+    src_start_s: float = Field(ge=0)
+    src_end_s: float = Field(ge=0)
+    is_hook_loop: bool = False
+
+
+class ClipReel(DomainModel):
+    """Virtual concatenated source built from ordered clip crops."""
+
+    entries: list[ReelEntry] = Field(default_factory=list)
+    reel_duration_s: float = Field(ge=0)
+
+    def clip_boundaries_s(self) -> list[float]:
+        """Reel-time positions where the active clip changes."""
+        if len(self.entries) <= 1:
+            return []
+        return [entry.reel_start_s for entry in self.entries[1:]]
+
+
 class SpeedSegment(DomainModel):
     """Piecewise-constant speed mapping between output and source time."""
 
@@ -137,6 +175,7 @@ class SpeedSegment(DomainModel):
     src_start_s: float = Field(ge=0)
     src_end_s: float = Field(ge=0)
     speed_factor: float = Field(gt=0)
+    source_id: str | None = None
 
 
 class SpeedCurvePoint(DomainModel):
@@ -196,6 +235,8 @@ class TeaserSpec(DomainModel):
     src_end_s: float = Field(ge=0)
     out_duration_s: float = Field(gt=0)
     mask: TeaserMask
+    source_id: str | None = None
+    source_path: Path | None = None
 
 
 class EmphasisSpec(DomainModel):
@@ -262,6 +303,23 @@ def write_artifact(model: BaseModel, name: str, temp_dir: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def write_artifact_list(models: list[BaseModel], name: str, temp_dir: Path) -> Path:
+    """Serialize a list of domain models to ``temp_dir/<name>.json``."""
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    path = temp_dir / f"{name}.json"
+    path.write_text(
+        json.dumps([model.model_dump(mode="json") for model in models], indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def read_artifact_list(model_cls: type[T], path: Path) -> list[T]:
+    """Load a JSON list artifact into typed domain models."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return [model_cls.model_validate(item) for item in payload]
 
 
 def read_artifact(model_cls: type[T], path: Path) -> T:

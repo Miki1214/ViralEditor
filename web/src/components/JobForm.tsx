@@ -1,4 +1,5 @@
 import { DEFAULT_HOOK_FONT, HOOK_FONT_OPTIONS } from "../constants/fonts";
+import type { LocalClipDraft } from "./ClipReelPanel";
 
 type FormState = {
   hookText: string;
@@ -9,8 +10,8 @@ type FormState = {
   safePaddingPct: number;
   targetDurationS: number;
   useFullTrack: boolean;
-  video: File | null;
   audio: File | null;
+  localClips: LocalClipDraft[];
 };
 
 interface JobFormProps {
@@ -22,30 +23,110 @@ interface JobFormProps {
   disabledReason?: string | null;
 }
 
-function FileField({
-  label,
-  accept,
+function MultiVideoField({
+  clips,
+  onClips,
+}: {
+  clips: LocalClipDraft[];
+  onClips: (clips: LocalClipDraft[]) => void;
+}) {
+  const probeDuration = (clipId: string, file: File) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.src = URL.createObjectURL(file);
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      const duration = Number.isFinite(video.duration) ? video.duration : null;
+      onClips(
+        clips.map((item) =>
+          item.id === clipId
+            ? {
+                ...item,
+                durationS: duration,
+                cropEndS: duration,
+              }
+            : item,
+        ),
+      );
+    };
+  };
+
+  const addFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const startOrder = clips.length;
+    const added: LocalClipDraft[] = Array.from(files).map((file, offset) => {
+      const id = `clip_${startOrder + offset}`;
+      const draft: LocalClipDraft = {
+        id,
+        file,
+        order: startOrder + offset,
+        included: true,
+        role: startOrder + offset === 0 && clips.length === 0 ? "hook" : "clip",
+        cropStartS: null,
+        cropEndS: null,
+        durationS: null,
+        previewUrl: URL.createObjectURL(file),
+      };
+      return draft;
+    });
+    const merged = [...clips, ...added];
+    onClips(merged);
+    added.forEach((draft) => probeDuration(draft.id, draft.file));
+  };
+
+  return (
+    <label className="block sm:col-span-2">
+      <span className="field-label">Timelapse clips (multi-drop)</span>
+      <div
+        className="mt-1 flex min-h-[88px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border bg-monitor-bg/50 px-4 py-5 text-center transition hover:border-scope-dim"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          addFiles(e.dataTransfer.files);
+        }}
+      >
+        <input
+          type="file"
+          accept="video/*"
+          multiple
+          className="sr-only"
+          id="video-clips-input"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        <label htmlFor="video-clips-input" className="cursor-pointer text-xs text-monitor-muted">
+          Drop clips here or click to browse
+        </label>
+        {clips.length > 0 && (
+          <p className="mt-2 font-mono text-[11px] text-scope-trace">
+            {clips.length} clip{clips.length === 1 ? "" : "s"} queued
+          </p>
+        )}
+      </div>
+    </label>
+  );
+}
+
+function AudioField({
   file,
   onFile,
 }: {
-  label: string;
-  accept: string;
   file: File | null;
   onFile: (file: File | null) => void;
 }) {
   return (
     <label className="block">
-      <span className="field-label">{label}</span>
+      <span className="field-label">Music track</span>
       <input
         type="file"
-        accept={accept}
+        accept="audio/*"
         className="field-input cursor-pointer file:mr-3 file:rounded file:border-0 file:bg-monitor-border file:px-2 file:py-1 file:text-xs file:text-monitor-text"
         onChange={(e) => onFile(e.target.files?.[0] ?? null)}
       />
       {file && (
-        <p className="mt-1 truncate font-mono text-[11px] text-monitor-muted">
-          {file.name}
-        </p>
+        <p className="mt-1 truncate font-mono text-[11px] text-monitor-muted">{file.name}</p>
       )}
     </label>
   );
@@ -62,7 +143,7 @@ export function JobForm({
   disabledReason,
 }: JobFormProps) {
   const patch = (partial: Partial<FormState>) => onChange({ ...form, ...partial });
-  const missingAssets = !form.video || !form.audio;
+  const missingAssets = form.localClips.length === 0 || !form.audio;
 
   return (
     <form
@@ -77,18 +158,11 @@ export function JobForm({
           Assets
         </h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
-          <FileField
-            label="Timelapse video"
-            accept="video/*"
-            file={form.video}
-            onFile={(video) => patch({ video })}
+          <MultiVideoField
+            clips={form.localClips}
+            onClips={(localClips) => patch({ localClips })}
           />
-          <FileField
-            label="Music track"
-            accept="audio/*"
-            file={form.audio}
-            onFile={(audio) => patch({ audio })}
-          />
+          <AudioField file={form.audio} onFile={(audio) => patch({ audio })} />
         </div>
       </div>
 
@@ -218,10 +292,12 @@ export function JobForm({
       {(disabledReason || missingAssets) && !submitting && (
         <p className="text-center text-xs text-hook-gold" role="status">
           {missingAssets
-            ? "Add a timelapse video and music track to enable Render."
+            ? "Add at least one clip and a music track to enable Render."
             : disabledReason}
         </p>
       )}
     </form>
   );
 }
+
+export type { FormState };

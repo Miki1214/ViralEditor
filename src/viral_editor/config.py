@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from viral_editor.models import BudgetPolicy, DomainModel, TeaserMask
+from viral_editor.models import BudgetPolicy, ClipInput, ClipRole, DomainModel, TeaserMask
 
 _HEX_COLOR = re.compile(r"^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
 _RGBA_COLOR = re.compile(
@@ -147,9 +147,10 @@ class MusicSelectionConfig(DomainModel):
 class JobConfig(DomainModel):
     """Validated job request — single source of truth for a render run."""
 
-    video_path: Path
+    video_path: Path | None = None
     audio_path: Path
     output_path: Path
+    clips: list[ClipInput] = Field(default_factory=list)
     seed: int = 42
     hook: TitleConfig
     style: StyleConfig = Field(default_factory=StyleConfig)
@@ -157,6 +158,30 @@ class JobConfig(DomainModel):
     speed_ramp: SpeedRampConfig = Field(default_factory=SpeedRampConfig)
     teaser: TeaserConfig = Field(default_factory=TeaserConfig)
     music: MusicSelectionConfig = Field(default_factory=MusicSelectionConfig)
+
+    @model_validator(mode="after")
+    def video_or_clips_required(self) -> JobConfig:
+        included = [clip for clip in self.clips if clip.included]
+        if not included and self.video_path is None:
+            raise ValueError("Provide video_path or at least one included clip")
+        return self
+
+    def effective_clips(self) -> list[ClipInput]:
+        """Return configured clips, or wrap a lone video_path as a single clip."""
+        included = [clip for clip in self.clips if clip.included]
+        if included:
+            return sorted(included, key=lambda clip: clip.order)
+        if self.video_path is not None:
+            return [
+                ClipInput(
+                    id="clip_primary",
+                    path=self.video_path,
+                    order=0,
+                    included=True,
+                    role="clip",
+                )
+            ]
+        return []
 
     @classmethod
     def load(cls, path: Path) -> JobConfig:
@@ -176,13 +201,17 @@ class JobConfig(DomainModel):
         except ValidationError as exc:
             raise ConfigError(_format_validation_error(config_path, exc)) from exc
 
-        return cfg.model_copy(
-            update={
-                "video_path": resolve_path(cfg.video_path),
-                "audio_path": resolve_path(cfg.audio_path),
-                "output_path": resolve_path(cfg.output_path),
-            }
-        )
+        updates: dict = {
+            "audio_path": resolve_path(cfg.audio_path),
+            "output_path": resolve_path(cfg.output_path),
+            "clips": [
+                clip.model_copy(update={"path": resolve_path(clip.path)})
+                for clip in cfg.clips
+            ],
+        }
+        if cfg.video_path is not None:
+            updates["video_path"] = resolve_path(cfg.video_path)
+        return cfg.model_copy(update=updates)
 
 
 def _format_validation_error(path: Path, exc: ValidationError) -> str:

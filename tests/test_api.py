@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -113,3 +114,32 @@ def test_create_job_rejects_empty_video(client: TestClient, tmp_path, monkeypatc
         },
     )
     assert response.status_code == 400
+
+
+def test_create_job_accepts_multiple_videos(client: TestClient, tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", lambda *args, **kwargs: None)
+
+    response = client.post(
+        "/api/jobs",
+        data={
+            "hook_text": "Multi clip",
+            "clips": json.dumps(
+                [
+                    {"id": "clip_0", "order": 0, "role": "hook"},
+                    {"id": "clip_1", "order": 1, "role": "clip"},
+                ]
+            ),
+        },
+        files=[
+            ("video", ("a.mp4", io.BytesIO(b"video-a"), "video/mp4")),
+            ("video", ("b.mp4", io.BytesIO(b"video-b"), "video/mp4")),
+            ("audio", ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg")),
+        ],
+    )
+    assert response.status_code == 201
+    job_id = response.json()["id"]
+    detail = client.get(f"/api/jobs/{job_id}").json()
+    assert len(detail["config"]["clips"]) == 2
+    assert detail["config"]["clips"][0]["role"] == "hook"

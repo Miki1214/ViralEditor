@@ -19,14 +19,17 @@ from viral_editor.audio.loop_planner import suggest_music_blocks_advanced
 from viral_editor.audio.structure import analyze_structure
 from viral_editor.config import ConfigError, JobConfig
 from viral_editor.ingest.loader import IngestError, validate_job
-from viral_editor.models import MusicStructurePlan, write_artifact
+from viral_editor.models import MusicStructurePlan, write_artifact, write_artifact_list
 from viral_editor.pipeline_events import PipelineEvent, StageAction
 from viral_editor.utils.logging import get_logger, log_stage
+from viral_editor.video.clip_reel import build_reel, hook_clip_for_teaser
 from viral_editor.video.speed_ramp import (
     plan_speed_options,
     trim_beat_features_to_window,
     trim_envelope_to_window,
 )
+from viral_editor.video.spatial_fx import plan_spatial_fx
+from viral_editor.video.teaser import build_teaser_spec, teaser_body_output_duration
 
 logger = get_logger(__name__)
 
@@ -253,18 +256,41 @@ def run_pipeline(
             ramp_features = analysis.beat_features
             ramp_sections = sections
 
+        hook = hook_clip_for_teaser(loaded.clips) if loaded.clips else None
+        teaser_spec = build_teaser_spec(
+            ingest.video,
+            loaded.teaser,
+            hook_clip=hook,
+            hook_media=ingest.clip_media.get(hook.id) if hook is not None else None,
+        )
+        body_output_duration_s = teaser_body_output_duration(
+            output_duration_s,
+            teaser_spec,
+        )
+
+        source_clips = loaded.clips if loaded.clips else loaded.effective_clips()
+        clip_reel = build_reel(
+            [clip for clip in source_clips if clip.included],
+            ingest.clip_media,
+            body_output_duration_s=body_output_duration_s,
+            speed_config=loaded.speed_ramp,
+        )
+        reel_path = write_artifact(clip_reel, "clip_reel", work_temp)
+        artifacts.append(reel_path.name)
+
         _emit(on_event, "speed_ramp", "start")
         speed_options = plan_speed_options(
             ramp_timeline,
             ramp_envelope,
             ingest.video,
-            output_duration_s=output_duration_s,
+            output_duration_s=body_output_duration_s,
             base_config=loaded.speed_ramp,
             features=ramp_features,
             sections=ramp_sections,
             hop_length=AudioDspConfig().hop_length,
             sr=analysis.timeline.sample_rate,
             output_fps=float(loaded.render.fps),
+            reel=clip_reel,
         )
         options_path = write_artifact(speed_options, "speed_ramp_options", work_temp)
         artifacts.append(options_path.name)
@@ -304,11 +330,39 @@ def run_pipeline(
             message=(
                 f"options={len(speed_options.options)}, "
                 f"style={speed_options.selected_style}, "
-                f"segments={len(selected_plan.segments)}"
+                f"segments={len(selected_plan.segments)}, "
+                f"body={selected_plan.output_duration_s:.2f}s"
             ),
         )
 
-        for stage in PIPELINE_STAGES[4:]:
+        _emit(on_event, "teaser", "start")
+        teaser_path = write_artifact(teaser_spec, "teaser_spec", work_temp)
+        artifacts.append(teaser_path.name)
+        fx_events = plan_spatial_fx(
+            ramp_timeline,
+            ingest.video,
+            seed=loaded.seed,
+        )
+        fx_path = write_artifact_list(fx_events, "fx_events", work_temp)
+        artifacts.append(fx_path.name)
+        logger.info(
+            "Teaser: tail %.2f–%.2fs -> %.2fs (%s); %d FX events",
+            teaser_spec.src_start_s,
+            teaser_spec.src_end_s,
+            teaser_spec.out_duration_s,
+            teaser_spec.mask,
+            len(fx_events),
+        )
+        _emit(
+            on_event,
+            "teaser",
+            "complete",
+            message=f"teaser={teaser_spec.out_duration_s:.2f}s, fx={len(fx_events)}",
+        )
+
+        total_output_duration_s = teaser_spec.out_duration_s + selected_plan.output_duration_s
+
+        for stage in PIPELINE_STAGES[5:]:
             _emit(
                 on_event,
                 stage,
@@ -317,13 +371,13 @@ def run_pipeline(
             )
 
         logger.warning(
-            "Stages after speed_ramp are not yet implemented (Phases 4–6). "
+            "Stages after teaser are not yet implemented (Phases 5–6). "
             "Full wiring lands in Phase 7."
         )
 
         result = PipelineResult(
             config=loaded,
-            output_duration_s=output_duration_s,
+            output_duration_s=total_output_duration_s,
             artifacts=artifacts,
             output_path=loaded.output_path if loaded.output_path.exists() else None,
         )

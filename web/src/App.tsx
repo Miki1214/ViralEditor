@@ -1,35 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
-import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, WaveformPayload } from "./types";
+import type { ClipInfo, ClipReelResponse, JobSummary, MusicBlock, PipelineEvent, StageInfo, WaveformPayload } from "./types";
 import {
   createJob,
   fetchArtifact,
+  fetchClips,
   fetchHealth,
   fetchJobs,
   fetchStages,
   fetchWaveform,
   subscribeJobEvents,
+  updateClips,
   updateMusicSelection,
 } from "./api/client";
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
+import { ClipReelPanel, reelResponseToClipInfo } from "./components/ClipReelPanel";
+import type { FormState } from "./components/JobForm";
 import { SpeedRampPanel } from "./components/SpeedRampPanel";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { PhonePreview } from "./components/PhonePreview";
 import { StageTelemetry } from "./components/StageTelemetry";
-
-type FormState = {
-  hookText: string;
-  emphasisWords: string;
-  fillColor: string;
-  emphasisColor: string;
-  fontFamily: string;
-  safePaddingPct: number;
-  targetDurationS: number;
-  useFullTrack: boolean;
-  video: File | null;
-  audio: File | null;
-};
 
 const initialForm: FormState = {
   hookText: "I built this in 30 days",
@@ -40,8 +31,8 @@ const initialForm: FormState = {
   safePaddingPct: 10,
   targetDurationS: 30,
   useFullTrack: false,
-  video: null,
   audio: null,
+  localClips: [],
 };
 
 export default function App() {
@@ -67,17 +58,23 @@ export default function App() {
   const [musicStartS, setMusicStartS] = useState<number | null>(null);
   const [musicEndS, setMusicEndS] = useState<number | null>(null);
   const [speedRampVersion, setSpeedRampVersion] = useState(0);
+  const [remoteReel, setRemoteReel] = useState<ClipReelResponse | null>(null);
+  const [remoteClips, setRemoteClips] = useState<ClipInfo[]>([]);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [clipsSaving, setClipsSaving] = useState(false);
 
   const videoPreviewUrl = useMemo(() => {
-    if (!form.video) return null;
-    return URL.createObjectURL(form.video);
-  }, [form.video]);
+    const hook =
+      form.localClips.find((clip) => clip.included && clip.role === "hook") ??
+      form.localClips.find((clip) => clip.included);
+    return hook?.previewUrl ?? null;
+  }, [form.localClips]);
 
   useEffect(() => {
     return () => {
-      if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+      form.localClips.forEach((clip) => URL.revokeObjectURL(clip.previewUrl));
     };
-  }, [videoPreviewUrl]);
+  }, [form.localClips]);
 
   const loadHealth = () => {
     fetchHealth()
@@ -138,10 +135,21 @@ export default function App() {
       });
   };
 
+  const loadRemoteClips = (jobId: string) => {
+    fetchClips(jobId)
+      .then((payload) => {
+        setRemoteReel(payload);
+        setRemoteClips(reelResponseToClipInfo(payload));
+        setSelectedClipId(payload.clips[0]?.id ?? null);
+      })
+      .catch(() => undefined);
+  };
+
   const handleFormChange = (next: FormState) => {
     const assetsChanged =
-      next.video !== form.video ||
-      next.audio !== form.audio;
+      next.audio !== form.audio ||
+      next.localClips.length !== form.localClips.length ||
+      next.localClips.some((clip, index) => clip.file !== form.localClips[index]?.file);
     if (assetsChanged && activeJobId && !submitting) {
       setActiveJobId(null);
       setJobStatus(null);
@@ -153,8 +161,35 @@ export default function App() {
       setMusicEndS(null);
       setEvents([]);
       setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
+      setRemoteReel(null);
+      setRemoteClips([]);
     }
     setForm(next);
+  };
+
+  const persistRemoteClips = async (clips: ClipInfo[]) => {
+    if (!activeJobId) return;
+    setClipsSaving(true);
+    try {
+      const payload = await updateClips(
+        activeJobId,
+        clips.map((clip) => ({
+          id: clip.id,
+          order: clip.order,
+          included: clip.included,
+          role: clip.role,
+          crop_start_s: clip.cropStartS ?? clip.crop_start_s,
+          crop_end_s: clip.cropEndS ?? clip.crop_end_s,
+        })),
+      );
+      setRemoteReel(payload);
+      setRemoteClips(reelResponseToClipInfo(payload));
+      setSpeedRampVersion((value) => value + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update clip reel");
+    } finally {
+      setClipsSaving(false);
+    }
   };
 
   const handleTargetChange = async (targetDurationS: number, useFullTrack: boolean) => {
@@ -189,8 +224,8 @@ export default function App() {
   };
 
   const handleSubmit = async () => {
-    if (!form.video || !form.audio) {
-      setError("Add a video and audio file before rendering.");
+    if (form.localClips.length === 0 || !form.audio) {
+      setError("Add at least one clip and an audio file before rendering.");
       return;
     }
     setError(null);
@@ -203,10 +238,20 @@ export default function App() {
     setMusicStartS(null);
     setMusicEndS(null);
     setMediaInfo({ outputDuration: null, videoFps: null, videoSize: null });
+    setRemoteReel(null);
+    setRemoteClips([]);
 
     try {
       const { id } = await createJob({
-        video: form.video,
+        clips: form.localClips.map((clip) => ({
+          id: clip.id,
+          file: clip.file,
+          order: clip.order,
+          included: clip.included,
+          role: clip.role,
+          crop_start_s: clip.cropStartS,
+          crop_end_s: clip.cropEndS,
+        })),
         audio: form.audio,
         hookText: form.hookText,
         emphasisWords: form.emphasisWords,
@@ -244,6 +289,7 @@ export default function App() {
                 });
               })
               .catch(() => undefined);
+            loadRemoteClips(id);
           }
           if (event.stage === "audio" && event.action === "complete") {
             loadScope(id);
@@ -379,6 +425,48 @@ export default function App() {
                 outputDurationS={mediaInfo.outputDuration ?? waveform.duration_s}
               />
             </>
+          )}
+
+          {form.localClips.length > 0 && !activeJobId && (
+            <ClipReelPanel
+              mode="local"
+              clips={form.localClips}
+              onLocalChange={(localClips) => setForm((prev) => ({ ...prev, localClips }))}
+              selectedClipId={selectedClipId}
+              onSelectClip={setSelectedClipId}
+            />
+          )}
+
+          {activeJobId && remoteClips.length > 0 && (
+            <ClipReelPanel
+              mode="remote"
+              jobId={activeJobId}
+              clips={remoteClips}
+              reelDurationS={remoteReel?.reel_duration_s}
+              targetBodyDurationS={remoteReel?.target_body_duration_s}
+              selectedClipId={selectedClipId}
+              onSelectClip={setSelectedClipId}
+              saving={clipsSaving}
+              onPatchClip={(id, patch) => {
+                const next = remoteClips.map((clip) =>
+                  clip.id === id
+                    ? {
+                        ...clip,
+                        ...patch,
+                        crop_start_s: patch.cropStartS ?? patch.crop_start_s ?? clip.crop_start_s,
+                        crop_end_s: patch.cropEndS ?? patch.crop_end_s ?? clip.crop_end_s,
+                      }
+                    : clip,
+                );
+                setRemoteClips(next);
+                void persistRemoteClips(next);
+              }}
+              onReorder={(clips) => {
+                const next = clips as ClipInfo[];
+                setRemoteClips(next);
+                void persistRemoteClips(next);
+              }}
+            />
           )}
 
           <JobForm

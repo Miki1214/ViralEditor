@@ -14,17 +14,22 @@ from viral_editor.models import (
     SpeedRampPlan,
     write_artifact,
 )
-from viral_editor.ingest.loader import probe_media
-from viral_editor.video.speed_ramp import (
-    plan_speed_options,
-    trim_beat_features_to_window,
-    trim_envelope_to_window,
+from viral_editor.api.clips import (
+    clip_durations_map,
+    persist_clip_reel,
+    probe_clip_media,
+    speed_planning_context,
 )
 from viral_editor.api.music import (
     load_audio_timeline,
     load_beat_features,
     load_music_structure,
     load_onset_envelope,
+)
+from viral_editor.video.speed_ramp import (
+    plan_speed_options,
+    trim_beat_features_to_window,
+    trim_envelope_to_window,
 )
 
 
@@ -110,19 +115,26 @@ def compute_speed_options(
         ramp_features = features
         ramp_sections = sections
 
-    video = probe_media(config.video_path)
+    clip_media = probe_clip_media(config)
+    video, reel, body_output_duration_s, _teaser = speed_planning_context(
+        config,
+        clip_media,
+        output_duration_s,
+    )
+    persist_clip_reel(config, temp_dir, reel)
 
     return plan_speed_options(
         ramp_timeline,
         ramp_envelope,
         video,
-        output_duration_s=output_duration_s,
+        output_duration_s=body_output_duration_s,
         base_config=config.speed_ramp,
         features=ramp_features,
         sections=ramp_sections,
         sr=timeline.sample_rate,
         output_fps=float(config.render.fps),
         resolve_overrides=resolve_overrides,
+        reel=reel,
     )
 
 
@@ -175,14 +187,20 @@ def speed_proxy_cache_key(
     *,
     style: str,
     plan: SpeedRampPlan,
-    video_path: Path,
+    video_path: Path | None,
+    clip_paths: dict[str, Path] | None,
     music_start_s: float | None,
     music_end_s: float | None,
 ) -> str:
     payload = {
         "style": style,
         "plan": plan.model_dump(mode="json"),
-        "video": str(video_path.resolve()),
+        "video": str(video_path.resolve()) if video_path is not None else None,
+        "clips": (
+            {clip_id: str(path.resolve()) for clip_id, path in sorted(clip_paths.items())}
+            if clip_paths
+            else None
+        ),
         "music_start_s": music_start_s,
         "music_end_s": music_end_s,
     }

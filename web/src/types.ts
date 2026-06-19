@@ -119,6 +119,34 @@ export interface SpeedSegment {
   src_start_s: number;
   src_end_s: number;
   speed_factor: number;
+  source_id?: string | null;
+}
+
+export type ClipRole = "clip" | "hook" | "filler";
+
+export interface ClipInfo {
+  id: string;
+  filename: string;
+  order: number;
+  included: boolean;
+  role: ClipRole;
+  crop_start_s: number | null;
+  crop_end_s: number | null;
+  duration_s: number;
+  crop_duration_s: number;
+  width?: number | null;
+  height?: number | null;
+  fps?: number | null;
+  cropStartS?: number | null;
+  cropEndS?: number | null;
+  durationS?: number | null;
+}
+
+export interface ClipReelResponse {
+  clips: ClipInfo[];
+  reel_duration_s: number;
+  target_body_duration_s: number | null;
+  entries: Record<string, unknown>[];
 }
 
 export interface SpeedRampPlan {

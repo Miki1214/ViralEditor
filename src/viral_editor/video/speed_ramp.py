@@ -11,6 +11,7 @@ from viral_editor.config import SpeedRampConfig
 from viral_editor.models import (
     AudioTimeline,
     BudgetPolicy,
+    ClipReel,
     MediaInfo,
     MusicSection,
     SpeedCurvePoint,
@@ -20,6 +21,7 @@ from viral_editor.models import (
     SpeedSegment,
     Transient,
 )
+from viral_editor.video.clip_reel import localize_segments
 from viral_editor.video.speed_presets import PRESETS, SpeedPreset, resolve_params
 
 DEFAULT_HOP_LENGTH = 512
@@ -196,6 +198,31 @@ def _percussive_density(
     return min(1.0, count / max(1.0, duration / PERCUSSIVE_WINDOW_S))
 
 
+def _snap_reel_boundaries_to_output(
+    reel: ClipReel,
+    output_duration_s: float,
+    *,
+    preset: SpeedPreset,
+    features: BeatSyncFeatures | None,
+) -> list[float]:
+    """Map reel clip boundaries to output-time hints, snapped to the beat grid."""
+    if reel.reel_duration_s <= 1e-9 or output_duration_s <= 0:
+        return []
+    hints: list[float] = []
+    for boundary_reel in reel.clip_boundaries_s():
+        proportional = boundary_reel / reel.reel_duration_s * output_duration_s
+        snapped = proportional
+        if preset.snap_mode == "downbeat" and features is not None and features.downbeat_times_s.size:
+            db = features.downbeat_times_s
+            snapped = float(db[int(np.argmin(np.abs(db - proportional)))])
+        elif preset.snap_mode == "beat" and features is not None and features.beat_times_s.size:
+            bt = features.beat_times_s
+            snapped = float(bt[int(np.argmin(np.abs(bt - proportional)))])
+        if 1e-6 < snapped < output_duration_s - 1e-6:
+            hints.append(round(snapped, 6))
+    return hints
+
+
 def _beat_grid_boundaries(
     output_duration_s: float,
     *,
@@ -203,6 +230,7 @@ def _beat_grid_boundaries(
     features: BeatSyncFeatures | None,
     bpm: float,
     drop_windows: list[tuple[float, float]],
+    clip_boundary_hints: list[float] | None = None,
 ) -> list[float]:
     boundaries = {0.0, output_duration_s}
     if preset.snap_mode == "downbeat" and features is not None and features.downbeat_times_s.size:
@@ -227,6 +255,10 @@ def _beat_grid_boundaries(
     for drop_start, drop_end in drop_windows:
         boundaries.add(round(drop_start, 6))
         boundaries.add(round(drop_end, 6))
+    if clip_boundary_hints:
+        for hint in clip_boundary_hints:
+            if 1e-6 < hint < output_duration_s - 1e-6:
+                boundaries.add(hint)
     ordered = sorted(boundaries)
     min_len = preset.min_segment_ms / 1000.0
     merged = [ordered[0]]
@@ -542,6 +574,7 @@ def _plan_with_preset(
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
     output_fps: float = DEFAULT_OUTPUT_FPS,
+    reel: ClipReel | None = None,
 ) -> SpeedRampPlan:
     sections = sections or []
     if output_duration_s <= 0:
@@ -553,7 +586,7 @@ def _plan_with_preset(
             segments=[],
         )
 
-    src_duration_s = video.duration_s
+    src_duration_s = reel.reel_duration_s if reel is not None else video.duration_s
     src_fps = video.fps or DEFAULT_SRC_FPS
     requested_output_s = output_duration_s
     output_duration_s = cap_output_duration_to_source(
@@ -568,12 +601,23 @@ def _plan_with_preset(
         drop_window_ms=preset.drop_window_ms,
     )
     bass_windows = _bass_windows(timeline.transients, output_duration_s=output_duration_s)
+    clip_hints = (
+        _snap_reel_boundaries_to_output(
+            reel,
+            output_duration_s,
+            preset=preset,
+            features=features,
+        )
+        if reel is not None
+        else None
+    )
     boundaries = _beat_grid_boundaries(
         output_duration_s,
         preset=preset,
         features=features,
         bpm=timeline.global_bpm,
         drop_windows=drop_windows,
+        clip_boundary_hints=clip_hints,
     )
     raw_segments = _build_raw_segments(
         boundaries,
@@ -601,6 +645,8 @@ def _plan_with_preset(
         output_fps=output_fps,
         src_fps=src_fps,
     )
+    if reel is not None and reel.entries:
+        segments = localize_segments(segments, reel)
     avg_s, max_s, min_s, slow_count, curve = _summarize_plan(
         segments,
         preset=preset,
@@ -639,6 +685,7 @@ def plan_speed_segments(
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
     output_fps: float = DEFAULT_OUTPUT_FPS,
+    reel: ClipReel | None = None,
 ) -> SpeedRampPlan:
     """Build a gapless speed plan for the selected config style."""
     preset = resolve_params(config, config.style)
@@ -653,6 +700,7 @@ def plan_speed_segments(
         hop_length=hop_length,
         sr=sr,
         output_fps=output_fps,
+        reel=reel,
     )
 
 
@@ -670,6 +718,7 @@ def plan_speed_options(
     output_fps: float = DEFAULT_OUTPUT_FPS,
     styles: tuple[str, ...] | None = None,
     resolve_overrides: dict[str, float | int | str | None] | None = None,
+    reel: ClipReel | None = None,
 ) -> SpeedRampOptionSet:
     """Compute all hook-oriented speed profiles for UI comparison."""
     style_ids = styles or tuple(PRESETS.keys())
@@ -687,6 +736,7 @@ def plan_speed_options(
             hop_length=hop_length,
             sr=sr,
             output_fps=output_fps,
+            reel=reel,
         )
         options.append(
             SpeedRampOption(

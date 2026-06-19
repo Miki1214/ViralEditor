@@ -179,6 +179,9 @@ def write_job_config(config: JobConfig, workspace: Path) -> Path:
     config_path = workspace / "job.json"
     payload = json.loads(config.model_dump_json())
     for key in ("video_path", "audio_path", "output_path"):
-        payload[key] = str(getattr(config, key))
+        value = getattr(config, key)
+        payload[key] = str(value) if value is not None else None
+    for clip in payload.get("clips", []):
+        clip["path"] = str(clip["path"])
     config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return config_path

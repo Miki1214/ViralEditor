@@ -9,6 +9,7 @@ from viral_editor.api.store import JobStore, write_job_config
 from viral_editor.audio.beat_detector import AudioAnalysisError
 from viral_editor.config import ConfigError, JobConfig, MusicSelectionConfig, StyleConfig, TitleConfig
 from viral_editor.ingest.loader import IngestError
+from viral_editor.models import ClipInput
 from viral_editor.pipeline import run_pipeline
 from viral_editor.pipeline_events import PipelineEvent
 from viral_editor.utils.ffmpeg import ensure_ffmpeg
@@ -79,7 +80,6 @@ def build_job_config(
     workspace: Path,
     hook_text: str,
     emphasis_words: list[str],
-    video_filename: str,
     audio_filename: str,
     fill_color: str = "#FFFFFF",
     emphasis_color: str = "#FFD700",
@@ -91,11 +91,12 @@ def build_job_config(
     selected_block_id: str | None = None,
     music_start_s: float | None = None,
     music_end_s: float | None = None,
+    video_filename: str | None = None,
+    clips: list[ClipInput] | None = None,
 ) -> JobConfig:
     input_dir = workspace / "input"
     output_dir = workspace / "output"
-    return JobConfig(
-        video_path=(input_dir / video_filename).resolve(),
+    common = dict(
         audio_path=(input_dir / audio_filename).resolve(),
         output_path=(output_dir / "result.mp4").resolve(),
         seed=seed,
@@ -113,4 +114,12 @@ def build_job_config(
             start_s=music_start_s,
             end_s=music_end_s,
         ),
+    )
+    if clips:
+        return JobConfig(clips=clips, **common)
+    if video_filename is None:
+        raise ValueError("Provide video_filename or clips")
+    return JobConfig(
+        video_path=(input_dir / video_filename).resolve(),
+        **common,
     )

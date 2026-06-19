@@ -6,6 +6,7 @@ import asyncio
 import json
 import uuid
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -19,8 +20,19 @@ from viral_editor.api.music import (
     refresh_music_selection,
     suggest_blocks_from_artifacts,
 )
+from viral_editor.api.clips import (
+    clip_durations_map,
+    clip_info_payload,
+    load_clip_reel,
+    probe_clip_media,
+    refresh_clips_selection,
+    speed_planning_context,
+)
+from viral_editor.video.clip_reel import clip_paths_by_id
 from viral_editor.api.runner import build_job_config, start_job
 from viral_editor.api.schemas import (
+    ClipReelResponse,
+    ClipsPatchRequest,
     JobCreatedResponse,
     JobDetail,
     JobSummary,
@@ -39,7 +51,7 @@ from viral_editor.api.store import JobStore, job_workspace, save_upload, write_j
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
 from viral_editor.config import ConfigError
-from viral_editor.models import SpeedRampOptionSet, WaveformPayload
+from viral_editor.models import ClipInput, SpeedRampOptionSet, WaveformPayload
 from viral_editor.pipeline import PIPELINE_STAGES
 from viral_editor.utils.ffmpeg import FFmpegError
 from viral_editor.video.proxy_render import render_speed_proxy
@@ -89,7 +101,7 @@ def get_job(job_id: str, request: Request) -> JobDetail:
 @router.post("", response_model=JobCreatedResponse, status_code=201)
 async def create_job(
     request: Request,
-    video: UploadFile = File(...),
+    video: Annotated[list[UploadFile], File()],
     audio: UploadFile = File(...),
     hook_text: str = Form(...),
     emphasis_words: str = Form(""),
@@ -103,46 +115,96 @@ async def create_job(
     selected_block_id: str | None = Form(None),
     music_start_s: float | None = Form(None),
     music_end_s: float | None = Form(None),
+    clips: str | None = Form(None),
     verbose: bool = Form(False),
 ) -> JobCreatedResponse:
     store = _store(request)
 
-    video_bytes = await video.read()
+    if not video:
+        raise HTTPException(status_code=400, detail="At least one video file is required")
+
     audio_bytes = await audio.read()
-    if not video_bytes:
-        raise HTTPException(status_code=400, detail="Video file is empty")
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Audio file is empty")
 
-    video_name = Path(video.filename or "video.mp4").name
+    meta_by_id: dict[str, dict] = {}
+    if clips:
+        try:
+            parsed = json.loads(clips)
+            if isinstance(parsed, list):
+                meta_by_id = {str(item["id"]): item for item in parsed if "id" in item}
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid clips JSON: {exc}") from exc
+
     audio_name = Path(audio.filename or "audio.mp3").name
 
     job_id = uuid.uuid4().hex
     workspace = job_workspace(job_id)
     workspace.mkdir(parents=True, exist_ok=True)
+    input_dir = workspace / "input"
 
-    save_upload(video_bytes, workspace / "input" / video_name)
-    save_upload(audio_bytes, workspace / "input" / audio_name)
+    clip_inputs: list[ClipInput] = []
+    for index, upload in enumerate(video):
+        video_bytes = await upload.read()
+        if not video_bytes:
+            raise HTTPException(status_code=400, detail=f"Video file {index} is empty")
+        default_id = f"clip_{index}"
+        meta = meta_by_id.get(default_id, meta_by_id.get(str(index), {}))
+        clip_id = str(meta.get("id", default_id))
+        video_name = Path(upload.filename or f"{clip_id}.mp4").name
+        save_upload(video_bytes, input_dir / video_name)
+        clip_inputs.append(
+            ClipInput(
+                id=clip_id,
+                path=(input_dir / video_name).resolve(),
+                order=int(meta.get("order", index)),
+                included=bool(meta.get("included", True)),
+                role=meta.get("role", "clip"),
+                crop_start_s=meta.get("crop_start_s"),
+                crop_end_s=meta.get("crop_end_s"),
+            )
+        )
+
+    save_upload(audio_bytes, input_dir / audio_name)
 
     try:
-        config = build_job_config(
-            workspace=workspace,
-            hook_text=hook_text,
-            emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
-            video_filename=video_name,
-            audio_filename=audio_name,
-            fill_color=fill_color,
-            emphasis_color=emphasis_color,
-            font_family=font_family,
-            safe_padding_pct=safe_padding_pct,
-            seed=seed,
-            target_duration_s=target_duration_s,
-            use_full_track=use_full_track,
-            selected_block_id=selected_block_id,
-            music_start_s=music_start_s,
-            music_end_s=music_end_s,
-        )
-    except ConfigError as exc:
+        if len(clip_inputs) == 1 and not clips:
+            config = build_job_config(
+                workspace=workspace,
+                hook_text=hook_text,
+                emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
+                video_filename=clip_inputs[0].path.name,
+                audio_filename=audio_name,
+                fill_color=fill_color,
+                emphasis_color=emphasis_color,
+                font_family=font_family,
+                safe_padding_pct=safe_padding_pct,
+                seed=seed,
+                target_duration_s=target_duration_s,
+                use_full_track=use_full_track,
+                selected_block_id=selected_block_id,
+                music_start_s=music_start_s,
+                music_end_s=music_end_s,
+            )
+        else:
+            config = build_job_config(
+                workspace=workspace,
+                hook_text=hook_text,
+                emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
+                audio_filename=audio_name,
+                clips=clip_inputs,
+                fill_color=fill_color,
+                emphasis_color=emphasis_color,
+                font_family=font_family,
+                safe_padding_pct=safe_padding_pct,
+                seed=seed,
+                target_duration_s=target_duration_s,
+                use_full_track=use_full_track,
+                selected_block_id=selected_block_id,
+                music_start_s=music_start_s,
+                music_end_s=music_end_s,
+            )
+    except (ConfigError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job = store.create(config, workspace=workspace, job_id=job_id)
@@ -352,6 +414,115 @@ def update_speed_selection(
     return option_set
 
 
+@router.get("/{job_id}/clips", response_model=ClipReelResponse)
+def get_clips(job_id: str, request: Request) -> ClipReelResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    clip_media = probe_clip_media(job.config)
+    reel = load_clip_reel(temp_dir)
+
+    music_window_s: float | None = None
+    target_body_s: float | None = None
+    if job.config.music.start_s is not None and job.config.music.end_s is not None:
+        music_window_s = job.config.music.end_s - job.config.music.start_s
+    elif temp_dir.joinpath("audio_timeline.json").is_file():
+        try:
+            timeline = load_audio_timeline(temp_dir)
+            music_window_s = timeline.audio_duration_seconds
+        except FileNotFoundError:
+            music_window_s = None
+
+    if music_window_s is not None:
+        _, _, target_body_s, _ = speed_planning_context(
+            job.config,
+            clip_media,
+            music_window_s,
+        )
+
+    return ClipReelResponse(
+        clips=clip_info_payload(job.config, clip_media, reel),
+        reel_duration_s=reel.reel_duration_s if reel is not None else 0.0,
+        target_body_duration_s=target_body_s,
+        entries=[entry.model_dump(mode="json") for entry in reel.entries] if reel else [],
+    )
+
+
+@router.get("/{job_id}/clips/{clip_id}/source")
+def get_clip_source(job_id: str, clip_id: str, request: Request) -> FileResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    clip = next((item for item in job.config.clips if item.id == clip_id), None)
+    if clip is None:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    if not clip.path.is_file():
+        raise HTTPException(status_code=404, detail="Clip file missing")
+    return FileResponse(clip.path, media_type="video/mp4", filename=clip.path.name)
+
+
+@router.patch("/{job_id}/clips", response_model=ClipReelResponse)
+def update_clips(
+    job_id: str,
+    payload: ClipsPatchRequest,
+    request: Request,
+) -> ClipReelResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.config.clips:
+        raise HTTPException(status_code=400, detail="Job has no multi-clip reel to update")
+
+    temp_dir = job.workspace / "temp"
+    updates = []
+    for item in payload.clips:
+        existing = next((clip for clip in job.config.clips if clip.id == item.id), None)
+        if existing is None:
+            raise HTTPException(status_code=400, detail=f"Unknown clip id: {item.id}")
+        updates.append(
+            ClipInput(
+                id=item.id,
+                path=existing.path,
+                order=item.order,
+                included=item.included,
+                role=item.role,
+                crop_start_s=item.crop_start_s,
+                crop_end_s=item.crop_end_s,
+            )
+        )
+    try:
+        updated_config, reel, _option_set = refresh_clips_selection(
+            job.config,
+            temp_dir,
+            updates,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    clip_media = probe_clip_media(updated_config)
+    target_body_s: float | None = None
+    if updated_config.music.start_s is not None and updated_config.music.end_s is not None:
+        music_window_s = updated_config.music.end_s - updated_config.music.start_s
+        _, _, target_body_s, _ = speed_planning_context(
+            updated_config,
+            clip_media,
+            music_window_s,
+        )
+    return ClipReelResponse(
+        clips=clip_info_payload(updated_config, clip_media, reel),
+        reel_duration_s=reel.reel_duration_s,
+        target_body_duration_s=target_body_s,
+        entries=[entry.model_dump(mode="json") for entry in reel.entries],
+    )
+
+
 @router.get("/{job_id}/speed-ramp/preview")
 def get_speed_ramp_preview(
     job_id: str,
@@ -374,10 +545,20 @@ def get_speed_ramp_preview(
         raise HTTPException(status_code=404, detail=f"Speed style {selected_style!r} not found")
 
     preview_dir = temp_dir / "previews"
+    clip_media = probe_clip_media(job.config)
+    clip_paths = clip_paths_by_id(job.config.effective_clips())
+    source_ids = {segment.source_id for segment in option.plan.segments}
+    if source_ids - {None}:
+        clip_paths = {
+            clip_id: path
+            for clip_id, path in clip_paths.items()
+            if clip_id in source_ids
+        }
     cache_key = speed_proxy_cache_key(
         style=selected_style,
         plan=option.plan,
         video_path=job.config.video_path,
+        clip_paths=clip_paths if job.config.clips else None,
         music_start_s=job.config.music.start_s,
         music_end_s=job.config.music.end_s,
     )
@@ -388,9 +569,11 @@ def get_speed_ramp_preview(
     if not preview_path.is_file():
         try:
             render_speed_proxy(
-                job.config.video_path,
                 job.config.audio_path,
                 option.plan,
+                video_path=job.config.video_path,
+                clip_paths=clip_paths if job.config.clips else None,
+                clip_durations=clip_durations_map(clip_media) if job.config.clips else None,
                 music_start_s=job.config.music.start_s,
                 music_end_s=job.config.music.end_s,
                 out_path=preview_path,

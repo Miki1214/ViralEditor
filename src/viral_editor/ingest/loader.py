@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import Field
+
 from viral_editor.config import JobConfig
 from viral_editor.models import DomainModel, MediaInfo
 from viral_editor.utils.ffmpeg import FFmpegError, run_ffprobe_json
@@ -24,6 +26,7 @@ class IngestResult(DomainModel):
     video: MediaInfo
     audio: MediaInfo
     output_duration_s: float
+    clip_media: dict[str, MediaInfo] = Field(default_factory=dict)
 
 
 def parse_frame_rate(raw: str) -> tuple[float, str]:
@@ -181,41 +184,71 @@ def _ensure_output_writable(output_path: Path) -> None:
 
 def validate_job(cfg: JobConfig) -> IngestResult:
     """Validate input files, probe media, and derive the output timeline."""
-    for label, media_path in (
-        ("video_path", cfg.video_path),
-        ("audio_path", cfg.audio_path),
-    ):
-        if not media_path.is_file():
-            raise IngestError(f"{label} does not exist: {media_path}")
-        if media_path.stat().st_size == 0:
-            raise IngestError(f"{label} is empty: {media_path}")
+    if not cfg.audio_path.is_file():
+        raise IngestError(f"audio_path does not exist: {cfg.audio_path}")
+    if cfg.audio_path.stat().st_size == 0:
+        raise IngestError(f"audio_path is empty: {cfg.audio_path}")
+
+    if cfg.video_path is not None:
+        if not cfg.video_path.is_file():
+            raise IngestError(f"video_path does not exist: {cfg.video_path}")
+        if cfg.video_path.stat().st_size == 0:
+            raise IngestError(f"video_path is empty: {cfg.video_path}")
 
     _ensure_output_writable(cfg.output_path)
 
-    video = probe_media(cfg.video_path)
-    if not video.has_video:
-        raise IngestError(f"No video stream found in {cfg.video_path}")
+    clip_media: dict[str, MediaInfo] = {}
+    for clip in cfg.effective_clips():
+        if not clip.path.is_file():
+            raise IngestError(f"clip {clip.id} does not exist: {clip.path}")
+        if clip.path.stat().st_size == 0:
+            raise IngestError(f"clip {clip.id} is empty: {clip.path}")
+        info = probe_media(clip.path)
+        if not info.has_video:
+            raise IngestError(f"No video stream found in clip {clip.id}: {clip.path}")
+        start = clip.crop_start_s if clip.crop_start_s is not None else 0.0
+        end = clip.crop_end_s if clip.crop_end_s is not None else info.duration_s
+        if end <= start:
+            raise IngestError(
+                f"clip {clip.id} crop_end_s must be greater than crop_start_s"
+            )
+        if end > info.duration_s + 1e-6 or start < 0:
+            raise IngestError(f"clip {clip.id} crop range exceeds source duration")
+        clip_media[clip.id] = info
 
+    effective = cfg.effective_clips()
+    if not effective:
+        raise IngestError("No included video clips found")
+
+    video = clip_media[effective[0].id]
     audio = probe_media(cfg.audio_path)
     if not audio.has_audio:
         raise IngestError(f"No audio stream found in {cfg.audio_path}")
 
     output_duration_s = audio.duration_s
+    reel_duration = sum(
+        (clip_media[c.id].duration_s if c.crop_end_s is None else c.crop_end_s)
+        - (c.crop_start_s or 0.0)
+        for c in effective
+        if c.role == "clip"
+    )
 
-    if video.duration_s < output_duration_s * _VIDEO_DURATION_WARN_RATIO:
+    if reel_duration < output_duration_s * _VIDEO_DURATION_WARN_RATIO:
         logger.warning(
-            "Source video (%.2fs) is much shorter than the music track (%.2fs); "
-            "footage will be looped during speed-ramp planning (Phase 3).",
-            video.duration_s,
+            "Source reel (%.2fs from %d clips) is much shorter than the music track (%.2fs); "
+            "filler/hook clips will extend the reel during planning.",
+            reel_duration,
+            len(effective),
             output_duration_s,
         )
 
     logger.info(
-        "Ingest complete — output duration %.2fs (from audio track)",
+        "Ingest complete — output duration %.2fs (from audio track), %d clips",
         output_duration_s,
+        len(effective),
     )
     logger.debug(
-        "Video: %dx%d @ %.3ffps, %.2fs | Audio: %dHz, %.2fs",
+        "Primary video: %dx%d @ %.3ffps, %.2fs | Audio: %dHz, %.2fs",
         video.width or 0,
         video.height or 0,
         video.fps or 0.0,
@@ -228,4 +261,5 @@ def validate_job(cfg: JobConfig) -> IngestResult:
         video=video,
         audio=audio,
         output_duration_s=output_duration_s,
+        clip_media=clip_media,
     )

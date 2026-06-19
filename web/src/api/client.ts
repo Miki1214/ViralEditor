@@ -1,4 +1,7 @@
 import type {
+  ClipInfo,
+  ClipReelResponse,
+  ClipRole,
   HealthResponse,
   JobSummary,
   MediaInfoArtifact,
@@ -39,7 +42,15 @@ export async function fetchJobs(): Promise<JobSummary[]> {
 }
 
 export interface CreateJobInput {
-  video: File;
+  clips: Array<{
+    id: string;
+    file: File;
+    order: number;
+    included: boolean;
+    role: ClipRole;
+    crop_start_s: number | null;
+    crop_end_s: number | null;
+  }>;
   audio: File;
   hookText: string;
   emphasisWords: string;
@@ -56,7 +67,22 @@ export interface CreateJobInput {
 
 export async function createJob(input: CreateJobInput): Promise<{ id: string }> {
   const form = new FormData();
-  form.append("video", input.video);
+  for (const clip of input.clips) {
+    form.append("video", clip.file);
+  }
+  form.append(
+    "clips",
+    JSON.stringify(
+      input.clips.map((clip) => ({
+        id: clip.id,
+        order: clip.order,
+        included: clip.included,
+        role: clip.role,
+        crop_start_s: clip.crop_start_s,
+        crop_end_s: clip.crop_end_s,
+      })),
+    ),
+  );
   form.append("audio", input.audio);
   form.append("hook_text", input.hookText);
   form.append("emphasis_words", input.emphasisWords);
@@ -189,4 +215,34 @@ export function speedProxyPreviewUrl(jobId: string, style: string, force = false
   const params = new URLSearchParams({ style });
   if (force) params.set("force", "1");
   return `/api/jobs/${jobId}/speed-ramp/preview?${params.toString()}`;
+}
+
+export function clipSourceUrl(jobId: string, clipId: string): string {
+  return `/api/jobs/${jobId}/clips/${clipId}/source`;
+}
+
+export async function fetchClips(jobId: string): Promise<ClipReelResponse> {
+  const res = await fetch(`/api/jobs/${jobId}/clips`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateClips(
+  jobId: string,
+  clips: Array<{
+    id: string;
+    order: number;
+    included: boolean;
+    role: ClipRole;
+    crop_start_s: number | null;
+    crop_end_s: number | null;
+  }>,
+): Promise<ClipReelResponse> {
+  const res = await fetch(`/api/jobs/${jobId}/clips`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clips }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }

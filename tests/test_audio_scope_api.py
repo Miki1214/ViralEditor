@@ -135,7 +135,7 @@ def _fake_video_probe(path):
 
     return MediaInfo(
         path=Path(path),
-        duration_s=120.0,
+        duration_s=30.0,
         has_video=True,
         fps=30.0,
         width=1920,
@@ -146,7 +146,10 @@ def _fake_video_probe(path):
 def test_speed_ramp_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
-    monkeypatch.setattr("viral_editor.api.speed.probe_media", _fake_video_probe)
+    monkeypatch.setattr(
+        "viral_editor.api.speed.probe_clip_media",
+        lambda config: {"clip_primary": _fake_video_probe("clip.mp4")},
+    )
 
     create = client.post(
         "/api/jobs",
@@ -171,7 +174,10 @@ def test_speed_ramp_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch
 def test_speed_selection_patch(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
-    monkeypatch.setattr("viral_editor.api.speed.probe_media", _fake_video_probe)
+    monkeypatch.setattr(
+        "viral_editor.api.speed.probe_clip_media",
+        lambda config: {"clip_primary": _fake_video_probe("clip.mp4")},
+    )
 
     create = client.post(
         "/api/jobs",
