@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, StoryboardPayload, WaveformPayload } from "./types";
 import {
   assignSlotClip,
@@ -18,6 +18,7 @@ import {
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { blockPlayheadToCompositeVideoTime } from "./utils/compositePlayhead";
 import { HookOverlayPanel } from "./components/HookOverlayPanel";
 import type { FormState } from "./components/JobForm";
 import { JobForm } from "./components/JobForm";
@@ -59,6 +60,36 @@ export default function App() {
   const [storyboardSaving, setStoryboardSaving] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewReady, setPreviewReady] = useState(false);
+  const [blockPlayheadS, setBlockPlayheadS] = useState(0);
+  const [compositePreviewPlaying, setCompositePreviewPlaying] = useState(false);
+  const togglePreviewRef = useRef<(() => void) | null>(null);
+  const seekPreviewRef = useRef<((videoTimeS: number) => void) | null>(null);
+  const playPreviewRef = useRef<(() => void) | null>(null);
+
+  const registerPreviewToggle = useCallback((handler: (() => void) | null) => {
+    togglePreviewRef.current = handler;
+  }, []);
+  const registerPreviewSeek = useCallback((handler: ((videoTimeS: number) => void) | null) => {
+    seekPreviewRef.current = handler;
+  }, []);
+  const registerPreviewPlay = useCallback((handler: (() => void) | null) => {
+    playPreviewRef.current = handler;
+  }, []);
+  const toggleCompositePreview = useCallback(() => {
+    togglePreviewRef.current?.();
+  }, []);
+  const seekCompositeFromBlock = useCallback(
+    (blockPlayheadS: number) => {
+      if (!storyboard) return;
+      seekPreviewRef.current?.(
+        blockPlayheadToCompositeVideoTime(blockPlayheadS, storyboard),
+      );
+    },
+    [storyboard],
+  );
+  const playCompositePreview = useCallback(() => {
+    playPreviewRef.current?.();
+  }, []);
   const [regeneratePrompt, setRegeneratePrompt] = useState<{
     targetDurationS: number;
     useFullTrack: boolean;
@@ -389,6 +420,11 @@ export default function App() {
         })()
       : null;
 
+  useEffect(() => {
+    setBlockPlayheadS(0);
+    setCompositePreviewPlaying(false);
+  }, [activeJobId, storyboard?.music_start_s, storyboard?.total_duration_s, compositeUrl]);
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-monitor-border bg-monitor-surface/80 backdrop-blur">
@@ -483,6 +519,13 @@ export default function App() {
                 onClearClip={handleClearClip}
                 onPatchStoryboard={handlePatchStoryboard}
                 saving={storyboardSaving}
+                blockPlayheadS={blockPlayheadS}
+                onBlockPlayheadChange={setBlockPlayheadS}
+                compositePreviewActive={previewReady && compositeUrl != null}
+                compositePreviewPlaying={compositePreviewPlaying}
+                onToggleCompositePreview={toggleCompositePreview}
+                onSeekCompositePreview={seekCompositeFromBlock}
+                onPlayCompositePreview={playCompositePreview}
               />
               <HookOverlayPanel form={form} onPatch={patchForm} />
             </>
@@ -533,6 +576,12 @@ export default function App() {
               safePaddingPct={form.safePaddingPct}
               videoPreviewUrl={compositeUrl}
               compositeMode={previewReady}
+              storyboard={storyboard}
+              onBlockPlayheadChange={setBlockPlayheadS}
+              onPreviewPlayingChange={setCompositePreviewPlaying}
+              registerPreviewToggle={registerPreviewToggle}
+              registerPreviewSeek={registerPreviewSeek}
+              registerPreviewPlay={registerPreviewPlay}
             />
             {musicStartS != null && musicEndS != null && (
               <dl className="mt-6 grid w-full grid-cols-2 gap-3 font-mono text-xs">

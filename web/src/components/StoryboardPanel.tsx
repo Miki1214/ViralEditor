@@ -33,6 +33,13 @@ interface StoryboardPanelProps {
     loop_to_hook?: boolean;
   }) => Promise<void>;
   saving?: boolean;
+  blockPlayheadS: number;
+  onBlockPlayheadChange: (seconds: number) => void;
+  compositePreviewActive?: boolean;
+  compositePreviewPlaying?: boolean;
+  onToggleCompositePreview?: () => void;
+  onSeekCompositePreview?: (blockPlayheadS: number) => void;
+  onPlayCompositePreview?: () => void;
 }
 
 function isVideoFile(file: File): boolean {
@@ -64,6 +71,13 @@ export function StoryboardPanel({
   onClearClip,
   onPatchStoryboard,
   saving = false,
+  blockPlayheadS,
+  onBlockPlayheadChange,
+  compositePreviewActive = false,
+  compositePreviewPlaying = false,
+  onToggleCompositePreview,
+  onSeekCompositePreview,
+  onPlayCompositePreview,
 }: StoryboardPanelProps) {
   const ordered = [...storyboard.slots].sort((a, b) => a.order - b.order);
   const active =
@@ -74,7 +88,6 @@ export function StoryboardPanel({
   const [durationS, setDurationS] = useState<number | null>(null);
   const [cropStartS, setCropStartS] = useState(0);
   const [cropEndS, setCropEndS] = useState(0);
-  const [blockPlayheadS, setBlockPlayheadS] = useState(0);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -199,8 +212,13 @@ export function StoryboardPanel({
             storyboard={storyboard}
             selectedSlotId={selectedSlotId}
             playheadS={blockPlayheadS}
-            onPlayheadChange={setBlockPlayheadS}
+            onPlayheadChange={onBlockPlayheadChange}
             onSelectSlot={onSelectSlot}
+            compositePreviewActive={compositePreviewActive}
+            compositePreviewPlaying={compositePreviewPlaying}
+            onToggleCompositePreview={onToggleCompositePreview}
+            onSeekCompositePreview={onSeekCompositePreview}
+            onPlayCompositePreview={onPlayCompositePreview}
           />
         </div>
       )}

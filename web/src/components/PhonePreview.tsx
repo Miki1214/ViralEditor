@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { StoryboardPayload } from "../types";
+import { compositeVideoTimeToBlockPlayhead } from "../utils/compositePlayhead";
 
 interface PhonePreviewProps {
   hookText: string;
@@ -10,6 +12,12 @@ interface PhonePreviewProps {
   videoPreviewUrl: string | null;
   /** When true, hook title overlay is baked into the composite video */
   compositeMode?: boolean;
+  storyboard?: StoryboardPayload | null;
+  onBlockPlayheadChange?: (seconds: number) => void;
+  onPreviewPlayingChange?: (playing: boolean) => void;
+  registerPreviewToggle?: (handler: (() => void) | null) => void;
+  registerPreviewSeek?: (handler: ((videoTimeS: number) => void) | null) => void;
+  registerPreviewPlay?: (handler: (() => void) | null) => void;
 }
 
 function renderHookLine(
@@ -46,12 +54,83 @@ export function PhonePreview({
   safePaddingPct,
   videoPreviewUrl,
   compositeMode = false,
+  storyboard = null,
+  onBlockPlayheadChange,
+  onPreviewPlayingChange,
+  registerPreviewToggle,
+  registerPreviewSeek,
+  registerPreviewPlay,
 }: PhonePreviewProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const storyboardRef = useRef(storyboard);
+  const onPlayheadRef = useRef(onBlockPlayheadChange);
   const [loadFailed, setLoadFailed] = useState(false);
+
+  storyboardRef.current = storyboard;
+  onPlayheadRef.current = onBlockPlayheadChange;
 
   useEffect(() => {
     setLoadFailed(false);
   }, [videoPreviewUrl]);
+
+  useEffect(() => {
+    registerPreviewToggle?.(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      if (video.paused) {
+        void video.play().catch(() => undefined);
+      } else {
+        video.pause();
+      }
+    });
+    return () => registerPreviewToggle?.(null);
+  }, [registerPreviewToggle, videoPreviewUrl]);
+
+  useEffect(() => {
+    registerPreviewSeek?.((videoTimeS: number) => {
+      const video = videoRef.current;
+      if (!video) return;
+      video.currentTime = videoTimeS;
+    });
+    return () => registerPreviewSeek?.(null);
+  }, [registerPreviewSeek, videoPreviewUrl]);
+
+  useEffect(() => {
+    registerPreviewPlay?.(() => {
+      const video = videoRef.current;
+      if (!video) return;
+      void video.play().catch(() => undefined);
+    });
+    return () => registerPreviewPlay?.(null);
+  }, [registerPreviewPlay, videoPreviewUrl]);
+
+  useEffect(() => {
+    if (!compositeMode || !videoPreviewUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const emitPlayhead = () => {
+      const sb = storyboardRef.current;
+      const onChange = onPlayheadRef.current;
+      if (!sb || !onChange) return;
+      onChange(compositeVideoTimeToBlockPlayhead(video.currentTime, sb));
+    };
+
+    let frameId = 0;
+    const tick = () => {
+      if (!video.paused) {
+        emitPlayhead();
+      }
+      frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+
+    video.addEventListener("seeked", emitPlayhead);
+    return () => {
+      cancelAnimationFrame(frameId);
+      video.removeEventListener("seeked", emitPlayhead);
+    };
+  }, [compositeMode, videoPreviewUrl]);
 
   return (
     <div className="relative w-[min(100%,280px)]">
@@ -62,6 +141,7 @@ export function PhonePreview({
         {videoPreviewUrl ? (
           <>
             <video
+              ref={videoRef}
               key={videoPreviewUrl}
               src={videoPreviewUrl}
               className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
@@ -69,6 +149,8 @@ export function PhonePreview({
               autoPlay
               loop
               controls={compositeMode}
+              onPlay={() => onPreviewPlayingChange?.(true)}
+              onPause={() => onPreviewPlayingChange?.(false)}
               onError={() => setLoadFailed(true)}
             />
             {loadFailed && (
