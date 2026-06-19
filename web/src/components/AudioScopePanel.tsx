@@ -97,7 +97,7 @@ export function AudioScopePanel({
 
     const audio = audioRef.current;
     audio.pause();
-    audio.loop = mode === "loop";
+    audio.loop = true;
     audio.src =
       mode === "loop"
         ? loopSeamPreviewUrl(jobId, block.start_s, block.end_s)
