@@ -35,6 +35,16 @@ def _clip(
     )
 
 
+def test_normalize_crop_range_clamps_to_source() -> None:
+    from viral_editor.video.clip_reel import normalize_crop_range
+
+    clip = _clip("a", order=0, crop_start=0.0, crop_end=50.0)
+    media = _media(30.0, "a")
+    start, end = normalize_crop_range(clip, media)
+    assert start == pytest.approx(0.0)
+    assert end == pytest.approx(30.0)
+
+
 def test_build_reel_orders_clip_roles() -> None:
     clips = [
         _clip("b", order=1),

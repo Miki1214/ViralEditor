@@ -10,6 +10,7 @@ from viral_editor.config import JobConfig
 from viral_editor.models import DomainModel, MediaInfo
 from viral_editor.utils.ffmpeg import FFmpegError, run_ffprobe_json
 from viral_editor.utils.logging import get_logger
+from viral_editor.video.clip_reel import normalize_crop_range
 
 logger = get_logger(__name__)
 
@@ -212,8 +213,22 @@ def validate_job(cfg: JobConfig) -> IngestResult:
             raise IngestError(
                 f"clip {clip.id} crop_end_s must be greater than crop_start_s"
             )
-        if end > info.duration_s + 1e-6 or start < 0:
-            raise IngestError(f"clip {clip.id} crop range exceeds source duration")
+        norm_start, norm_end = normalize_crop_range(clip, info)
+        if (
+            abs(norm_start - start) > 1e-6
+            or abs(norm_end - end) > 1e-6
+            or start < 0
+            or end > info.duration_s + 1e-6
+        ):
+            logger.warning(
+                "clip %s crop [%.3f, %.3f] clamped to source duration %.3fs → [%.3f, %.3f]",
+                clip.id,
+                start,
+                end,
+                info.duration_s,
+                norm_start,
+                norm_end,
+            )
         clip_media[clip.id] = info
 
     effective = cfg.effective_clips()

@@ -60,7 +60,19 @@ export function useProbeClipDurations(
               ? {
                   ...item,
                   durationS: duration,
-                  cropEndS: duration,
+                  cropStartS:
+                    item.cropStartS != null && duration != null
+                      ? Math.max(0, Math.min(item.cropStartS, duration))
+                      : item.cropStartS,
+                  cropEndS:
+                    duration != null
+                      ? item.cropEndS != null
+                        ? Math.max(
+                            (item.cropStartS ?? 0) + 0.25,
+                            Math.min(item.cropEndS, duration),
+                          )
+                        : duration
+                      : item.cropEndS,
                 }
               : item,
           ),

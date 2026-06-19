@@ -134,6 +134,66 @@ def test_validate_job_returns_ingest_result(
     assert result.audio.duration_s == pytest.approx(32.41)
 
 
+def test_validate_job_clamps_oversized_crop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from viral_editor.models import ClipInput
+
+    audio = tmp_path / "track.mp3"
+    output = tmp_path / "output" / "result.mp4"
+    clip_a = tmp_path / "a.mp4"
+    clip_b = tmp_path / "b.mp4"
+    audio.write_bytes(b"fake-audio")
+    clip_a.write_bytes(b"fake-a")
+    clip_b.write_bytes(b"fake-b")
+
+    cfg = JobConfig(
+        audio_path=audio,
+        output_path=output,
+        hook={"text": "Hook"},
+        clips=[
+            ClipInput(
+                id="clip_0",
+                path=clip_a,
+                order=0,
+                role="clip",
+                crop_start_s=0.0,
+                crop_end_s=40.0,
+            ),
+            ClipInput(
+                id="clip_2",
+                path=clip_b,
+                order=1,
+                role="clip",
+                crop_start_s=0.0,
+                crop_end_s=25.0,
+            ),
+        ],
+    )
+
+    durations = {
+        clip_a.name: 30.0,
+        clip_b.name: 20.0,
+    }
+
+    def fake_probe(path: Path):
+        duration = durations.get(path.name, 30.0)
+        if path.suffix == ".mp3":
+            return probe_media_from_payload(path, AUDIO_PROBE, video=False)
+        payload = {
+            **VIDEO_PROBE,
+            "format": {"duration": f"{duration:.6f}"},
+        }
+        return probe_media_from_payload(path, payload, video=True)
+
+    monkeypatch.setattr("viral_editor.ingest.loader.probe_media", fake_probe)
+
+    result = validate_job(cfg)
+    assert "clip_0" in result.clip_media
+    assert "clip_2" in result.clip_media
+
+
 def test_validate_job_rejects_missing_video(tmp_path: Path) -> None:
     audio = tmp_path / "track.mp3"
     audio.write_bytes(b"x")

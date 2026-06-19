@@ -145,6 +145,54 @@ def test_create_job_accepts_multiple_videos(client: TestClient, tmp_path, monkey
     assert detail["config"]["clips"][0]["role"] == "hook"
 
 
+def test_create_job_matches_clip_metadata_by_upload_order(
+    client: TestClient,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """Metadata at clips JSON index N must apply to the Nth uploaded video."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", lambda *args, **kwargs: None)
+
+    response = client.post(
+        "/api/jobs",
+        data={
+            "hook_text": "Reordered meta",
+            "clips": json.dumps(
+                [
+                    {
+                        "id": "clip_2",
+                        "order": 0,
+                        "role": "hook",
+                        "crop_start_s": 1.0,
+                        "crop_end_s": 5.0,
+                    },
+                    {
+                        "id": "clip_0",
+                        "order": 1,
+                        "role": "clip",
+                        "crop_start_s": 0.0,
+                        "crop_end_s": 3.0,
+                    },
+                ]
+            ),
+        },
+        files=[
+            ("video", ("second-clip.mp4", io.BytesIO(b"video-2"), "video/mp4")),
+            ("video", ("first-clip.mp4", io.BytesIO(b"video-0"), "video/mp4")),
+            ("audio", ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg")),
+        ],
+    )
+    assert response.status_code == 201
+    job_id = response.json()["id"]
+    detail = client.get(f"/api/jobs/{job_id}").json()
+    clips = {clip["id"]: clip for clip in detail["config"]["clips"]}
+    assert clips["clip_2"]["role"] == "hook"
+    assert clips["clip_2"]["crop_start_s"] == pytest.approx(1.0)
+    assert clips["clip_0"]["crop_start_s"] == pytest.approx(0.0)
+
+
 def test_patch_clips_recomputes_reel(
     client: TestClient,
     tmp_path,

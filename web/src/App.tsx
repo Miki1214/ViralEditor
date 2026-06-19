@@ -274,15 +274,25 @@ export default function App() {
     setRemoteClips([]);
 
     try {
+      const orderedClips = [...form.localClips].sort((a, b) => a.order - b.order);
       const { id } = await createJob({
-        clips: form.localClips.map((clip) => ({
+        clips: orderedClips.map((clip) => ({
           id: clip.id,
           file: clip.file,
           order: clip.order,
           included: clip.included,
           role: clip.role,
-          crop_start_s: clip.cropStartS,
-          crop_end_s: clip.cropEndS,
+          crop_start_s:
+            clip.cropStartS != null && clip.durationS != null
+              ? Math.max(0, Math.min(clip.cropStartS, clip.durationS))
+              : clip.cropStartS,
+          crop_end_s:
+            clip.cropEndS != null && clip.durationS != null
+              ? Math.max(
+                  (clip.cropStartS ?? 0) + 0.25,
+                  Math.min(clip.cropEndS, clip.durationS),
+                )
+              : clip.cropEndS,
         })),
         audio: form.audio,
         hookText: form.hookText,

@@ -7,7 +7,7 @@ from pathlib import Path
 from viral_editor.config import JobConfig
 from viral_editor.ingest.loader import probe_media
 from viral_editor.models import ClipInput, ClipReel, MediaInfo, write_artifact
-from viral_editor.video.clip_reel import build_reel, clip_paths_by_id
+from viral_editor.video.clip_reel import build_reel, clip_paths_by_id, normalize_crop_range
 from viral_editor.video.teaser import build_teaser_spec, teaser_body_output_duration
 
 
@@ -92,8 +92,7 @@ def clip_info_payload(
         media = clip_media.get(clip.id)
         if media is None:
             continue
-        crop_start = clip.crop_start_s if clip.crop_start_s is not None else 0.0
-        crop_end = clip.crop_end_s if clip.crop_end_s is not None else media.duration_s
+        norm_start, norm_end = normalize_crop_range(clip, media)
         payload.append(
             {
                 "id": clip.id,
@@ -104,7 +103,7 @@ def clip_info_payload(
                 "crop_start_s": clip.crop_start_s,
                 "crop_end_s": clip.crop_end_s,
                 "duration_s": media.duration_s,
-                "crop_duration_s": max(0.0, crop_end - crop_start),
+                "crop_duration_s": max(0.0, norm_end - norm_start),
                 "width": media.width,
                 "height": media.height,
                 "fps": media.fps,

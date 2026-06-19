@@ -127,12 +127,12 @@ async def create_job(
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Audio file is empty")
 
-    meta_by_id: dict[str, dict] = {}
+    parsed_clips: list[dict] = []
     if clips:
         try:
             parsed = json.loads(clips)
             if isinstance(parsed, list):
-                meta_by_id = {str(item["id"]): item for item in parsed if "id" in item}
+                parsed_clips = [item for item in parsed if isinstance(item, dict)]
         except json.JSONDecodeError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid clips JSON: {exc}") from exc
 
@@ -149,7 +149,7 @@ async def create_job(
         if not video_bytes:
             raise HTTPException(status_code=400, detail=f"Video file {index} is empty")
         default_id = f"clip_{index}"
-        meta = meta_by_id.get(default_id, meta_by_id.get(str(index), {}))
+        meta = parsed_clips[index] if index < len(parsed_clips) else {}
         clip_id = str(meta.get("id", default_id))
         video_name = Path(upload.filename or f"{clip_id}.mp4").name
         save_upload(video_bytes, input_dir / video_name)

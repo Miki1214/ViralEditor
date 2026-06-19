@@ -8,15 +8,23 @@ from viral_editor.config import SpeedRampConfig
 from viral_editor.models import ClipInput, ClipReel, ClipRole, MediaInfo, ReelEntry, SpeedSegment
 
 
-def _crop_range(
+def normalize_crop_range(
     clip: ClipInput,
     media: MediaInfo,
 ) -> tuple[float, float]:
+    """Clamp crop in/out to the probed source duration."""
     start = clip.crop_start_s if clip.crop_start_s is not None else 0.0
     end = clip.crop_end_s if clip.crop_end_s is not None else media.duration_s
     start = max(0.0, min(start, media.duration_s))
     end = max(start + 1e-6, min(end, media.duration_s))
     return start, end
+
+
+def _crop_range(
+    clip: ClipInput,
+    media: MediaInfo,
+) -> tuple[float, float]:
+    return normalize_crop_range(clip, media)
 
 
 def _append_entry(
