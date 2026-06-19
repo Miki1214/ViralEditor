@@ -8,6 +8,7 @@ from pathlib import Path
 
 from viral_editor.audio.beat_detector import (
     AudioAnalysisError,
+    AudioDspConfig,
     analyze_audio_with_envelope,
     save_beat_features,
     save_chroma,
@@ -21,6 +22,11 @@ from viral_editor.ingest.loader import IngestError, validate_job
 from viral_editor.models import MusicStructurePlan, write_artifact
 from viral_editor.pipeline_events import PipelineEvent, StageAction
 from viral_editor.utils.logging import get_logger, log_stage
+from viral_editor.video.speed_ramp import (
+    plan_speed_options,
+    trim_beat_features_to_window,
+    trim_envelope_to_window,
+)
 
 logger = get_logger(__name__)
 
@@ -203,29 +209,115 @@ def run_pipeline(
         )
 
         if loaded.music.start_s is not None and loaded.music.end_s is not None:
-            windowed = trim_timeline_to_window(
+            ramp_timeline = trim_timeline_to_window(
                 analysis.timeline,
                 start_s=loaded.music.start_s,
                 end_s=loaded.music.end_s,
             )
+            ramp_envelope = trim_envelope_to_window(
+                analysis.onset_envelope,
+                start_s=loaded.music.start_s,
+                end_s=loaded.music.end_s,
+            )
+            ramp_features = (
+                trim_beat_features_to_window(
+                    analysis.beat_features,
+                    start_s=loaded.music.start_s,
+                    end_s=loaded.music.end_s,
+                )
+                if analysis.beat_features is not None
+                else None
+            )
+            ramp_sections = [
+                section.model_copy(
+                    update={
+                        "start_s": max(0.0, section.start_s - loaded.music.start_s),
+                        "end_s": min(
+                            output_duration_s,
+                            section.end_s - loaded.music.start_s,
+                        ),
+                    }
+                )
+                for section in sections
+                if section.end_s > loaded.music.start_s and section.start_s < loaded.music.end_s
+            ]
             logger.info(
                 "Music window %.2f–%.2fs (%.2fs output)",
                 loaded.music.start_s,
                 loaded.music.end_s,
                 output_duration_s,
             )
-            del windowed  # used by later phases once speed ramp lands
+        else:
+            ramp_timeline = analysis.timeline
+            ramp_envelope = analysis.onset_envelope
+            ramp_features = analysis.beat_features
+            ramp_sections = sections
 
-        for stage in PIPELINE_STAGES[3:]:
+        _emit(on_event, "speed_ramp", "start")
+        speed_options = plan_speed_options(
+            ramp_timeline,
+            ramp_envelope,
+            ingest.video,
+            output_duration_s=output_duration_s,
+            base_config=loaded.speed_ramp,
+            features=ramp_features,
+            sections=ramp_sections,
+            hop_length=AudioDspConfig().hop_length,
+            sr=analysis.timeline.sample_rate,
+            output_fps=float(loaded.render.fps),
+        )
+        options_path = write_artifact(speed_options, "speed_ramp_options", work_temp)
+        artifacts.append(options_path.name)
+        selected_plan = next(
+            (
+                option.plan
+                for option in speed_options.options
+                if option.style == speed_options.selected_style
+            ),
+            speed_options.options[0].plan if speed_options.options else None,
+        )
+        if selected_plan is None:
+            raise RuntimeError("Speed ramp planner produced no options")
+        speed_path = write_artifact(selected_plan, "speed_segments", work_temp)
+        artifacts.append(speed_path.name)
+        if selected_plan.requested_output_duration_s is not None:
+            logger.warning(
+                "Music window (%.2fs) exceeds source video (%.2fs); "
+                "speed-ramp output capped to %.2fs.",
+                selected_plan.requested_output_duration_s,
+                selected_plan.src_duration_s,
+                selected_plan.output_duration_s,
+            )
+        logger.info(
+            "Speed ramp: %d options, style=%s, %d segments, %.2fs output -> %.2fs source (%s)",
+            len(speed_options.options),
+            speed_options.selected_style,
+            len(selected_plan.segments),
+            selected_plan.output_duration_s,
+            selected_plan.segments[-1].src_end_s if selected_plan.segments else 0.0,
+            selected_plan.budget_policy,
+        )
+        _emit(
+            on_event,
+            "speed_ramp",
+            "complete",
+            message=(
+                f"options={len(speed_options.options)}, "
+                f"style={speed_options.selected_style}, "
+                f"segments={len(selected_plan.segments)}"
+            ),
+        )
+
+        for stage in PIPELINE_STAGES[4:]:
             _emit(
                 on_event,
                 stage,
                 "skip",
-                message="Not yet implemented (Phases 3–6)",
+                message="Not yet implemented (Phases 4–6)",
             )
 
         logger.warning(
-            "Stages after audio are not yet implemented (Phases 3–6). "
+            "Stages after speed_ramp are not yet implemented (Phases 4–6). "
             "Full wiring lands in Phase 7."
         )
 

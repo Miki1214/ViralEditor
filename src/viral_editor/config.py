@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from viral_editor.models import DomainModel, TeaserMask
+from viral_editor.models import BudgetPolicy, DomainModel, TeaserMask
 
 _HEX_COLOR = re.compile(r"^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
 _RGBA_COLOR = re.compile(
@@ -92,15 +92,32 @@ class TitleConfig(DomainModel):
 class SpeedRampConfig(DomainModel):
     """Speed-ramp planner parameters."""
 
+    style: str = "drop_sync"
     s_min: float = Field(default=1.0, gt=0)
     s_max: float = Field(default=30.0, gt=0)
     alpha: float = Field(default=0.0, ge=0)
+    budget_policy: BudgetPolicy = "scale"
+    drop_window_ms: int = Field(default=300, ge=50, le=2000)
+    min_segment_ms: int = Field(default=100, ge=10)
+    speed_quantum: float = Field(default=0.5, gt=0)
+    grid_step_ms: int | None = Field(default=None, ge=10)
+    bass_accent: float | None = Field(default=None, ge=0, le=1)
 
     @model_validator(mode="after")
     def s_max_gte_s_min(self) -> SpeedRampConfig:
         if self.s_max < self.s_min:
             raise ValueError("speed_ramp.s_max must be >= speed_ramp.s_min")
         return self
+
+    @field_validator("style")
+    @classmethod
+    def validate_style(cls, value: str) -> str:
+        from viral_editor.video.speed_presets import PRESETS
+
+        if value not in PRESETS:
+            known = ", ".join(sorted(PRESETS))
+            raise ValueError(f"speed_ramp.style must be one of: {known}")
+        return value
 
 
 class TeaserConfig(DomainModel):

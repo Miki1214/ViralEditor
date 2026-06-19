@@ -12,6 +12,7 @@ import {
 } from "./api/client";
 import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
+import { SpeedRampPanel } from "./components/SpeedRampPanel";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { PhonePreview } from "./components/PhonePreview";
@@ -65,6 +66,7 @@ export default function App() {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [musicStartS, setMusicStartS] = useState<number | null>(null);
   const [musicEndS, setMusicEndS] = useState<number | null>(null);
+  const [speedRampVersion, setSpeedRampVersion] = useState(0);
 
   const videoPreviewUrl = useMemo(() => {
     if (!form.video) return null;
@@ -226,6 +228,9 @@ export default function App() {
         id,
         (event) => {
           setEvents((prev) => [...prev, event]);
+          if (event.stage === "speed_ramp" && event.action === "complete") {
+            setSpeedRampVersion((value) => value + 1);
+          }
           if (event.stage === "ingest" && event.action === "complete") {
             fetchArtifact(id, "media_info")
               .then((artifact) => {
@@ -357,15 +362,23 @@ export default function App() {
           </div>
 
           {waveform && activeJobId && (
-            <AudioScopePanel
-              jobId={activeJobId}
-              waveform={waveform}
-              targetDurationS={form.targetDurationS}
-              useFullTrack={form.useFullTrack}
-              selectedBlockId={selectedBlockId}
-              onTargetChange={handleTargetChange}
-              onSelectBlock={handleSelectBlock}
-            />
+            <>
+              <AudioScopePanel
+                jobId={activeJobId}
+                waveform={waveform}
+                targetDurationS={form.targetDurationS}
+                useFullTrack={form.useFullTrack}
+                selectedBlockId={selectedBlockId}
+                onTargetChange={handleTargetChange}
+                onSelectBlock={handleSelectBlock}
+              />
+              <SpeedRampPanel
+                key={`${activeJobId}-${speedRampVersion}`}
+                jobId={activeJobId}
+                waveform={waveform}
+                outputDurationS={mediaInfo.outputDuration ?? waveform.duration_s}
+              />
+            </>
           )}
 
           <JobForm

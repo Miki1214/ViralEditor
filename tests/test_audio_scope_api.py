@@ -126,3 +126,73 @@ def test_music_selection_patch(client: TestClient, monkeypatch: pytest.MonkeyPat
 
     blocks = json.loads((job_workspace(job_id) / "temp" / "music_blocks.json").read_text())
     assert blocks["selected_block_id"] == "block_a"
+
+
+def _fake_video_probe(path):
+    from pathlib import Path
+
+    from viral_editor.models import MediaInfo
+
+    return MediaInfo(
+        path=Path(path),
+        duration_s=120.0,
+        has_video=True,
+        fps=30.0,
+        width=1920,
+        height=1080,
+    )
+
+
+def test_speed_ramp_endpoint(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.speed.probe_media", _fake_video_probe)
+
+    create = client.post(
+        "/api/jobs",
+        data={"hook_text": "Speed ramp test"},
+        files={
+            "video": ("clip.mp4", io.BytesIO(b"video"), "video/mp4"),
+            "audio": ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg"),
+        },
+    )
+    assert create.status_code == 201
+    job_id = create.json()["id"]
+    _seed_analysis_artifacts(job_id)
+
+    response = client.get(f"/api/jobs/{job_id}/speed-ramp")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selected_style"] == "drop_sync"
+    assert len(body["options"]) == 4
+    assert body["options"][0]["plan"]["speed_curve"]
+
+
+def test_speed_selection_patch(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.speed.probe_media", _fake_video_probe)
+
+    create = client.post(
+        "/api/jobs",
+        data={"hook_text": "Speed selection test"},
+        files={
+            "video": ("clip.mp4", io.BytesIO(b"video"), "video/mp4"),
+            "audio": ("track.mp3", io.BytesIO(b"audio"), "audio/mpeg"),
+        },
+    )
+    job_id = create.json()["id"]
+    _seed_analysis_artifacts(job_id)
+
+    response = client.patch(
+        f"/api/jobs/{job_id}/speed-selection",
+        json={"style": "steady_flow", "alpha": 6.0},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["selected_style"] == "steady_flow"
+
+    segments_path = job_workspace(job_id) / "temp" / "speed_segments.json"
+    assert segments_path.is_file()
+    segments = json.loads(segments_path.read_text())
+    assert segments["style"] == "steady_flow"

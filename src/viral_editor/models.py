@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 T = TypeVar("T", bound=BaseModel)
 
 TransientType = Literal["percussive", "bass", "drop"]
+BudgetPolicy = Literal["scale", "loop", "trim"]
 FxKind = Literal["zoom", "rotate"]
 TeaserMask = Literal["vignette", "dir_blur"]
 
@@ -136,6 +137,47 @@ class SpeedSegment(DomainModel):
     src_start_s: float = Field(ge=0)
     src_end_s: float = Field(ge=0)
     speed_factor: float = Field(gt=0)
+
+
+class SpeedCurvePoint(DomainModel):
+    """Downsampled point on the output speed curve for UI overlay."""
+
+    t: float = Field(ge=0)
+    speed: float = Field(gt=0)
+    is_slow_zone: bool = False
+    is_bass_accent: bool = False
+
+
+class SpeedRampPlan(DomainModel):
+    """Speed-ramp planner artifact for Phase 6 render."""
+
+    style: str = "drop_sync"
+    output_duration_s: float = Field(ge=0)
+    requested_output_duration_s: float | None = Field(default=None, ge=0)
+    src_duration_s: float = Field(ge=0)
+    budget_policy: BudgetPolicy = "scale"
+    avg_speed: float = Field(default=0.0, ge=0)
+    max_speed: float = Field(default=0.0, ge=0)
+    min_speed: float = Field(default=0.0, ge=0)
+    slow_zone_count: int = Field(default=0, ge=0)
+    speed_curve: list[SpeedCurvePoint] = Field(default_factory=list)
+    segments: list[SpeedSegment] = Field(default_factory=list)
+
+
+class SpeedRampOption(DomainModel):
+    """One hook-oriented speed profile with summary plan."""
+
+    style: str
+    label: str
+    description: str
+    plan: SpeedRampPlan
+
+
+class SpeedRampOptionSet(DomainModel):
+    """All computed speed options plus the selected style."""
+
+    selected_style: str
+    options: list[SpeedRampOption] = Field(default_factory=list)
 
 
 class FxEvent(DomainModel):

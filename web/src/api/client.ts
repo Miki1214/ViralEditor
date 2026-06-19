@@ -4,6 +4,7 @@ import type {
   MediaInfoArtifact,
   MusicBlock,
   PipelineEvent,
+  SpeedRampOptionSet,
   StageInfo,
   WaveformPayload,
 } from "../types";
@@ -156,4 +157,36 @@ export function loopSeamPreviewUrl(jobId: string, startS: number, endS: number):
 
 export function outputUrl(jobId: string): string {
   return `/api/jobs/${jobId}/output`;
+}
+
+export async function fetchSpeedRamp(jobId: string): Promise<SpeedRampOptionSet> {
+  const res = await fetch(`/api/jobs/${jobId}/speed-ramp`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function updateSpeedSelection(
+  jobId: string,
+  payload: {
+    style?: string;
+    alpha?: number;
+    s_min?: number;
+    s_max?: number;
+    drop_window_ms?: number;
+    bass_accent?: number;
+  },
+): Promise<SpeedRampOptionSet> {
+  const res = await fetch(`/api/jobs/${jobId}/speed-selection`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export function speedProxyPreviewUrl(jobId: string, style: string, force = false): string {
+  const params = new URLSearchParams({ style });
+  if (force) params.set("force", "1");
+  return `/api/jobs/${jobId}/speed-ramp/preview?${params.toString()}`;
 }

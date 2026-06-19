@@ -26,15 +26,23 @@ from viral_editor.api.schemas import (
     JobSummary,
     MusicSelectionUpdate,
     PipelineStagesResponse,
+    SpeedSelectionUpdate,
     StageInfo,
+)
+from viral_editor.api.speed import (
+    compute_speed_options,
+    load_speed_ramp_options,
+    refresh_speed_selection,
+    speed_proxy_cache_key,
 )
 from viral_editor.api.store import JobStore, job_workspace, save_upload, write_job_config
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
 from viral_editor.config import ConfigError
-from viral_editor.models import WaveformPayload
+from viral_editor.models import SpeedRampOptionSet, WaveformPayload
 from viral_editor.pipeline import PIPELINE_STAGES
 from viral_editor.utils.ffmpeg import FFmpegError
+from viral_editor.video.proxy_render import render_speed_proxy
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -300,3 +308,94 @@ def update_music_selection(
     job = store.get(job_id)
     assert job is not None
     return JobDetail(**job.to_summary().model_dump(), config=job.config)
+
+
+@router.get("/{job_id}/speed-ramp", response_model=SpeedRampOptionSet)
+def get_speed_ramp(job_id: str, request: Request) -> SpeedRampOptionSet:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    temp_dir = job.workspace / "temp"
+    try:
+        return compute_speed_options(job.config, temp_dir)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.patch("/{job_id}/speed-selection", response_model=SpeedRampOptionSet)
+def update_speed_selection(
+    job_id: str,
+    payload: SpeedSelectionUpdate,
+    request: Request,
+) -> SpeedRampOptionSet:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    overrides = payload.model_dump(exclude_none=True, exclude={"style"})
+    try:
+        updated_config, option_set = refresh_speed_selection(
+            job.config,
+            temp_dir,
+            style=payload.style,
+            overrides=overrides or None,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    return option_set
+
+
+@router.get("/{job_id}/speed-ramp/preview")
+def get_speed_ramp_preview(
+    job_id: str,
+    request: Request,
+    style: str | None = Query(default=None),
+) -> FileResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    temp_dir = job.workspace / "temp"
+    try:
+        option_set = load_speed_ramp_options(temp_dir) or compute_speed_options(job.config, temp_dir)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    selected_style = style or option_set.selected_style
+    option = next((item for item in option_set.options if item.style == selected_style), None)
+    if option is None:
+        raise HTTPException(status_code=404, detail=f"Speed style {selected_style!r} not found")
+
+    preview_dir = temp_dir / "previews"
+    cache_key = speed_proxy_cache_key(
+        style=selected_style,
+        plan=option.plan,
+        video_path=job.config.video_path,
+        music_start_s=job.config.music.start_s,
+        music_end_s=job.config.music.end_s,
+    )
+    preview_path = preview_dir / f"{cache_key}.mp4"
+    force = request.query_params.get("force") == "1"
+    if force and preview_path.is_file():
+        preview_path.unlink(missing_ok=True)
+    if not preview_path.is_file():
+        try:
+            render_speed_proxy(
+                job.config.video_path,
+                job.config.audio_path,
+                option.plan,
+                music_start_s=job.config.music.start_s,
+                music_end_s=job.config.music.end_s,
+                out_path=preview_path,
+            )
+        except (RuntimeError, FFmpegError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return FileResponse(preview_path, media_type="video/mp4", filename=preview_path.name)

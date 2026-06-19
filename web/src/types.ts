@@ -106,6 +106,47 @@ export interface WaveformPayload {
   selected_block_id: string | null;
 }
 
+export interface SpeedCurvePoint {
+  t: number;
+  speed: number;
+  is_slow_zone: boolean;
+  is_bass_accent: boolean;
+}
+
+export interface SpeedSegment {
+  out_start_s: number;
+  out_end_s: number;
+  src_start_s: number;
+  src_end_s: number;
+  speed_factor: number;
+}
+
+export interface SpeedRampPlan {
+  style: string;
+  output_duration_s: number;
+  requested_output_duration_s: number | null;
+  src_duration_s: number;
+  budget_policy: string;
+  avg_speed: number;
+  max_speed: number;
+  min_speed: number;
+  slow_zone_count: number;
+  speed_curve: SpeedCurvePoint[];
+  segments: SpeedSegment[];
+}
+
+export interface SpeedRampOption {
+  style: string;
+  label: string;
+  description: string;
+  plan: SpeedRampPlan;
+}
+
+export interface SpeedRampOptionSet {
+  selected_style: string;
+  options: SpeedRampOption[];
+}
+
 export interface AudioTimeline {
   global_bpm: number;
   audio_duration_seconds: number;

@@ -54,3 +54,12 @@ class MusicSelectionUpdate(BaseModel):
     target_duration_s: float | None = Field(default=None, gt=0)
     selected_block_id: str | None = None
     use_full_track: bool | None = None
+
+
+class SpeedSelectionUpdate(BaseModel):
+    style: str | None = None
+    alpha: float | None = Field(default=None, ge=0)
+    s_min: float | None = Field(default=None, gt=0)
+    s_max: float | None = Field(default=None, gt=0)
+    drop_window_ms: int | None = Field(default=None, ge=50, le=2000)
+    bass_accent: float | None = Field(default=None, ge=0, le=1)
