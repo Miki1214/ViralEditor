@@ -1,4 +1,4 @@
-import { BASS, DOWNBEAT, DROP, TRACE } from "./scopeTheme";
+import { BASS, DROP, LABEL_COLOR, TRACE } from "./scopeTheme";
 
 export interface ScopeLegendItem {
   id: string;
@@ -29,7 +29,7 @@ export const AUDIO_SCOPE_LEGEND: ScopeLegendItem[] = [
     id: "section",
     color: "rgba(56,189,248,0.35)",
     label: "Section",
-    description: "Structure label (intro, hook, …)",
+    description: "Structure segment · extra rows when overlapping",
     kind: "ribbon",
   },
   {
@@ -48,9 +48,9 @@ export const AUDIO_SCOPE_LEGEND: ScopeLegendItem[] = [
   },
   {
     id: "bar",
-    color: DOWNBEAT,
+    color: LABEL_COLOR,
     label: "Bar",
-    description: "Downbeat / measure start",
+    description: "Gray tick · measure downbeat in marker strip",
     kind: "tick",
   },
 ];

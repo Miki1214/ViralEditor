@@ -450,11 +450,13 @@ def test_build_block_catalog_covers_preset_targets() -> None:
         if duration <= timeline.audio_duration_seconds
     }
     assert set(catalog.plans) == expected
-    assert len(catalog.loop_qualities) == len(expected)
+    assert catalog.loop_qualities
     for entry in catalog.loop_qualities:
         plan = catalog.plans[str(int(entry.target_duration_s))]
         assert plan.blocks
         assert entry.loop_quality_pct == round(min(100.0, max(b.loop_quality for b in plan.blocks) * 100.0))
+    # Presets without a phrase window (e.g. 15s on this fixture) are omitted from chip scores.
+    assert {str(int(entry.target_duration_s)) for entry in catalog.loop_qualities}.issubset(expected)
 
 
 def test_plan_from_catalog_matches_fresh_plan() -> None:
@@ -519,3 +521,38 @@ def test_vocal_penalty_reduces_loop_quality_for_mid_phrase_cuts() -> None:
         baseline.loop_quality * (1.0 - VOCAL_SEAM_WEIGHT * penalized.vocal_penalty),
         rel=1e-4,
     )
+
+
+def test_loop_qualities_from_plans_skip_full_track_fallback() -> None:
+    from viral_editor.audio.loop_planner import (
+        _make_full_track_block,
+        is_phrase_aligned_plan,
+        loop_qualities_from_plans,
+    )
+    from viral_editor.models import MusicBlockPlan
+
+    features = _synthetic_abab_features(n_beats=120, bpm=120.0)
+    timeline = _timeline(60.0, bpm=120.0)
+    full = _make_full_track_block(
+        timeline,
+        features,
+        reason="No phrase-aligned window for this target — preview the full track",
+    )
+    failed_plan = MusicBlockPlan(
+        target_duration_s=10.0,
+        track_duration_s=60.0,
+        selected_block_id=full.id,
+        use_full_track=True,
+        target_match_failed=True,
+        suggested_target_duration_s=20.0,
+        blocks=[full],
+    )
+    assert is_phrase_aligned_plan(failed_plan) is False
+    assert loop_qualities_from_plans({"10": failed_plan}) == []
+
+    plan = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=20.0)
+    assert is_phrase_aligned_plan(plan) is True
+    qualities = loop_qualities_from_plans({"20": plan})
+    assert len(qualities) == 1
+    assert qualities[0].target_duration_s == 20.0
+    assert qualities[0].loop_quality_pct > 0

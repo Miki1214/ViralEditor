@@ -4,6 +4,7 @@ import { resamplePointsToPixelWidth } from "./scope/scopePoints";
 import { scopeWidth } from "./scope/scopeLayout";
 import { ScopeMarkerStrip } from "./scope/ScopeMarkerStrip";
 import { SectionRibbon } from "./scope/SectionRibbon";
+import { layoutSectionSwimlanes } from "./scope/sectionSwimlanes";
 import {
   buildTimeTicks,
   DROP,
@@ -13,7 +14,6 @@ import {
   SCOPE_MARKER_STRIP_HEIGHT,
   SCOPE_PAD_X,
   SCOPE_RULER_HEIGHT,
-  SCOPE_SECTION_RIBBON_HEIGHT,
   TICK_COLOR,
   TRACE,
 } from "./scope/scopeTheme";
@@ -33,11 +33,6 @@ interface ScopeCanvasProps {
 }
 
 const WAVEFORM_HEIGHT = 140;
-const TOTAL_HEIGHT =
-  SCOPE_SECTION_RIBBON_HEIGHT +
-  WAVEFORM_HEIGHT +
-  SCOPE_RULER_HEIGHT +
-  SCOPE_MARKER_STRIP_HEIGHT;
 
 export function ScopeCanvas({
   durationS,
@@ -55,11 +50,19 @@ export function ScopeCanvas({
   const width = scopeWidth(windowDurationS);
   const padX = SCOPE_PAD_X;
   const padY = 10;
-  const waveformTop = SCOPE_SECTION_RIBBON_HEIGHT;
+
+  const sectionLayout = useMemo(
+    () => layoutSectionSwimlanes(sections, scopeWindow, width),
+    [sections, scopeWindow, width],
+  );
+  const ribbonHeight = sectionLayout.height;
+  const waveformTop = ribbonHeight;
   const innerW = width - padX * 2;
   const innerH = WAVEFORM_HEIGHT - padY * 2;
   const rulerTop = waveformTop + WAVEFORM_HEIGHT;
   const markerStripTop = rulerTop + SCOPE_RULER_HEIGHT;
+  const totalHeight =
+    ribbonHeight + WAVEFORM_HEIGHT + SCOPE_RULER_HEIGHT + SCOPE_MARKER_STRIP_HEIGHT;
 
   const localPoints = useMemo(() => {
     if (!window || (window.startS === 0 && window.endS === durationS)) {
@@ -108,14 +111,20 @@ export function ScopeCanvas({
 
   return (
     <svg
-      viewBox={`0 0 ${width} ${TOTAL_HEIGHT}`}
+      viewBox={`0 0 ${width} ${totalHeight}`}
       width={width}
-      height={TOTAL_HEIGHT}
+      height={totalHeight}
       className="block max-w-none bg-[#141618]"
       role="img"
       aria-label="Audio scope waveform"
     >
-      <SectionRibbon sections={sections} window={scopeWindow} viewWidth={width} y={0} />
+      <SectionRibbon
+        sections={sections}
+        window={scopeWindow}
+        viewWidth={width}
+        y={0}
+        layout={sectionLayout}
+      />
 
       {blocks.map((block) => {
         if (block.end_s <= scopeWindow.startS || block.start_s >= scopeWindow.endS) return null;

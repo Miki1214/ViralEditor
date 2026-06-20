@@ -73,6 +73,16 @@ def test_repeated_sections_flagged() -> None:
     assert any(section.is_repeated for section in sections)
 
 
+def test_sections_do_not_overlap() -> None:
+    features = _synthetic_abab_features(n_beats=64)
+    duration_s = float(features.beat_times_s[-1] + 60.0 / features.meta.global_bpm)
+    sections = analyze_structure(features, transients=[], duration_s=duration_s)
+    assert len(sections) >= 2
+    for left, right in zip(sections, sections[1:], strict=False):
+        assert left.end_s <= right.start_s + 0.001
+        assert left.start_s < left.end_s
+
+
 def test_short_track_returns_single_section() -> None:
     features = _synthetic_abab_features(n_beats=4)
     sections = analyze_structure(features, transients=[], duration_s=8.0)

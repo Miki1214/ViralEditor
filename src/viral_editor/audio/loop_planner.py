@@ -454,6 +454,29 @@ def _enumerate_phrase_candidates(
     )
 
 
+def is_phrase_aligned_plan(plan: MusicBlockPlan) -> bool:
+    """True when the plan offers at least one preset-length phrase loop (not full-track fallback)."""
+    if plan.target_match_failed or plan.use_full_track:
+        return False
+    return any(block.id != "block_full" for block in plan.blocks)
+
+
+def loop_qualities_from_plans(plans: dict[str, MusicBlockPlan]) -> list[TargetLoopQuality]:
+    """Best loop quality per preset, excluding full-track fallback plans."""
+    loop_qualities: list[TargetLoopQuality] = []
+    for key, plan in plans.items():
+        if not is_phrase_aligned_plan(plan):
+            continue
+        best = max(block.loop_quality for block in plan.blocks)
+        loop_qualities.append(
+            TargetLoopQuality(
+                target_duration_s=float(key),
+                loop_quality_pct=round(min(100.0, best * 100.0)),
+            )
+        )
+    return loop_qualities
+
+
 def _matchable_target_durations_from_candidates(
     all_candidates: list[_Candidate],
     *,
@@ -834,16 +857,7 @@ def build_block_catalog(
         )
         plans[key] = plan
 
-    loop_qualities: list[TargetLoopQuality] = []
-    for key, plan in plans.items():
-        if not plan.blocks:
-            continue
-        best = max(block.loop_quality for block in plan.blocks)
-        loop_qualities.append(
-            TargetLoopQuality(
-                target_duration_s=float(key),
-                loop_quality_pct=round(min(100.0, best * 100.0)),
-            )
-        )
-
-    return MusicBlockCatalog(plans=plans, loop_qualities=loop_qualities)
+    return MusicBlockCatalog(
+        plans=plans,
+        loop_qualities=loop_qualities_from_plans(plans),
+    )

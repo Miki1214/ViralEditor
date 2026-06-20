@@ -70,6 +70,8 @@ def analyze_structure(
 
     beat_times = features.beat_times_s
     downbeats = features.downbeat_times_s
+    beat_period = 60.0 / max(features.meta.global_bpm, 1e-6)
+    prev_end_s = 0.0
     raw_sections: list[tuple[int, int, np.ndarray]] = []
     for start_beat, end_beat in zip(boundary_beats[:-1], boundary_beats[1:], strict=False):
         if end_beat <= start_beat:
@@ -105,11 +107,18 @@ def analyze_structure(
     for index, ((start_beat, end_beat, _), label) in enumerate(
         zip(raw_sections, labels, strict=True)
     ):
-        start_s = _snap_time_to_downbeat(float(beat_times[min(start_beat, len(beat_times) - 1)]), downbeats)
-        end_idx = min(end_beat, len(beat_times) - 1)
-        end_s = _snap_time_to_downbeat(float(beat_times[end_idx]), downbeats)
+        start_s = float(beat_times[min(start_beat, len(beat_times) - 1)])
+        if end_beat >= len(beat_times):
+            end_s = duration_s
+        else:
+            end_s = float(beat_times[end_beat])
+        if downbeats.size:
+            start_s = _snap_time_to_downbeat(start_s, downbeats)
+        start_s = max(start_s, prev_end_s)
         if end_s <= start_s:
-            end_s = min(duration_s, start_s + beats_per_bar * (60.0 / features.meta.global_bpm))
+            end_s = min(duration_s, start_s + beats_per_bar * beat_period)
+        end_s = min(end_s, duration_s)
+        prev_end_s = end_s
 
         rms_seg = rms[:, start_beat:end_beat] if rms.size else np.array([[0.5]])
         energy = float(np.clip(rms_seg.mean(), 0.0, 1.0)) if rms_seg.size else 0.5

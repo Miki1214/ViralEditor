@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Transient } from "../../types";
-import { BASS, DOWNBEAT, DROP, MARKER_STRIP_BG, TICK_COLOR } from "./scopeTheme";
+import { BASS, DROP, LABEL_COLOR, MARKER_STRIP_BG, TICK_COLOR } from "./scopeTheme";
 import { decimateTimesBySpacing, timeToX, type ScopeWindow } from "./scopeWindow";
 
 interface ScopeMarkerStripProps {
@@ -14,7 +14,6 @@ interface ScopeMarkerStripProps {
 
 const MIN_DOWNBEAT_SPACING_PX = 14;
 const MIN_ACCENT_SPACING_PX = 8;
-const MIN_BAR_LABEL_SPACING_PX = 40;
 
 export function ScopeMarkerStrip({
   window,
@@ -57,15 +56,6 @@ export function ScopeMarkerStrip({
     return visible;
   }, [accents, durationS, innerW, padX]);
 
-  const showBarLabels = useMemo(() => {
-    if (visibleDownbeats.length < 2) {
-      return false;
-    }
-    const first = timeToX(visibleDownbeats[0] ?? 0, durationS, padX, innerW);
-    const second = timeToX(visibleDownbeats[1] ?? 0, durationS, padX, innerW);
-    return second - first >= MIN_BAR_LABEL_SPACING_PX;
-  }, [visibleDownbeats, durationS, innerW, padX]);
-
   if (durationS <= 0) {
     return null;
   }
@@ -83,31 +73,18 @@ export function ScopeMarkerStrip({
       />
 
       {visibleDownbeats.map((timeS) => {
-        const barIndex =
-          downbeats.findIndex((downbeat) => Math.abs(downbeat - timeS) < 0.001) + 1;
         const x = timeToX(timeS, durationS, padX, innerW);
         return (
-          <g key={`downbeat-${timeS}`}>
-            <line
-              x1={x}
-              x2={x}
-              y1={baselineY - downbeatHeight}
-              y2={baselineY}
-              stroke={DOWNBEAT}
-              strokeWidth={1.25}
-            />
-            {showBarLabels && barIndex > 0 && (
-              <text
-                x={x + 2}
-                y={y + 10}
-                fill={TICK_COLOR}
-                fontSize={8}
-                fontFamily="JetBrains Mono, ui-monospace, monospace"
-              >
-                {barIndex}
-              </text>
-            )}
-          </g>
+          <line
+            key={`downbeat-${timeS}`}
+            x1={x}
+            x2={x}
+            y1={baselineY - downbeatHeight}
+            y2={baselineY}
+            stroke={LABEL_COLOR}
+            strokeWidth={1.25}
+            opacity={0.7}
+          />
         );
       })}
 

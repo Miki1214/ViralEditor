@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from viral_editor.api.music import (
     load_audio_timeline,
     load_beat_features,
-    load_music_block_catalog,
+    target_loop_qualities_from_artifacts,
     load_music_blocks,
     load_music_structure,
     load_onset_envelope,
@@ -358,15 +358,19 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
             selected_block_id=job.config.music.selected_block_id,
         )
 
-    catalog = load_music_block_catalog(temp_dir)
-    loop_qualities = catalog.loop_qualities if catalog is not None else None
+    features = load_beat_features(temp_dir)
+    loop_qualities = (
+        target_loop_qualities_from_artifacts(temp_dir, timeline, features)
+        if features is not None
+        else None
+    )
 
     return build_waveform_payload(
         timeline,
         envelope,
         block_plan,
         structure=load_music_structure(temp_dir),
-        features=load_beat_features(temp_dir),
+        features=features,
         scope_lanes=load_scope_lanes(temp_dir),
         loop_qualities=loop_qualities,
     )

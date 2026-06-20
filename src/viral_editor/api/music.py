@@ -11,6 +11,9 @@ from viral_editor.audio.block_planner import apply_block_selection, selected_blo
 from viral_editor.audio.features import BeatSyncFeatures, load_features
 from viral_editor.audio.loop_planner import (
     build_block_catalog,
+    is_phrase_aligned_plan,
+    list_target_loop_qualities,
+    loop_qualities_from_plans,
     suggest_music_blocks_advanced,
 )
 from viral_editor.audio.structure import analyze_structure
@@ -20,6 +23,7 @@ from viral_editor.models import (
     MusicBlockCatalog,
     MusicBlockPlan,
     MusicStructurePlan,
+    TargetLoopQuality,
     read_artifact,
     write_artifact,
 )
@@ -147,6 +151,21 @@ def plan_from_catalog(
     return catalog.plans.get(_catalog_key(target_duration_s))
 
 
+def target_loop_qualities_from_artifacts(
+    temp_dir: Path,
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+) -> list[TargetLoopQuality]:
+    """Phrase-loop quality scores for preset chips (independent of cached catalog)."""
+    sections = _sections_for_planner(temp_dir, timeline, features)
+    return list_target_loop_qualities(
+        timeline,
+        features,
+        sections,
+        scope_lanes=load_scope_lanes(temp_dir),
+    )
+
+
 def suggest_blocks_from_artifacts(
     temp_dir: Path,
     timeline: AudioTimeline,
@@ -210,6 +229,7 @@ def refresh_music_selection(
     if target_changed or full_track_changed:
         music.selected_block_id = None
         plan: MusicBlockPlan | None = None
+        catalog: MusicBlockCatalog | None = None
         if features is not None and not music.use_full_track:
             catalog = load_music_block_catalog(temp_dir)
             if catalog is None:
@@ -222,6 +242,30 @@ def refresh_music_selection(
                     scope_lanes=scope_lanes,
                 )
             plan = plan_from_catalog(catalog, music.target_duration_s)
+            track_longer_than_target = timeline.audio_duration_seconds > music.target_duration_s
+            if track_longer_than_target and (
+                plan is None or not is_phrase_aligned_plan(plan)
+            ):
+                fresh = suggest_blocks_from_artifacts(
+                    temp_dir,
+                    timeline,
+                    envelope,
+                    target_duration_s=music.target_duration_s,
+                    selected_block_id=None,
+                )
+                if is_phrase_aligned_plan(fresh):
+                    plan = fresh
+                    updated_plans = dict(catalog.plans)
+                    updated_plans[_catalog_key(music.target_duration_s)] = fresh
+                    catalog = catalog.model_copy(
+                        update={
+                            "plans": updated_plans,
+                            "loop_qualities": loop_qualities_from_plans(updated_plans),
+                        },
+                    )
+                    write_artifact(catalog, "music_block_catalog", temp_dir)
+                elif plan is None:
+                    plan = fresh
         if plan is None:
             plan = suggest_blocks_from_artifacts(
                 temp_dir,
