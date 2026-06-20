@@ -1,0 +1,8 @@
+---
+description: Fix-Forward
+alwaysApply: true
+---
+
+- We are using a strict "fix forward" development loop. Do not revert to older implementations.
+- Before suggesting a fix, cross-reference the current file topology provided by Engram to ensure the modules actually exist in their current state.
+- If an error persists, do not repeat the previous implementation from the chat history. Try a structurally different approach.
