@@ -256,6 +256,7 @@ export interface SpatialFxSettings {
   pan_min_decay_s: number;
   pan_energy_threshold: number;
   pan_energy_floor: number;
+  pan_hook_enabled: boolean;
   pan_hook_by_s: number;
 }
 

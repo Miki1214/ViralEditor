@@ -326,6 +326,26 @@ def test_place_translations_guarantees_hook_pan() -> None:
     assert any("Hook pan" in event.reason for event in events)
 
 
+def test_place_translations_skips_hook_pan_when_disabled() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.05, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+
+    events = place_translations(
+        scope,
+        [],
+        window_start_s=0.0,
+        window_end_s=min(3.0, duration_s),
+        beats=[1.5, 2.0, 2.5],
+        pan_beat_mode="beats",
+        pan_energy_floor=0.9,
+        pan_hook_enabled=False,
+        pan_hook_by_s=1.0,
+    )
+    assert not any("Hook pan" in event.reason for event in events)
+
+
 def test_place_interrupts_includes_translate_when_enabled() -> None:
     hop, sr = 512, 22050
     rms = np.full(500, 0.8, dtype=np.float32)

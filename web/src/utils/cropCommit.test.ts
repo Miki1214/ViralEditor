@@ -26,6 +26,7 @@ function baseStoryboard(slots: StorySlot[]): StoryboardPayload {
       pan_min_decay_s: 0.2,
       pan_energy_threshold: 0.45,
       pan_energy_floor: 0.2,
+      pan_hook_enabled: true,
       pan_hook_by_s: 1.0,
     },
     retention: {

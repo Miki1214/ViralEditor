@@ -488,11 +488,14 @@ def _ensure_hook_pan(
     downbeat_times: list[float],
     window_start_s: float,
     window_end_s: float,
-    pan_hook_by_s: float,
+    pan_hook_enabled: bool = True,
+    pan_hook_by_s: float = 1.0,
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
 ) -> list[PlannedInterrupt]:
     """Guarantee at least one pan impulse within the hook window."""
+    if not pan_hook_enabled:
+        return selected
     if any(event.timestamp_s <= pan_hook_by_s + 1e-6 for event in selected):
         return selected
 
@@ -545,6 +548,7 @@ def place_translations(
     pan_beat_mode: PanBeatMode = "auto",
     pan_energy_threshold: float = 0.45,
     pan_energy_floor: float = 0.2,
+    pan_hook_enabled: bool = True,
     pan_hook_by_s: float = 1.0,
 ) -> list[PlannedInterrupt]:
     """Beat-synced horizontal pan impulses with energy gating and hook boost."""
@@ -640,6 +644,7 @@ def place_translations(
         downbeat_times=downbeat_times,
         window_start_s=window_start_s,
         window_end_s=window_end_s,
+        pan_hook_enabled=pan_hook_enabled,
         pan_hook_by_s=pan_hook_by_s,
         hop_length=hop_length,
         sr=sr,
@@ -661,6 +666,7 @@ def place_interrupts(
     pan_beat_mode: PanBeatMode = "auto",
     pan_energy_threshold: float = 0.45,
     pan_energy_floor: float = 0.2,
+    pan_hook_enabled: bool = True,
     pan_hook_by_s: float = 1.0,
 ) -> list[PlannedInterrupt]:
     """Place zoom/rotate interrupts on energy peaks with 3–5 s cadence and early hook."""
@@ -779,6 +785,7 @@ def place_interrupts(
                 pan_beat_mode=pan_beat_mode,
                 pan_energy_threshold=pan_energy_threshold,
                 pan_energy_floor=pan_energy_floor,
+                pan_hook_enabled=pan_hook_enabled,
                 pan_hook_by_s=pan_hook_by_s,
             )
         )

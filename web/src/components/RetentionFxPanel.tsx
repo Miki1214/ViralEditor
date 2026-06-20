@@ -106,6 +106,7 @@ function panPlanFromSpatialFx(spatialFx: SpatialFxSettings) {
     panBeatMode: spatialFx.pan_beat_mode ?? "auto",
     panEnergyThreshold: spatialFx.pan_energy_threshold ?? 0.45,
     panEnergyFloor: spatialFx.pan_energy_floor ?? 0.2,
+    panHookEnabled: spatialFx.pan_hook_enabled ?? true,
     panHookByS: spatialFx.pan_hook_by_s ?? 1.0,
   };
 }
@@ -244,6 +245,7 @@ export function RetentionFxPanel({
   const panHookTenths = panHookSplit.localValue;
   const panEnabled = spatialFx.translate_enabled ?? true;
   const panBeatMode = spatialFx.pan_beat_mode ?? "auto";
+  const panHookEnabled = spatialFx.pan_hook_enabled ?? true;
 
   const buildupFromSlots = hookEndSlot?.target_duration_s;
   const buildupS =
@@ -278,6 +280,7 @@ export function RetentionFxPanel({
       spatialFx.translate_enabled,
       spatialFx.pan_beat_mode,
       spatialFx.pan_energy_threshold,
+      spatialFx.pan_hook_enabled,
       spatialFx.pan_hook_by_s,
     ],
   );
@@ -513,6 +516,15 @@ export function RetentionFxPanel({
                 </span>
               </div>
             </label>
+            <Toggle
+              checked={panHookEnabled}
+              disabled={saving || !spatialFx.enabled || !panEnabled}
+              label="First pan"
+              hint="Guarantee a left/right pan near the start of the music window."
+              onChange={(pan_hook_enabled) =>
+                void onPatch({ spatial_fx: { pan_hook_enabled } })
+              }
+            />
             <label className="block">
               <span className="field-label">First pan by</span>
               <div className="mt-1 flex items-center gap-2">
@@ -521,7 +533,7 @@ export function RetentionFxPanel({
                   min={5}
                   max={20}
                   step={1}
-                  disabled={saving || !spatialFx.enabled || !panEnabled}
+                  disabled={saving || !spatialFx.enabled || !panEnabled || !panHookEnabled}
                   value={panHookTenths}
                   className="flex-1"
                   {...sliderReleaseHandlers(
@@ -545,6 +557,11 @@ export function RetentionFxPanel({
               "Enable to sync impulses to analyzed transients"
             )}
           </p>
+          {spatialFx.enabled && (
+            <p className="font-mono text-[10px] leading-snug text-monitor-muted/80">
+              Rotates are brief tilt shakes on bass flux — a pattern interrupt to refresh attention span.
+            </p>
+          )}
         </section>
       </div>
     </div>

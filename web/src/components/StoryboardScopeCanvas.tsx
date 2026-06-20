@@ -87,6 +87,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
           panBeatMode: fxSettings.pan_beat_mode ?? "auto",
           panEnergyThreshold: fxSettings.pan_energy_threshold ?? 0.45,
           panEnergyFloor: fxSettings.pan_energy_floor ?? 0.2,
+          panHookEnabled: fxSettings.pan_hook_enabled ?? true,
           panHookByS: fxSettings.pan_hook_by_s ?? 1.0,
         },
       }),
@@ -102,6 +103,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
       fxSettings.translate_enabled,
       fxSettings.pan_beat_mode,
       fxSettings.pan_energy_threshold,
+      fxSettings.pan_hook_enabled,
       fxSettings.pan_hook_by_s,
     ],
   );

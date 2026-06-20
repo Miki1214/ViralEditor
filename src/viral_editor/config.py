@@ -143,6 +143,7 @@ class SpatialFxConfig(DomainModel):
     pan_min_decay_s: float = Field(default=0.2, ge=0.1, le=0.5)
     pan_energy_threshold: float = Field(default=0.45, ge=0.15, le=0.85)
     pan_energy_floor: float = Field(default=0.2, ge=0, le=0.5)
+    pan_hook_enabled: bool = True
     pan_hook_by_s: float = Field(default=1.0, gt=0, le=3)
 
 

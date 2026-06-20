@@ -163,6 +163,7 @@ class SpatialFxSettingsResponse(BaseModel):
     pan_min_decay_s: float = 0.2
     pan_energy_threshold: float = 0.45
     pan_energy_floor: float = 0.2
+    pan_hook_enabled: bool = True
     pan_hook_by_s: float = 1.0
 
 
@@ -218,6 +219,7 @@ class SpatialFxSettingsPatch(BaseModel):
     pan_min_decay_s: float | None = Field(default=None, ge=0.1, le=0.5)
     pan_energy_threshold: float | None = Field(default=None, ge=0.15, le=0.85)
     pan_energy_floor: float | None = Field(default=None, ge=0, le=0.5)
+    pan_hook_enabled: bool | None = None
     pan_hook_by_s: float | None = Field(default=None, gt=0, le=3)
 
 

@@ -19,6 +19,7 @@ const panDefaults = {
   panBeatMode: "beats" as const,
   panEnergyThreshold: 0.45,
   panEnergyFloor: 0.2,
+  panHookEnabled: true,
   panHookByS: 1.0,
 };
 
@@ -77,6 +78,31 @@ describe("spatialFxMarkers translate", () => {
     const pans = markers.filter((marker) => marker.kind === "translate");
     expect(pans.some((marker) => marker.timeS <= 1.0)).toBe(true);
     expect(pans.some((marker) => marker.reason?.includes("Hook pan"))).toBe(true);
+  });
+
+  it("skips hook pan when disabled", () => {
+    const quietLanes: ScopeLaneSeries[] = [
+      lane("rms", Array.from({ length: 40 }, (_, index) => [index * 0.1, 0.05])),
+      lane("band_low", Array.from({ length: 40 }, (_, index) => [index * 0.1, 0.05])),
+      lane("surge", Array.from({ length: 40 }, (_, index) => [index * 0.1, 0.05])),
+    ];
+    const markers = planSpatialFxMarkers([] as Transient[], {
+      musicStartS,
+      musicEndS: 3,
+      maxEventsPerSecond: 16,
+      enabled: true,
+      lanes: quietLanes,
+      downbeats: [1.5, 2.0, 2.5],
+      beats: [1.5, 2.0, 2.5],
+      pan: {
+        ...panDefaults,
+        panEnergyFloor: 0.9,
+        panHookEnabled: false,
+        panHookByS: 1.0,
+      },
+    });
+    const pans = markers.filter((marker) => marker.kind === "translate");
+    expect(pans.some((marker) => marker.reason?.includes("Hook pan"))).toBe(false);
   });
 
   it("counts translate markers separately from zoom and rotate", () => {

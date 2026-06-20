@@ -709,6 +709,7 @@ def _storyboard_response(
             pan_min_decay_s=config.spatial_fx.pan_min_decay_s,
             pan_energy_threshold=config.spatial_fx.pan_energy_threshold,
             pan_energy_floor=config.spatial_fx.pan_energy_floor,
+            pan_hook_enabled=config.spatial_fx.pan_hook_enabled,
             pan_hook_by_s=config.spatial_fx.pan_hook_by_s,
         ),
         retention=RetentionSettingsResponse(

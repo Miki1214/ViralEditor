@@ -15,6 +15,7 @@ export interface PanPlanSettings {
   panBeatMode: PanBeatMode;
   panEnergyThreshold: number;
   panEnergyFloor: number;
+  panHookEnabled: boolean;
   panHookByS: number;
 }
 
@@ -23,6 +24,7 @@ const DEFAULT_PAN_SETTINGS: PanPlanSettings = {
   panBeatMode: "auto",
   panEnergyThreshold: 0.45,
   panEnergyFloor: 0.2,
+  panHookEnabled: true,
   panHookByS: 1.0,
 };
 
@@ -244,8 +246,12 @@ function ensureHookPan(
   downbeatTimes: number[],
   musicStartS: number,
   musicEndS: number,
+  panHookEnabled: boolean,
   panHookByS: number,
 ): FxMarker[] {
+  if (!panHookEnabled) {
+    return selected;
+  }
   if (selected.some((event) => event.timeS <= panHookByS + 1e-6)) {
     return selected;
   }
@@ -359,6 +365,7 @@ function planTranslationMarkers(
     downbeatTimes,
     musicStartS,
     musicEndS,
+    pan.panHookEnabled,
     pan.panHookByS,
   );
 }

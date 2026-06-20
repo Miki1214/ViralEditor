@@ -190,6 +190,7 @@ def plan_spatial_fx(
             pan_beat_mode=fx_cfg.pan_beat_mode,
             pan_energy_threshold=fx_cfg.pan_energy_threshold,
             pan_energy_floor=fx_cfg.pan_energy_floor,
+            pan_hook_enabled=fx_cfg.pan_hook_enabled,
             pan_hook_by_s=fx_cfg.pan_hook_by_s,
         )
         events = [
