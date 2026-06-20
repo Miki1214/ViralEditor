@@ -5,6 +5,7 @@ import {
   clearSlotClip,
   compositePreviewUrl,
   createDraftJob,
+  fetchCompositePreview,
   fetchHealth,
   fetchJobs,
   fetchStages,
@@ -25,7 +26,13 @@ import { HookOverlayPanel } from "./components/HookOverlayPanel";
 import type { FormState } from "./components/JobForm";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
+import { DebugConsolePanel } from "./components/DebugConsolePanel";
 import { PhonePreview, type PreviewTransportRestore } from "./components/PhonePreview";
+import {
+  installDebugConsoleCapture,
+  isDebugMode,
+  pushDebugLog,
+} from "./utils/debugLog";
 import { emitPlayheadUi } from "./utils/playheadBus";
 import type {
   BlockPlayheadChangeHandler,
@@ -67,6 +74,9 @@ export default function App() {
   const [storyboardSaving, setStoryboardSaving] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewReady, setPreviewReady] = useState(false);
+  const [validatedPreviewUrl, setValidatedPreviewUrl] = useState<string | null>(null);
+  const [previewLoadError, setPreviewLoadError] = useState<string | null>(null);
+  const debugMode = isDebugMode();
   const [blockPlayheadS, setBlockPlayheadS] = useState(0);
   const blockPlayheadRef = useRef(0);
   const [compositePreviewPlaying, setCompositePreviewPlaying] = useState(false);
@@ -547,9 +557,68 @@ export default function App() {
       : null;
 
   useEffect(() => {
+    if (!debugMode) return;
+    pushDebugLog("info", "app", "Debug mode enabled");
+    return installDebugConsoleCapture();
+  }, [debugMode]);
+
+  useEffect(() => {
+    if (error && debugMode) {
+      pushDebugLog("error", "app", error);
+    }
+  }, [error, debugMode]);
+
+  useEffect(() => {
+    if (!activeJobId || !previewReady || !compositeUrl) {
+      setValidatedPreviewUrl(null);
+      setPreviewLoadError(null);
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    const force = previewVersion > 0;
+
+    void (async () => {
+      if (debugMode) {
+        pushDebugLog("info", "preview", "Fetching composite preview…", compositeUrl);
+        const result = await fetchCompositePreview(activeJobId, force);
+        if (cancelled) return;
+        if (!result.ok) {
+          pushDebugLog("error", "preview", `HTTP ${result.status}`, result.detail);
+          setPreviewLoadError(result.detail);
+          setValidatedPreviewUrl(null);
+          return;
+        }
+        objectUrl = URL.createObjectURL(result.blob);
+        pushDebugLog(
+          "info",
+          "preview",
+          `Preview loaded (${Math.round(result.blob.size / 1024)} KB)`,
+        );
+        setPreviewLoadError(null);
+        setValidatedPreviewUrl(objectUrl);
+        return;
+      }
+
+      setPreviewLoadError(null);
+      setValidatedPreviewUrl(compositeUrl);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [activeJobId, previewReady, previewVersion, compositeUrl, debugMode]);
+
+  const phonePreviewUrl = debugMode ? validatedPreviewUrl : compositeUrl;
+
+  useEffect(() => {
     setBlockPlayheadS(0);
     setCompositePreviewPlaying(false);
-  }, [activeJobId, storyboard?.music_start_s, storyboard?.total_duration_s, compositeUrl]);
+  }, [activeJobId, storyboard?.music_start_s, storyboard?.total_duration_s, phonePreviewUrl]);
 
   return (
     <div className="min-h-screen">
@@ -651,7 +720,7 @@ export default function App() {
                 saving={storyboardSaving}
                 blockPlayheadS={blockPlayheadS}
                 onBlockPlayheadChange={handleBlockPlayheadChange}
-                compositePreviewActive={previewReady && compositeUrl != null}
+                compositePreviewActive={previewReady && phonePreviewUrl != null}
                 compositePreviewPlaying={compositePreviewPlaying}
                 onToggleCompositePreview={toggleCompositePreview}
                 onSeekCompositePreview={seekCompositeFromBlock}
@@ -712,7 +781,8 @@ export default function App() {
               emphasisColor={form.emphasisColor}
               fontFamily={form.fontFamily}
               safePaddingPct={form.safePaddingPct}
-              videoPreviewUrl={compositeUrl}
+              videoPreviewUrl={phonePreviewUrl}
+              loadErrorMessage={previewLoadError}
               compositeMode={previewReady}
               storyboard={storyboard}
               loopMode={previewLoopMode}
@@ -748,6 +818,7 @@ export default function App() {
                 Refresh preview
               </button>
             )}
+            {debugMode && <DebugConsolePanel />}
           </div>
         </aside>
       </main>

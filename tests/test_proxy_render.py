@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from viral_editor.models import SpeedRampPlan, SpeedSegment
@@ -189,7 +191,10 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
     assert "concat=n=2:v=1:a=0[composed]" not in graph
     assert "drawtext" in graph
     assert "scale=w='trunc(iw*(" in graph
-    assert "rotate=a='if(between(t" in graph
+    assert "rotate=enable='between(t," in graph
+    assert "eval=frame" in graph
+    assert re.search(r"rotate=[^\]]*eval=frame", graph) is None
+    assert "between(t\\," not in graph
     assert "[outv]" in graph
 
 

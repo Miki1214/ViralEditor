@@ -10,6 +10,20 @@ from viral_editor.utils.ffmpeg import FFmpegError, resolve_drawtext_fontfile, ru
 from viral_editor.video.spatial_fx import rotate_direction
 
 COMPOSITE_FPS = 30
+# Preview proxy is small — boost rotation so sub-degree shakes read on a phone frame.
+PREVIEW_ROTATE_GAIN = 3.0
+MIN_ROTATE_DECAY_S = 0.15
+
+
+def _fx_decay_ramp(t0: float, dur: float) -> str:
+    """Linear 1→0 ramp; commas unescaped — used inside quoted ffmpeg expressions."""
+    return f"(1-(t-{t0:.6f})/{dur:.6f})"
+
+
+def _zoom_scale_factor(t0: float, dur: float, zoom: float) -> str:
+    t1 = t0 + dur
+    ramp = _fx_decay_ramp(t0, dur)
+    return f"if(between(t,{t0:.6f},{t1:.6f}),1+({zoom:.6f}-1)*{ramp},1)"
 
 
 def _normalize_segment_timeline(parts: list[str], input_ref: str, label: str) -> str:
@@ -304,28 +318,37 @@ def _apply_spatial_fx_chain(
 
     for index, event in enumerate(fx_events[:max_events]):
         t0 = event.timestamp_s
-        dur = max(event.decay_frames / max(fps, 1.0), 1.0 / fps)
+        if event.kind == "rotate":
+            dur = max(
+                event.decay_frames / max(fps, 1.0),
+                MIN_ROTATE_DECAY_S,
+                1.0 / fps,
+            )
+        else:
+            dur = max(event.decay_frames / max(fps, 1.0), 1.0 / fps)
         t1 = t0 + dur
         out_label = f"fx{index}"
         if event.kind == "zoom":
             zoom = 1.0 + (event.magnitude - 1.0) * intensity
-            factor = (
-                f"if(between(t\\,{t0:.6f}\\,{t1:.6f})\\,"
-                f"1+({zoom:.6f}-1)*(1-(t-{t0:.6f})/{dur:.6f})\\,1)"
-            )
+            factor = _zoom_scale_factor(t0, dur, zoom)
             parts.append(
                 f"[{current}]scale=w='trunc(iw*({factor}))':h='trunc(ih*({factor}))':eval=frame,"
                 f"crop={width}:{height}:(iw-ow)/2:(ih-oh)/2[{out_label}]"
             )
         else:
             sign = rotate_direction(event, seed=seed)
-            radians = event.magnitude * sign * intensity * 3.14159265 / 180.0
-            angle = (
-                f"if(between(t\\,{t0:.6f}\\,{t1:.6f})\\,"
-                f"{radians:.8f}*(1-(t-{t0:.6f})/{dur:.6f})\\,0)"
+            radians = (
+                event.magnitude
+                * sign
+                * intensity
+                * PREVIEW_ROTATE_GAIN
+                * 3.14159265
+                / 180.0
             )
+            ramp = _fx_decay_ramp(t0, dur)
             parts.append(
-                f"[{current}]rotate=a='{angle}':c=none:ow={width}:oh={height}[{out_label}]"
+                f"[{current}]rotate=enable='between(t,{t0:.6f},{t1:.6f})':"
+                f"a='{radians:.8f}*{ramp}':c=none:ow={width}:oh={height}[{out_label}]"
             )
         current = out_label
 
@@ -610,7 +633,10 @@ def render_composite(
     try:
         run_ffmpeg(command)
     except FFmpegError as exc:
-        raise RuntimeError(f"Composite preview render failed: {exc}") from exc
+        detail = str(exc)
+        if exc.stderr:
+            detail = f"{detail}\n{exc.stderr}"
+        raise RuntimeError(f"Composite preview render failed: {detail}") from exc
     return out_path
 
 

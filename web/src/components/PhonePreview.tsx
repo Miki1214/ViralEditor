@@ -21,6 +21,8 @@ interface PhonePreviewProps {
   fontFamily: string;
   safePaddingPct: number;
   videoPreviewUrl: string | null;
+  /** Server-side or probe error message for composited preview */
+  loadErrorMessage?: string | null;
   /** When true, hook title overlay is baked into the composite video */
   compositeMode?: boolean;
   storyboard?: StoryboardPayload | null;
@@ -68,6 +70,7 @@ export function PhonePreview({
   fontFamily,
   safePaddingPct,
   videoPreviewUrl,
+  loadErrorMessage = null,
   compositeMode = false,
   storyboard = null,
   loopMode = "block",
@@ -104,7 +107,12 @@ export function PhonePreview({
     setLoadFailed(false);
     transportReadyRef.current = false;
     ignorePauseRef.current = previewRestoreRef?.current != null;
-  }, [videoPreviewUrl, previewRestoreRef]);
+  }, [videoPreviewUrl, previewRestoreRef, loadErrorMessage]);
+
+  const showPreviewError = loadFailed || Boolean(loadErrorMessage);
+  const previewErrorText =
+    loadErrorMessage ??
+    "Preview failed to load — use Refresh preview after assigning clips";
 
   useEffect(() => {
     if (!compositeMode || !videoPreviewUrl) return;
@@ -250,9 +258,9 @@ export function PhonePreview({
               }}
               onError={() => setLoadFailed(true)}
             />
-            {loadFailed && (
+            {showPreviewError && (
               <div className="absolute inset-0 flex items-center justify-center bg-monitor-bg/90 px-4 text-center font-mono text-[10px] text-hook-gold">
-                Preview failed to load — use Refresh preview after assigning clips
+                {previewErrorText}
               </div>
             )}
           </>

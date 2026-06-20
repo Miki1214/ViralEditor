@@ -278,3 +278,30 @@ export function compositePreviewUrl(jobId: string, force = false): string {
   const query = params.toString();
   return `/api/jobs/${jobId}/preview${query ? `?${query}` : ""}`;
 }
+
+export async function fetchCompositePreview(
+  jobId: string,
+  force = false,
+): Promise<
+  | { ok: true; blob: Blob; url: string }
+  | { ok: false; status: number; detail: string; url: string }
+> {
+  const url = compositePreviewUrl(jobId, force);
+  const res = await fetch(url);
+  if (res.ok) {
+    return { ok: true, blob: await res.blob(), url };
+  }
+  return { ok: false, status: res.status, detail: await parseError(res), url };
+}
+
+/** @deprecated use fetchCompositePreview */
+export async function probeCompositePreview(
+  jobId: string,
+  force = false,
+): Promise<{ ok: true; url: string } | { ok: false; status: number; detail: string; url: string }> {
+  const result = await fetchCompositePreview(jobId, force);
+  if (result.ok) {
+    return { ok: true, url: result.url };
+  }
+  return result;
+}
