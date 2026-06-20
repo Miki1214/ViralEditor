@@ -95,6 +95,19 @@ export interface WaveformPoint {
   v: number;
 }
 
+export interface ScopeLaneSeries {
+  id: string;
+  label: string;
+  points: WaveformPoint[];
+}
+
+export interface ChromaGram {
+  times: number[];
+  pitch_classes: string[];
+  frames: number[][];
+  tonic: string | null;
+}
+
 export interface TargetLoopQuality {
   target_duration_s: number;
   loop_quality_pct: number;
@@ -107,8 +120,11 @@ export interface WaveformPayload {
   beat_engine: string | null;
   points: WaveformPoint[];
   transients: Transient[];
+  beats: number[];
   downbeats: number[];
   sections: MusicSection[];
+  lanes: ScopeLaneSeries[];
+  chroma: ChromaGram | null;
   blocks: MusicBlock[];
   selected_block_id: string | null;
   target_match_failed?: boolean;

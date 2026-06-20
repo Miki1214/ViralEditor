@@ -6,6 +6,7 @@ import { RetentionFxPanel } from "./RetentionFxPanel";
 import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
+import { MusicDetailRack } from "./scope/MusicDetailRack";
 
 function hookSourceBudgetS(storyboard: StoryboardPayload, slot: StorySlot): number {
   if (slot.role === "hook") {
@@ -342,6 +343,16 @@ export function StoryboardPanel({
             selectedSlotId={selectedSlotId}
             playheadS={blockPlayheadS}
             onSelectSlot={selectSlotAndSeek}
+          />
+          <MusicDetailRack
+            lanes={waveform.lanes ?? []}
+            chroma={waveform.chroma ?? null}
+            window={{
+              startS: storyboard.music_start_s,
+              endS: storyboard.music_end_s,
+            }}
+            viewWidth={640}
+            playheadLocalS={blockPlayheadS}
           />
           <StoryboardBlockPlayer
             jobId={jobId}

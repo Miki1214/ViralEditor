@@ -17,6 +17,7 @@ from viral_editor.api.music import (
     load_music_blocks,
     load_music_structure,
     load_onset_envelope,
+    load_scope_lanes,
     refresh_music_selection,
     suggest_blocks_from_artifacts,
 )
@@ -360,6 +361,7 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
         block_plan,
         structure=load_music_structure(temp_dir),
         features=load_beat_features(temp_dir),
+        scope_lanes=load_scope_lanes(temp_dir),
     )
 
 

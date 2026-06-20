@@ -136,6 +136,23 @@ class TargetLoopQuality(DomainModel):
     loop_quality_pct: int = Field(ge=0, le=100)
 
 
+class ScopeLaneSeries(DomainModel):
+    """One downsampled lane for the Music detail rack."""
+
+    id: str
+    label: str
+    points: list[WaveformPoint] = Field(default_factory=list)
+
+
+class ChromaGram(DomainModel):
+    """Beat-synchronous pitch-class heatmap for the Music detail rack."""
+
+    times: list[float] = Field(default_factory=list)
+    pitch_classes: list[str] = Field(default_factory=list)
+    frames: list[list[float]] = Field(default_factory=list)
+    tonic: str | None = None
+
+
 class WaveformPayload(DomainModel):
     """Downsampled scope data for the Control Room UI."""
 
@@ -145,8 +162,11 @@ class WaveformPayload(DomainModel):
     beat_engine: str | None = None
     points: list[WaveformPoint] = Field(default_factory=list)
     transients: list[Transient] = Field(default_factory=list)
+    beats: list[float] = Field(default_factory=list)
     downbeats: list[float] = Field(default_factory=list)
     sections: list[MusicSection] = Field(default_factory=list)
+    lanes: list[ScopeLaneSeries] = Field(default_factory=list)
+    chroma: ChromaGram | None = None
     blocks: list[MusicBlock] = Field(default_factory=list)
     selected_block_id: str | None = None
     target_match_failed: bool = False

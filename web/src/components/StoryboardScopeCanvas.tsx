@@ -2,6 +2,20 @@ import { useMemo } from "react";
 import type { SpatialFxSettings, StoryboardPayload, WaveformPayload } from "../types";
 import { planSpatialFxMarkers } from "../utils/spatialFxMarkers";
 import { slotColorForIndex } from "../utils/slotColors";
+import { ScopeBeatGrid } from "./scope/ScopeBeatGrid";
+import { SectionRibbon } from "./scope/SectionRibbon";
+import {
+  buildTimeTicks,
+  formatScopeTime,
+  LABEL_COLOR,
+  RULER_BG,
+  SCOPE_PAD_X,
+  SCOPE_RULER_HEIGHT,
+  SCOPE_SECTION_RIBBON_HEIGHT,
+  TICK_COLOR,
+  TRACE,
+} from "./scope/scopeTheme";
+import { cropTimesToWindow, timeToX, type ScopeWindow } from "./scope/scopeWindow";
 
 interface StoryboardScopeCanvasProps {
   waveform: WaveformPayload;
@@ -12,48 +26,13 @@ interface StoryboardScopeCanvasProps {
   onSelectSlot?: (slotId: string) => void;
 }
 
-const TRACE = "#3DDC84";
 const ZOOM = "#F4C430";
 const ROTATE = "#38BDF8";
-const TICK_COLOR = "rgba(139,146,152,0.35)";
-const LABEL_COLOR = "#8B9298";
 const WAVEFORM_HEIGHT = 72;
-const RULER_HEIGHT = 22;
-const TOTAL_HEIGHT = WAVEFORM_HEIGHT + RULER_HEIGHT;
-const PAD_X = 4;
+const WAVEFORM_TOP = SCOPE_SECTION_RIBBON_HEIGHT;
+const TOTAL_HEIGHT = SCOPE_SECTION_RIBBON_HEIGHT + WAVEFORM_HEIGHT + SCOPE_RULER_HEIGHT;
+const PAD_X = SCOPE_PAD_X;
 const PAD_Y = 8;
-const TICK_INTERVALS_S = [1, 2, 5, 10, 15, 30, 60, 120, 300];
-
-function formatScopeTime(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(total / 60);
-  const secs = total % 60;
-  return `${minutes}:${secs.toString().padStart(2, "0")}`;
-}
-
-function timeTickInterval(durationS: number, innerW: number): number {
-  if (durationS <= 0 || innerW <= 0) return 10;
-  const targetSpacingPx = 96;
-  const roughInterval = (durationS / innerW) * targetSpacingPx;
-  for (const interval of TICK_INTERVALS_S) {
-    if (interval >= roughInterval) return interval;
-  }
-  return TICK_INTERVALS_S[TICK_INTERVALS_S.length - 1];
-}
-
-function buildTimeTicks(durationS: number, innerW: number): number[] {
-  if (durationS <= 0) return [0];
-  const interval = timeTickInterval(durationS, innerW);
-  const ticks: number[] = [];
-  for (let timeS = 0; timeS <= durationS + 0.001; timeS += interval) {
-    ticks.push(Math.min(timeS, durationS));
-  }
-  const last = ticks[ticks.length - 1];
-  if (last == null || Math.abs(last - durationS) > 0.5) {
-    ticks.push(durationS);
-  }
-  return ticks;
-}
 
 function blockPoints(
   points: WaveformPayload["points"],
@@ -74,7 +53,9 @@ export function StoryboardScopeCanvas({
   onSelectSlot,
 }: StoryboardScopeCanvasProps) {
   const blockStartS = storyboard.music_start_s;
+  const blockEndS = storyboard.music_end_s;
   const blockDurationS = storyboard.total_duration_s;
+  const scopeWindow: ScopeWindow = { startS: blockStartS, endS: blockEndS };
   const fxSettings = spatialFx ?? storyboard.spatial_fx;
   const orderedSlots = useMemo(
     () => [...storyboard.slots].sort((a, b) => a.order - b.order),
@@ -82,8 +63,17 @@ export function StoryboardScopeCanvas({
   );
 
   const points = useMemo(
-    () => blockPoints(waveform.points, blockStartS, storyboard.music_end_s),
-    [waveform.points, blockStartS, storyboard.music_end_s],
+    () => blockPoints(waveform.points, blockStartS, blockEndS),
+    [waveform.points, blockStartS, blockEndS],
+  );
+
+  const localBeats = useMemo(
+    () => cropTimesToWindow(waveform.beats ?? [], scopeWindow),
+    [waveform.beats, scopeWindow],
+  );
+  const localDownbeats = useMemo(
+    () => cropTimesToWindow(waveform.downbeats, scopeWindow),
+    [waveform.downbeats, scopeWindow],
   );
 
   const fxMarkers = useMemo(
@@ -117,7 +107,7 @@ export function StoryboardScopeCanvas({
     return points
       .map((point, index) => {
         const x = PAD_X + (point.t / blockDurationS) * innerW;
-        const y = PAD_Y + innerH - point.v * innerH;
+        const y = WAVEFORM_TOP + PAD_Y + innerH - point.v * innerH;
         return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
       })
       .join(" ");
@@ -172,20 +162,34 @@ export function StoryboardScopeCanvas({
           if (slotId) onSelectSlot(slotId);
         }}
       >
+        <SectionRibbon
+          sections={waveform.sections}
+          window={scopeWindow}
+          viewWidth={viewWidth}
+          y={0}
+        />
         <rect
           x={0}
-          y={WAVEFORM_HEIGHT}
+          y={WAVEFORM_TOP + WAVEFORM_HEIGHT}
           width={viewWidth}
-          height={RULER_HEIGHT}
-          fill="#101214"
+          height={SCOPE_RULER_HEIGHT}
+          fill={RULER_BG}
         />
         <line
           x1={PAD_X}
           x2={viewWidth - PAD_X}
-          y1={WAVEFORM_HEIGHT}
-          y2={WAVEFORM_HEIGHT}
+          y1={WAVEFORM_TOP + WAVEFORM_HEIGHT}
+          y2={WAVEFORM_TOP + WAVEFORM_HEIGHT}
           stroke={TICK_COLOR}
           strokeWidth={1}
+        />
+        <ScopeBeatGrid
+          beats={localBeats}
+          downbeats={localDownbeats}
+          window={{ startS: 0, endS: blockDurationS }}
+          viewWidth={viewWidth}
+          topY={WAVEFORM_TOP + PAD_Y}
+          bottomY={WAVEFORM_TOP + WAVEFORM_HEIGHT - PAD_Y}
         />
         {orderedSlots.map((slot, index) => {
           const selected = slot.id === selectedSlotId;
@@ -199,7 +203,7 @@ export function StoryboardScopeCanvas({
             <g key={slot.id}>
               <rect
                 x={x}
-                y={PAD_Y}
+                y={WAVEFORM_TOP + PAD_Y}
                 width={w}
                 height={innerH}
                 fill={selected ? color.fillActive : color.fill}
@@ -210,7 +214,7 @@ export function StoryboardScopeCanvas({
               {selected && (
                 <text
                   x={x + w / 2}
-                  y={PAD_Y + 10}
+                  y={WAVEFORM_TOP + PAD_Y + 10}
                   textAnchor="middle"
                   fill={color.stroke}
                   fontSize={8}
@@ -255,14 +259,14 @@ export function StoryboardScopeCanvas({
               const highlightPath = clipPoints
                 .map((point, index) => {
                   const x = PAD_X + (point.t / blockDurationS) * innerW;
-                  const y = PAD_Y + innerH - point.v * innerH;
+                  const y = WAVEFORM_TOP + PAD_Y + innerH - point.v * innerH;
                   return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
                 })
                 .join(" ");
               return (
                 <g key={`highlight-${slot.id}`}>
                   <clipPath id={`slot-clip-${slot.id}`}>
-                    <rect x={clipStart} y={PAD_Y} width={clipWidth} height={innerH} />
+                    <rect x={clipStart} y={WAVEFORM_TOP + PAD_Y} width={clipWidth} height={innerH} />
                   </clipPath>
                   <path
                     d={highlightPath}
@@ -287,14 +291,14 @@ export function StoryboardScopeCanvas({
                 <line
                   x1={x}
                   x2={x}
-                  y1={PAD_Y}
-                  y2={PAD_Y + innerH * 0.55}
+                  y1={WAVEFORM_TOP + PAD_Y}
+                  y2={WAVEFORM_TOP + PAD_Y + innerH * 0.55}
                   stroke={ZOOM}
                   strokeWidth={2}
                   opacity={0.95}
                 />
                 <polygon
-                  points={`${x},${PAD_Y + 2} ${x - 3},${PAD_Y + 8} ${x + 3},${PAD_Y + 8}`}
+                  points={`${x},${WAVEFORM_TOP + PAD_Y + 2} ${x - 3},${WAVEFORM_TOP + PAD_Y + 8} ${x + 3},${WAVEFORM_TOP + PAD_Y + 8}`}
                   fill={ZOOM}
                   opacity={0.95}
                 />
@@ -306,38 +310,16 @@ export function StoryboardScopeCanvas({
               <line
                 x1={x}
                 x2={x}
-                y1={PAD_Y + innerH * 0.45}
-                y2={PAD_Y + innerH}
+                y1={WAVEFORM_TOP + PAD_Y + innerH * 0.45}
+                y2={WAVEFORM_TOP + PAD_Y + innerH}
                 stroke={ROTATE}
                 strokeWidth={1.5}
                 opacity={0.9}
               />
-              <circle cx={x} cy={PAD_Y + innerH - 3} r={2.5} fill={ROTATE} opacity={0.95} />
+              <circle cx={x} cy={WAVEFORM_TOP + PAD_Y + innerH - 3} r={2.5} fill={ROTATE} opacity={0.95} />
             </g>
           );
         })}
-
-        {waveform.downbeats
-          .filter(
-            (timeS) =>
-              timeS >= blockStartS - 0.001 && timeS <= storyboard.music_end_s + 0.001,
-          )
-          .map((timeS) => {
-            const relative = timeS - blockStartS;
-            const x = PAD_X + (relative / blockDurationS) * innerW;
-            return (
-              <line
-                key={`downbeat-${timeS}`}
-                x1={x}
-                x2={x}
-                y1={WAVEFORM_HEIGHT - PAD_Y - 6}
-                y2={WAVEFORM_HEIGHT - PAD_Y}
-                stroke="rgba(139,146,152,0.45)"
-                strokeWidth={1.5}
-                style={{ pointerEvents: "none" }}
-              />
-            );
-          })}
 
         {orderedSlots.slice(0, -1).map((slot) => {
           const x = PAD_X + (slot.out_end_s / blockDurationS) * innerW;
@@ -346,8 +328,8 @@ export function StoryboardScopeCanvas({
               key={`boundary-${slot.id}`}
               x1={x}
               x2={x}
-              y1={PAD_Y}
-              y2={PAD_Y + innerH}
+              y1={WAVEFORM_TOP + PAD_Y}
+              y2={WAVEFORM_TOP + PAD_Y + innerH}
               stroke="rgba(139,146,152,0.35)"
               strokeWidth={1}
               strokeDasharray="3 2"
@@ -360,8 +342,8 @@ export function StoryboardScopeCanvas({
           <line
             x1={PAD_X + (playheadS / blockDurationS) * innerW}
             x2={PAD_X + (playheadS / blockDurationS) * innerW}
-            y1={PAD_Y}
-            y2={PAD_Y + innerH}
+            y1={WAVEFORM_TOP + PAD_Y}
+            y2={WAVEFORM_TOP + PAD_Y + innerH}
             stroke="#E8EAED"
             strokeWidth={1.5}
             style={{ pointerEvents: "none" }}
@@ -369,15 +351,15 @@ export function StoryboardScopeCanvas({
         )}
 
         {timeTicks.map((timeS) => {
-          const x = PAD_X + (timeS / blockDurationS) * innerW;
+          const x = timeToX(timeS, blockDurationS, PAD_X, innerW);
           const anchor = timeS <= 0 ? "start" : timeS >= blockDurationS - 0.5 ? "end" : "middle";
           return (
             <g key={`tick-${timeS}`} style={{ pointerEvents: "none" }}>
               <line
                 x1={x}
                 x2={x}
-                y1={WAVEFORM_HEIGHT - 4}
-                y2={WAVEFORM_HEIGHT + 5}
+                y1={WAVEFORM_TOP + WAVEFORM_HEIGHT - 4}
+                y2={WAVEFORM_TOP + WAVEFORM_HEIGHT + 5}
                 stroke={TICK_COLOR}
                 strokeWidth={1}
               />

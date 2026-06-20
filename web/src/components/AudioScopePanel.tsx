@@ -4,6 +4,7 @@ import { TARGET_DURATION_PRESETS } from "../constants/durations";
 import type { MusicBlock, WaveformPayload } from "../types";
 import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
 import { ScopeCanvas, blockPixelRange, scopeWidth } from "./ScopeCanvas";
+import { MusicDetailRack } from "./scope/MusicDetailRack";
 
 interface AudioScopePanelProps {
   jobId: string;
@@ -324,16 +325,23 @@ export function AudioScopePanel({
             Scroll horizontally to inspect the full track
           </p>
         )}
-        <div ref={scopeScrollRef} className="overflow-x-auto pb-1">
+        <div ref={scopeScrollRef} className="space-y-2 overflow-x-auto pb-1">
           <ScopeCanvas
             durationS={waveform.duration_s}
             points={waveform.points}
             transients={waveform.transients}
             sections={waveform.sections}
+            beats={waveform.beats ?? []}
             downbeats={waveform.downbeats}
             blocks={blocks}
             selectedBlockId={selectedBlockId}
             playingBlockId={playingBlockId}
+          />
+          <MusicDetailRack
+            lanes={waveform.lanes ?? []}
+            chroma={waveform.chroma ?? null}
+            window={{ startS: 0, endS: waveform.duration_s }}
+            viewWidth={scopeWidth(waveform.duration_s)}
           />
         </div>
       </div>

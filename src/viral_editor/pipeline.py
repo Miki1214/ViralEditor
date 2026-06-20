@@ -13,6 +13,7 @@ from viral_editor.audio.beat_detector import (
     save_beat_features,
     save_chroma,
     save_onset_envelope,
+    save_scope_lanes,
 )
 from viral_editor.audio.block_planner import selected_block, trim_timeline_to_window
 from viral_editor.audio.loop_planner import suggest_music_blocks_advanced
@@ -145,6 +146,11 @@ def run_pipeline(
             work_temp / "features.npz",
         )
         artifacts.append(features_path.name)
+        scope_lanes_path = save_scope_lanes(
+            analysis.scope_lanes,
+            work_temp / "scope_lanes.npz",
+        )
+        artifacts.append(scope_lanes_path.name)
 
         sections = analyze_structure(
             analysis.beat_features,

@@ -44,6 +44,40 @@ class AudioAnalysisResult:
     onset_envelope: np.ndarray
     chroma: np.ndarray
     beat_features: BeatSyncFeatures
+    scope_lanes: dict[str, np.ndarray]
+
+
+_MID_BAND_MAX_HZ = 2000
+_SCOPE_LANE_KEYS = ("rms", "band_low", "band_mid", "band_high")
+
+
+def _compute_scope_lanes(
+    y: np.ndarray,
+    stft_mag: np.ndarray,
+    freqs: np.ndarray,
+    *,
+    hop_length: int,
+    sr: int,
+    bass_band_hz: int,
+) -> dict[str, np.ndarray]:
+    """Per-frame envelopes aligned with the onset strength envelope."""
+    n_frames = stft_mag.shape[1]
+    low_mask = freqs <= bass_band_hz
+    mid_mask = (freqs > bass_band_hz) & (freqs <= _MID_BAND_MAX_HZ)
+    high_mask = freqs > _MID_BAND_MAX_HZ
+
+    band_low = stft_mag[low_mask].sum(axis=0) if low_mask.any() else np.zeros(n_frames)
+    band_mid = stft_mag[mid_mask].sum(axis=0) if mid_mask.any() else np.zeros(n_frames)
+    band_high = stft_mag[high_mask].sum(axis=0) if high_mask.any() else np.zeros(n_frames)
+
+    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    target_len = min(n_frames, rms.size, band_low.size)
+    return {
+        "rms": rms[:target_len].astype(np.float32),
+        "band_low": band_low[:target_len].astype(np.float32),
+        "band_mid": band_mid[:target_len].astype(np.float32),
+        "band_high": band_high[:target_len].astype(np.float32),
+    }
 
 
 def _estimate_tempo(
@@ -303,6 +337,15 @@ def analyze_audio_with_envelope(
     )
     freqs = librosa.fft_frequencies(sr=sr, n_fft=cfg.n_fft)
 
+    scope_lanes = _compute_scope_lanes(
+        y,
+        stft_mag,
+        freqs,
+        hop_length=cfg.hop_length,
+        sr=sr,
+        bass_band_hz=cfg.bass_band_hz,
+    )
+
     transients = _classify_transients(
         onsets_s,
         amplitudes_norm,
@@ -332,6 +375,7 @@ def analyze_audio_with_envelope(
         onset_envelope=onset_env,
         chroma=chroma,
         beat_features=beat_features,
+        scope_lanes=scope_lanes,
     )
 
 
@@ -351,3 +395,17 @@ def save_chroma(chroma: np.ndarray, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     np.save(path, chroma)
     return path
+
+
+def save_scope_lanes(scope_lanes: dict[str, np.ndarray], path: Path) -> Path:
+    """Persist per-frame scope lane envelopes for the Music detail UI."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, **scope_lanes)
+    return path
+
+
+def load_scope_lanes(path: Path) -> dict[str, np.ndarray] | None:
+    if not path.is_file():
+        return None
+    data = np.load(path)
+    return {key: data[key] for key in data.files if key in _SCOPE_LANE_KEYS}

@@ -28,6 +28,12 @@ def load_onset_envelope(temp_dir: Path) -> np.ndarray:
     return np.load(path)
 
 
+def load_scope_lanes(temp_dir: Path) -> dict[str, np.ndarray] | None:
+    from viral_editor.audio.beat_detector import load_scope_lanes as _load_scope_lanes
+
+    return _load_scope_lanes(temp_dir / "scope_lanes.npz")
+
+
 def load_chroma(temp_dir: Path) -> np.ndarray | None:
     path = temp_dir / "chroma.npy"
     if not path.is_file():

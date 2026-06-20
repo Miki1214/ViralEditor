@@ -121,6 +121,10 @@ def test_analyze_audio_with_envelope_writes_npy(tmp_path: Path) -> None:
     assert result.beat_features.meta.engine in {"librosa", "beat-this"}
     assert result.beat_features.chroma_sync.ndim == 2
     assert result.beat_features.chroma_sync.shape[1] == result.beat_features.meta.n_beats
+    assert set(result.scope_lanes.keys()) == {"rms", "band_low", "band_mid", "band_high"}
+    for lane in result.scope_lanes.values():
+        assert lane.ndim == 1
+        assert lane.size > 0
 
 
 def test_downbeats_are_subset_of_beats(tmp_path: Path) -> None:

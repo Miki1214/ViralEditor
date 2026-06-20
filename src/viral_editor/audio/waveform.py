@@ -10,7 +10,24 @@ from viral_editor.audio.loop_planner import (
     CANONICAL_TARGET_DURATIONS_S,
     list_target_loop_qualities,
 )
-from viral_editor.models import AudioTimeline, MusicBlockPlan, MusicStructurePlan, WaveformPayload, WaveformPoint
+from viral_editor.models import (
+    AudioTimeline,
+    ChromaGram,
+    MusicBlockPlan,
+    MusicStructurePlan,
+    ScopeLaneSeries,
+    WaveformPayload,
+    WaveformPoint,
+)
+
+PITCH_CLASSES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+SCOPE_LANE_LABELS = {
+    "rms": "Loudness",
+    "band_low": "Low",
+    "band_mid": "Mid",
+    "band_high": "High",
+}
+SCOPE_LANE_ORDER = ("rms", "band_low", "band_mid", "band_high")
 
 
 def downsample_envelope(
@@ -49,6 +66,65 @@ def downsample_envelope(
     return points
 
 
+def build_chroma_gram(
+    features: BeatSyncFeatures,
+    *,
+    max_cols: int = 400,
+) -> ChromaGram | None:
+    chroma = features.chroma_sync
+    if chroma.size == 0 or chroma.ndim != 2:
+        return None
+    n_beats = chroma.shape[1]
+    stride = max(1, int(np.ceil(n_beats / max_cols)))
+    indices = list(range(0, n_beats, stride))
+    beat_times = features.beat_times_s
+    times = [round(float(beat_times[index]), 4) for index in indices if index < beat_times.size]
+    frames: list[list[float]] = []
+    for index in indices:
+        column = chroma[:, index].astype(float)
+        peak = float(column.max()) if column.size else 1.0
+        if peak <= 0:
+            peak = 1.0
+        frames.append([round(float(value / peak), 4) for value in column])
+    if not frames:
+        return None
+    return ChromaGram(
+        times=times,
+        pitch_classes=list(PITCH_CLASSES),
+        frames=frames,
+        tonic=features.meta.key,
+    )
+
+
+def build_scope_lane_series(
+    scope_lanes: dict[str, np.ndarray] | None,
+    *,
+    duration_s: float,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> list[ScopeLaneSeries]:
+    if not scope_lanes:
+        return []
+    lanes: list[ScopeLaneSeries] = []
+    for lane_id in SCOPE_LANE_ORDER:
+        envelope = scope_lanes.get(lane_id)
+        if envelope is None or envelope.size == 0:
+            continue
+        lanes.append(
+            ScopeLaneSeries(
+                id=lane_id,
+                label=SCOPE_LANE_LABELS.get(lane_id, lane_id),
+                points=downsample_envelope(
+                    envelope,
+                    duration_s=duration_s,
+                    hop_length=hop_length,
+                    sr=sr,
+                ),
+            )
+        )
+    return lanes
+
+
 def build_waveform_payload(
     timeline: AudioTimeline,
     onset_envelope: np.ndarray,
@@ -58,11 +134,14 @@ def build_waveform_payload(
     sr: int = DEFAULT_SR,
     structure: MusicStructurePlan | None = None,
     features: BeatSyncFeatures | None = None,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> WaveformPayload:
     blocks = sorted(block_plan.blocks, key=lambda block: block.loop_quality, reverse=True)
     downbeats: list[float] = []
+    beats: list[float] = []
     if features is not None:
         downbeats = [round(float(t), 4) for t in features.downbeat_times_s.tolist()]
+        beats = [round(float(t), 4) for t in features.beat_times_s.tolist()]
     sections = structure.sections if structure is not None else []
     key = structure.key if structure is not None else (features.meta.key if features else None)
     beat_engine = structure.beat_engine if structure is not None else (
@@ -103,8 +182,16 @@ def build_waveform_payload(
             sr=sr,
         ),
         transients=timeline.transients,
+        beats=beats,
         downbeats=downbeats,
         sections=sections,
+        lanes=build_scope_lane_series(
+            scope_lanes,
+            duration_s=timeline.audio_duration_seconds,
+            hop_length=hop_length,
+            sr=sr,
+        ),
+        chroma=build_chroma_gram(features) if features is not None else None,
         blocks=blocks,
         selected_block_id=block_plan.selected_block_id,
         target_match_failed=block_plan.target_match_failed,

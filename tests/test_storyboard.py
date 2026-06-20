@@ -19,7 +19,7 @@ from viral_editor.audio.storyboard import (
     storyboard_filled_enough,
     storyboard_to_segments,
 )
-from viral_editor.models import MediaInfo, MusicBlock, Transient
+from viral_editor.models import MediaInfo, MusicBlock, MusicBlockPlan, Transient
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "audio"
 
@@ -197,6 +197,7 @@ def test_plan_and_relayout_never_overlap_for_varied_durations() -> None:
 def test_validation_drop_fixture_storyboard() -> None:
     """End-to-end: validation_drop.wav should plan a single non-overlapping hook slot."""
     from viral_editor.audio.beat_detector import AudioDspConfig, analyze_audio_with_envelope
+    from viral_editor.audio.waveform import build_waveform_payload
 
     path = FIXTURES_DIR / "validation_drop.wav"
     assert path.is_file()
@@ -221,6 +222,21 @@ def test_validation_drop_fixture_storyboard() -> None:
         features=result.beat_features,
     )
     _assert_slots_tile_timeline(relaid, storyboard.total_duration_s)
+
+    block_plan = MusicBlockPlan(
+        target_duration_s=10.0,
+        track_duration_s=duration,
+        blocks=[],
+    )
+    payload = build_waveform_payload(
+        result.timeline,
+        result.onset_envelope,
+        block_plan,
+        features=result.beat_features,
+        scope_lanes=result.scope_lanes,
+    )
+    assert payload.lanes
+    assert payload.chroma is not None
 
 
 def test_plan_storyboard_marks_max_drop_as_punch() -> None:
