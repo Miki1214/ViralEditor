@@ -89,6 +89,42 @@ def test_periodic_features_high_loop_quality() -> None:
     assert top.loop_quality >= 0.75
 
 
+def _patch_candidate_enumeration(
+    monkeypatch: pytest.MonkeyPatch,
+    per_target_fake,
+) -> None:
+    """Patch single-pass and per-target enumerators for tests that mock candidates."""
+
+    def fake_all(
+        timeline: AudioTimeline,
+        features: BeatSyncFeatures,
+        sections: list[MusicSection],
+        **kwargs: object,
+    ) -> list:
+        from viral_editor.audio.loop_planner import CANONICAL_TARGET_DURATIONS_S
+
+        merged: list = []
+        for duration in CANONICAL_TARGET_DURATIONS_S:
+            merged.extend(
+                per_target_fake(
+                    timeline,
+                    features,
+                    sections,
+                    target_duration_s=float(duration),
+                )
+            )
+        return merged
+
+    monkeypatch.setattr(
+        "viral_editor.audio.loop_planner._enumerate_all_phrase_candidates",
+        fake_all,
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
+        per_target_fake,
+    )
+
+
 def test_list_target_loop_qualities(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -101,6 +137,7 @@ def test_list_target_loop_qualities(
         _sections: list[MusicSection],
         *,
         target_duration_s: float,
+        **_: object,
     ) -> list:
         from viral_editor.audio.loop_planner import _Candidate
 
@@ -142,10 +179,7 @@ def test_list_target_loop_qualities(
             ]
         return []
 
-    monkeypatch.setattr(
-        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
-        fake_enumerate,
-    )
+    _patch_candidate_enumeration(monkeypatch, fake_enumerate)
     from viral_editor.audio.loop_planner import list_target_loop_qualities
 
     qualities = list_target_loop_qualities(timeline, features, [])
@@ -168,6 +202,7 @@ def test_tied_best_loop_targets_share_top_score(
         _sections: list[MusicSection],
         *,
         target_duration_s: float,
+        **_: object,
     ) -> list:
         from viral_editor.audio.loop_planner import _Candidate
 
@@ -209,10 +244,7 @@ def test_tied_best_loop_targets_share_top_score(
             ]
         return []
 
-    monkeypatch.setattr(
-        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
-        fake_enumerate,
-    )
+    _patch_candidate_enumeration(monkeypatch, fake_enumerate)
     from viral_editor.audio.waveform import build_waveform_payload
     import numpy as np
     from viral_editor.models import MusicBlockPlan
@@ -236,10 +268,7 @@ def test_build_waveform_payload_empty_loop_qualities(
     def fake_enumerate(*_args, **_kwargs) -> list:
         return []
 
-    monkeypatch.setattr(
-        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
-        fake_enumerate,
-    )
+    _patch_candidate_enumeration(monkeypatch, fake_enumerate)
     from viral_editor.audio.waveform import build_waveform_payload
     import numpy as np
     from viral_editor.models import MusicBlockPlan
@@ -268,6 +297,7 @@ def test_list_matchable_target_durations(
         _sections: list[MusicSection],
         *,
         target_duration_s: float,
+        **_: object,
     ) -> list:
         from viral_editor.audio.loop_planner import _Candidate
 
@@ -293,10 +323,7 @@ def test_list_matchable_target_durations(
             ]
         return []
 
-    monkeypatch.setattr(
-        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
-        fake_enumerate,
-    )
+    _patch_candidate_enumeration(monkeypatch, fake_enumerate)
     from viral_editor.audio.loop_planner import list_matchable_target_durations
 
     matchable = list_matchable_target_durations(timeline, features, [])
@@ -315,7 +342,7 @@ def test_no_match_suggests_nearest_duration(
         _sections: list[MusicSection],
         *,
         target_duration_s: float,
-        scope_lanes=None,
+        **_: object,
     ) -> list:
         from viral_editor.audio.loop_planner import _Candidate
 
@@ -341,10 +368,7 @@ def test_no_match_suggests_nearest_duration(
             ]
         return []
 
-    monkeypatch.setattr(
-        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
-        fake_enumerate,
-    )
+    _patch_candidate_enumeration(monkeypatch, fake_enumerate)
     plan = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=10.0)
     assert plan.use_full_track is True
     assert plan.target_match_failed is True
@@ -411,3 +435,37 @@ def test_adjacent_targets_prefer_different_duration_windows() -> None:
     best_20 = max(candidates_20, key=lambda item: item.loop_quality)
     best_25 = max(candidates_25, key=lambda item: item.loop_quality)
     assert (best_20.start_s, best_20.end_s) != (best_25.start_s, best_25.end_s)
+
+
+def test_build_block_catalog_covers_preset_targets() -> None:
+    from viral_editor.audio.loop_planner import CANONICAL_TARGET_DURATIONS_S, build_block_catalog
+
+    features = _synthetic_abab_features(n_beats=320, bpm=129.0)
+    timeline = _timeline(120.0, bpm=129.0)
+    catalog = build_block_catalog(timeline, features, [])
+
+    expected = {
+        str(int(duration))
+        for duration in CANONICAL_TARGET_DURATIONS_S
+        if duration <= timeline.audio_duration_seconds
+    }
+    assert set(catalog.plans) == expected
+    assert len(catalog.loop_qualities) == len(expected)
+    for entry in catalog.loop_qualities:
+        plan = catalog.plans[str(int(entry.target_duration_s))]
+        assert plan.blocks
+        assert entry.loop_quality_pct == round(min(100.0, max(b.loop_quality for b in plan.blocks) * 100.0))
+
+
+def test_plan_from_catalog_matches_fresh_plan() -> None:
+    from viral_editor.api.music import plan_from_catalog
+    from viral_editor.audio.loop_planner import build_block_catalog
+
+    features = _synthetic_abab_features(n_beats=320, bpm=129.0)
+    timeline = _timeline(120.0, bpm=129.0)
+    catalog = build_block_catalog(timeline, features, [])
+
+    cached = plan_from_catalog(catalog, 20.0)
+    assert cached is not None
+    fresh = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=20.0)
+    assert cached.model_dump() == fresh.model_dump()

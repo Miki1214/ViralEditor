@@ -109,9 +109,14 @@ def run_pipeline(
                 loaded.audio_path,
                 loaded.output_path,
             )
-        _emit(on_event, "config", "complete")
+        _emit(
+            on_event,
+            "config",
+            "complete",
+            message=Path(loaded.audio_path).name,
+        )
 
-        _emit(on_event, "ingest", "start")
+        _emit(on_event, "ingest", "start", message="Probing audio with ffprobe")
         ingest = validate_job(loaded)
         artifact_path = write_artifact(ingest, "media_info", work_temp)
         artifacts.append(artifact_path.name)
@@ -124,11 +129,17 @@ def run_pipeline(
             message=f"output_duration_s={ingest.output_duration_s:.2f}",
         )
 
-        _emit(on_event, "audio", "start")
+        _emit(on_event, "audio", "start", message=Path(loaded.audio_path).name)
+
+        def _audio_progress(message: str) -> None:
+            _emit(on_event, "audio", "info", message=message)
+
         analysis = analyze_audio_with_envelope(
             loaded.audio_path,
             expected_duration_s=ingest.audio.duration_s,
+            on_progress=_audio_progress,
         )
+        _emit(on_event, "audio", "info", message="Writing analysis artifacts")
         timeline_path = write_artifact(analysis.timeline, "audio_timeline", work_temp)
         artifacts.append(timeline_path.name)
         envelope_path = save_onset_envelope(
@@ -152,6 +163,7 @@ def run_pipeline(
         )
         artifacts.append(scope_lanes_path.name)
 
+        _emit(on_event, "audio", "info", message="Analyzing song structure (sections)")
         sections = analyze_structure(
             analysis.beat_features,
             transients=analysis.timeline.transients,
@@ -167,15 +179,54 @@ def run_pipeline(
 
         logger.info("Wrote %s", timeline_path.resolve())
         drop_count = sum(1 for t in analysis.timeline.transients if t.type == "drop")
+        section_labels = ", ".join(section.label for section in sections[:4])
+        if len(sections) > 4:
+            section_labels += f", +{len(sections) - 4} more"
+        _emit(
+            on_event,
+            "audio",
+            "info",
+            message=(
+                f"{len(sections)} sections"
+                + (f" ({section_labels})" if section_labels else "")
+            ),
+        )
 
-        block_plan = suggest_music_blocks_advanced(
+        _emit(
+            on_event,
+            "audio",
+            "info",
+            message="Planning loop blocks and preset length catalog",
+        )
+        from viral_editor.api.music import persist_music_block_catalog
+
+        catalog = persist_music_block_catalog(
+            work_temp,
             analysis.timeline,
             analysis.beat_features,
             sections,
-            target_duration_s=loaded.music.target_duration_s,
-            selected_block_id=loaded.music.selected_block_id,
             scope_lanes=analysis.scope_lanes,
+            on_progress=_audio_progress,
         )
+        artifacts.append("music_block_catalog.json")
+
+        catalog_key = str(int(round(loaded.music.target_duration_s)))
+        cached_plan = catalog.plans.get(catalog_key)
+        if cached_plan is not None:
+            block_plan = cached_plan.model_copy(deep=True)
+            if loaded.music.selected_block_id:
+                block_plan = block_plan.model_copy(
+                    update={"selected_block_id": loaded.music.selected_block_id}
+                )
+        else:
+            block_plan = suggest_music_blocks_advanced(
+                analysis.timeline,
+                analysis.beat_features,
+                sections,
+                target_duration_s=loaded.music.target_duration_s,
+                selected_block_id=loaded.music.selected_block_id,
+                scope_lanes=analysis.scope_lanes,
+            )
 
         if loaded.music.start_s is not None and loaded.music.end_s is not None:
             output_duration_s = loaded.music.end_s - loaded.music.start_s
@@ -223,6 +274,7 @@ def run_pipeline(
         if is_draft:
             from viral_editor.api.storyboard import persist_storyboard_for_job
 
+            _emit(on_event, "audio", "info", message="Building storyboard slots")
             persist_storyboard_for_job(loaded, work_temp, sections=sections)
             for stage in PIPELINE_STAGES[3:]:
                 _emit(

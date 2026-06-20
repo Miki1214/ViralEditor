@@ -16,6 +16,7 @@ from viral_editor.models import (
     MusicBlockPlan,
     MusicStructurePlan,
     ScopeLaneSeries,
+    TargetLoopQuality,
     WaveformPayload,
     WaveformPoint,
 )
@@ -150,6 +151,7 @@ def build_waveform_payload(
     structure: MusicStructurePlan | None = None,
     features: BeatSyncFeatures | None = None,
     scope_lanes: dict[str, np.ndarray] | None = None,
+    loop_qualities: list[TargetLoopQuality] | None = None,
 ) -> WaveformPayload:
     blocks = sorted(block_plan.blocks, key=lambda block: block.loop_quality, reverse=True)
     downbeats: list[float] = []
@@ -165,7 +167,8 @@ def build_waveform_payload(
 
     if features is not None:
         sections = structure.sections if structure is not None else []
-        loop_qualities = list_target_loop_qualities(timeline, features, sections)
+        if loop_qualities is None:
+            loop_qualities = list_target_loop_qualities(timeline, features, sections)
         matchable_targets = [entry.target_duration_s for entry in loop_qualities]
         if loop_qualities:
             max_loop_pct = max(entry.loop_quality_pct for entry in loop_qualities)

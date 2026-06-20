@@ -128,7 +128,7 @@ export function MusicDetailRack({
       </button>
 
       {open && (
-        <div className="overflow-x-auto pb-1">
+        <div className="pb-1">
           <svg
             id={panelId}
             viewBox={`0 0 ${viewWidth} ${totalHeight}`}

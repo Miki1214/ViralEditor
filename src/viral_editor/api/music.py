@@ -2,16 +2,27 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
 
 from viral_editor.audio.block_planner import apply_block_selection, selected_block, suggest_music_blocks
 from viral_editor.audio.features import BeatSyncFeatures, load_features
-from viral_editor.audio.loop_planner import suggest_music_blocks_advanced
+from viral_editor.audio.loop_planner import (
+    build_block_catalog,
+    suggest_music_blocks_advanced,
+)
 from viral_editor.audio.structure import analyze_structure
 from viral_editor.config import JobConfig
-from viral_editor.models import AudioTimeline, MusicBlockPlan, MusicStructurePlan, write_artifact
+from viral_editor.models import (
+    AudioTimeline,
+    MusicBlockCatalog,
+    MusicBlockPlan,
+    MusicStructurePlan,
+    read_artifact,
+    write_artifact,
+)
 
 
 def load_audio_timeline(temp_dir: Path) -> AudioTimeline:
@@ -62,6 +73,80 @@ def load_music_blocks(temp_dir: Path) -> MusicBlockPlan:
     return MusicBlockPlan.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def load_music_block_catalog(temp_dir: Path) -> MusicBlockCatalog | None:
+    path = temp_dir / "music_block_catalog.json"
+    if not path.is_file():
+        return None
+    return read_artifact(MusicBlockCatalog, path)
+
+
+def _catalog_key(target_duration_s: float) -> str:
+    return str(int(round(target_duration_s)))
+
+
+def _sections_for_planner(
+    temp_dir: Path,
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+) -> list:
+    structure = load_music_structure(temp_dir)
+    if structure is not None:
+        return structure.sections
+    return analyze_structure(
+        features,
+        transients=timeline.transients,
+        duration_s=timeline.audio_duration_seconds,
+    )
+
+
+def persist_music_block_catalog(
+    temp_dir: Path,
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    sections: list,
+    *,
+    scope_lanes: dict[str, np.ndarray] | None = None,
+    on_progress: Callable[[str], None] | None = None,
+) -> MusicBlockCatalog:
+    """Build and persist precomputed plans for all preset target lengths."""
+    catalog = build_block_catalog(
+        timeline,
+        features,
+        sections,
+        scope_lanes=scope_lanes,
+        on_progress=on_progress,
+    )
+    write_artifact(catalog, "music_block_catalog", temp_dir)
+    return catalog
+
+
+def ensure_music_block_catalog(
+    temp_dir: Path,
+    timeline: AudioTimeline,
+    features: BeatSyncFeatures,
+    sections: list,
+    *,
+    scope_lanes: dict[str, np.ndarray] | None = None,
+) -> MusicBlockCatalog:
+    catalog = load_music_block_catalog(temp_dir)
+    if catalog is not None:
+        return catalog
+    return persist_music_block_catalog(
+        temp_dir,
+        timeline,
+        features,
+        sections,
+        scope_lanes=scope_lanes,
+    )
+
+
+def plan_from_catalog(
+    catalog: MusicBlockCatalog,
+    target_duration_s: float,
+) -> MusicBlockPlan | None:
+    return catalog.plans.get(_catalog_key(target_duration_s))
+
+
 def suggest_blocks_from_artifacts(
     temp_dir: Path,
     timeline: AudioTimeline,
@@ -73,16 +158,7 @@ def suggest_blocks_from_artifacts(
     """Use beat-sync planner when ``features.npz`` exists, else legacy planner."""
     features = load_beat_features(temp_dir)
     if features is not None:
-        structure = load_music_structure(temp_dir)
-        sections = (
-            structure.sections
-            if structure is not None
-            else analyze_structure(
-                features,
-                transients=timeline.transients,
-                duration_s=timeline.audio_duration_seconds,
-            )
-        )
+        sections = _sections_for_planner(temp_dir, timeline, features)
         return suggest_music_blocks_advanced(
             timeline,
             features,
@@ -113,6 +189,8 @@ def refresh_music_selection(
     """Re-suggest blocks and sync ``JobConfig.music`` with the chosen window."""
     timeline = load_audio_timeline(temp_dir)
     envelope = load_onset_envelope(temp_dir)
+    features = load_beat_features(temp_dir)
+    scope_lanes = load_scope_lanes(temp_dir)
 
     music = config.music.model_copy(deep=True)
     if target_duration_s is not None:
@@ -130,15 +208,28 @@ def refresh_music_selection(
     )
 
     if target_changed or full_track_changed:
-        # Prior block ids (e.g. block_c or block_full) may not exist in the new plan.
         music.selected_block_id = None
-        plan = suggest_blocks_from_artifacts(
-            temp_dir,
-            timeline,
-            envelope,
-            target_duration_s=music.target_duration_s,
-            selected_block_id=None,
-        )
+        plan: MusicBlockPlan | None = None
+        if features is not None and not music.use_full_track:
+            catalog = load_music_block_catalog(temp_dir)
+            if catalog is None:
+                sections = _sections_for_planner(temp_dir, timeline, features)
+                catalog = persist_music_block_catalog(
+                    temp_dir,
+                    timeline,
+                    features,
+                    sections,
+                    scope_lanes=scope_lanes,
+                )
+            plan = plan_from_catalog(catalog, music.target_duration_s)
+        if plan is None:
+            plan = suggest_blocks_from_artifacts(
+                temp_dir,
+                timeline,
+                envelope,
+                target_duration_s=music.target_duration_s,
+                selected_block_id=None,
+            )
     else:
         try:
             plan = load_music_blocks(temp_dir)

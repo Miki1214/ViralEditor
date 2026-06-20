@@ -129,7 +129,9 @@ def find_energy_peaks(
 
     downbeat_list = [float(t) for t in np.asarray(downbeats).tolist()]
     peaks: list[_Peak] = []
-    for frame in _local_maxima(signal):
+    window_signal = signal[start_frame:end_frame]
+    for local_frame in _local_maxima(window_signal):
+        frame = start_frame + local_frame
         time_s = _frame_to_time(frame, hop_length=hop_length, sr=sr)
         if time_s < window_start_s - 1e-6 or time_s >= end_s - 1e-6:
             continue
@@ -174,8 +176,13 @@ def find_flux_peaks(
 
     signal = _normalize_lane(flux)
     end_s = window_end_s if window_end_s is not None else _frame_to_time(flux.size - 1, hop_length=hop_length, sr=sr)
+    start_frame = _time_to_frame(window_start_s, hop_length=hop_length, sr=sr)
+    end_frame = _time_to_frame(end_s, hop_length=hop_length, sr=sr)
+    start_frame = max(0, min(start_frame, signal.size - 1))
+    end_frame = max(start_frame + 1, min(end_frame, signal.size))
     peaks: list[_Peak] = []
-    for frame in _local_maxima(signal, min_prominence=0.06):
+    for local_frame in _local_maxima(signal[start_frame:end_frame], min_prominence=0.06):
+        frame = start_frame + local_frame
         time_s = _frame_to_time(frame, hop_length=hop_length, sr=sr)
         if time_s < window_start_s - 1e-6 or time_s >= end_s - 1e-6:
             continue
@@ -562,21 +569,25 @@ def retention_bonus_for_window(
     window_start_s: float,
     window_end_s: float,
 ) -> float:
-    """Compact 0–1 bonus for block scoring from policy metrics."""
-    interrupts = place_interrupts(
+    """Compact 0–1 bonus for block scoring — avoids full interrupt planning."""
+    if not scope_lanes:
+        return 0.5
+
+    peaks = find_energy_peaks(
         scope_lanes,
         downbeats,
         window_start_s=window_start_s,
         window_end_s=window_end_s,
     )
-    plan_score = score_plan(
-        scope_lanes,
-        downbeats,
-        interrupts,
-        window_start_s=window_start_s,
-        window_end_s=window_end_s,
-    )
-    return plan_score.overall
+    if not peaks:
+        return 0.25
+
+    window_dur = max(window_end_s - window_start_s, 1e-6)
+    rel_times = [peak.time_s - window_start_s for peak in peaks[:6]]
+    hook_score = 1.0 if any(t <= EARLY_HOOK_FX_BY_S for t in rel_times) else 0.35
+    density = min(len(rel_times) / max(window_dur / INTERRUPT_MAX_GAP_S, 1.0), 1.0)
+    downbeat_ratio = sum(1 for peak in peaks[:6] if peak.on_downbeat) / max(len(peaks[:6]), 1)
+    return min(1.0, hook_score * 0.4 + density * 0.35 + downbeat_ratio * 0.25)
 
 
 def pacing_density_score(

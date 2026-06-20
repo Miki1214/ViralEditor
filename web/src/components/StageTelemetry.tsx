@@ -105,6 +105,23 @@ function stageDurationMs(stageId: string, events: PipelineEvent[]): number | nul
   return (end.timestamp - start.timestamp) * 1000;
 }
 
+function latestStageInfo(events: PipelineEvent[], stageId: string): string | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.stage === stageId && event.action === "info" && event.message) {
+      return event.message;
+    }
+  }
+  return null;
+}
+
+function formatEventAction(action: PipelineEvent["action"]): string {
+  if (action === "info") {
+    return "…";
+  }
+  return action;
+}
+
 export function StageTelemetry({ stages, events, status, hasOutput = false }: StageTelemetryProps) {
   const statusLabel =
     status === "completed" && !hasOutput ? "analysis done" : status ?? "";
@@ -136,12 +153,15 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
           {stages.map((stage, index) => {
             const state = stageState(stage.id, events);
             const last = [...events].reverse().find((e) => e.stage === stage.id);
+            const activeStep = state === "active" ? latestStageInfo(events, stage.id) : null;
             const duration = stageDurationMs(stage.id, events);
             const durationHint =
               duration != null && state !== "active" ? ` · ${formatElapsedMs(duration)}` : "";
-            const tooltip = last?.message
-              ? `${stage.label}: ${stateLabels[state]}${durationHint} — ${last.message}`
-              : `${stage.label}: ${stateLabels[state]}${durationHint}`;
+            const tooltip = activeStep
+              ? `${stage.label}: ${activeStep}`
+              : last?.message
+                ? `${stage.label}: ${stateLabels[state]}${durationHint} — ${last.message}`
+                : `${stage.label}: ${stateLabels[state]}${durationHint}`;
 
             return (
               <div key={stage.id} className="flex shrink-0 items-center gap-1">
@@ -152,12 +172,19 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
                 )}
                 <div
                   title={tooltip}
-                  className={`flex items-center gap-1.5 whitespace-nowrap rounded border px-2.5 py-1 font-mono text-[11px] ${stateStyles[state]}`}
+                  className={`flex max-w-[11rem] flex-col gap-0.5 rounded border px-2.5 py-1 font-mono text-[11px] ${stateStyles[state]}`}
                 >
-                  <span>{stage.label}</span>
-                  <span className="text-[9px] uppercase tracking-wide opacity-75">
-                    {stateLabels[state]}
-                  </span>
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span>{stage.label}</span>
+                    <span className="text-[9px] uppercase tracking-wide opacity-75">
+                      {stateLabels[state]}
+                    </span>
+                  </div>
+                  {activeStep && (
+                    <span className="truncate text-[9px] normal-case tracking-normal opacity-80">
+                      {activeStep}
+                    </span>
+                  )}
                 </div>
               </div>
             );
@@ -187,26 +214,45 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
             </span>
           </button>
           {logsOpen && (
-            <div className="max-h-48 overflow-y-auto border-t border-monitor-border p-2 font-mono text-[10px] leading-relaxed text-monitor-muted">
-              {enrichedEvents.map(({ event, offsetMs, stageDurationMs: durationMs }, index) => (
-                <p key={`${event.timestamp}-${index}`} className="flex gap-2">
-                  <span className="w-[4.5rem] shrink-0 tabular-nums text-monitor-muted/70">
-                    {event.timestamp > 0 ? formatLogOffsetMs(offsetMs) : "—"}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="text-scope-trace">{event.stage}</span>
-                    {" · "}
-                    {event.action}
-                    {durationMs != null && (
-                      <>
-                        {" · "}
-                        <span className="text-scope-dim">{formatElapsedMs(durationMs)}</span>
-                      </>
-                    )}
-                    {event.message ? ` — ${event.message}` : ""}
-                  </span>
-                </p>
-              ))}
+            <div className="max-h-56 overflow-y-auto border-t border-monitor-border p-2 font-mono text-[10px] leading-relaxed text-monitor-muted">
+              {enrichedEvents.map(({ event, offsetMs, stageDurationMs: durationMs }, index) => {
+                const isInfo = event.action === "info";
+                return (
+                  <p
+                    key={`${event.timestamp}-${index}`}
+                    className={`flex gap-2 ${isInfo ? "text-monitor-muted/90" : ""}`}
+                  >
+                    <span className="w-[4.5rem] shrink-0 tabular-nums text-monitor-muted/70">
+                      {event.timestamp > 0 ? formatLogOffsetMs(offsetMs) : "—"}
+                    </span>
+                    <span className="min-w-0">
+                      <span className={isInfo ? "text-monitor-muted" : "text-scope-trace"}>
+                        {event.stage}
+                      </span>
+                      {" · "}
+                      <span className={isInfo ? "text-monitor-muted/70" : ""}>
+                        {formatEventAction(event.action)}
+                      </span>
+                      {!isInfo && durationMs != null && (
+                        <>
+                          {" · "}
+                          <span className="text-scope-dim">{formatElapsedMs(durationMs)}</span>
+                        </>
+                      )}
+                      {event.message ? (
+                        <>
+                          {isInfo ? " " : " — "}
+                          <span className={isInfo ? "text-monitor-text/85" : ""}>
+                            {event.message}
+                          </span>
+                        </>
+                      ) : (
+                        ""
+                      )}
+                    </span>
+                  </p>
+                );
+              })}
             </div>
           )}
         </div>

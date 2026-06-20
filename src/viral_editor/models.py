@@ -136,6 +136,13 @@ class TargetLoopQuality(DomainModel):
     loop_quality_pct: int = Field(ge=0, le=100)
 
 
+class MusicBlockCatalog(DomainModel):
+    """Precomputed block plans keyed by preset target duration (seconds as string)."""
+
+    plans: dict[str, MusicBlockPlan] = Field(default_factory=dict)
+    loop_qualities: list[TargetLoopQuality] = Field(default_factory=list)
+
+
 class ScopeLaneSeries(DomainModel):
     """One downsampled lane for the Music detail rack."""
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -334,14 +335,20 @@ def analyze_audio_with_envelope(
     *,
     config: AudioDspConfig | None = None,
     expected_duration_s: float | None = None,
+    on_progress: Callable[[str], None] | None = None,
 ) -> AudioAnalysisResult:
     """Analyze audio and return the timeline plus the onset strength envelope."""
     cfg = config or AudioDspConfig()
     resolved = audio_path.resolve()
 
+    def progress(message: str) -> None:
+        if on_progress is not None:
+            on_progress(message)
+
     if not resolved.is_file():
         raise AudioAnalysisError(f"Audio file not found: {resolved}")
 
+    progress(f"Decoding {resolved.name}")
     logger.info("Loading audio for DSP: %s", resolved)
     y, sr = librosa.load(resolved, sr=cfg.target_sr, mono=True)
     if y.size == 0:
@@ -358,6 +365,9 @@ def analyze_audio_with_envelope(
                 delta,
             )
 
+    progress(f"Track length {duration_s:.1f}s @ {sr} Hz")
+
+    progress("Onset envelope and chroma")
     onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=cfg.hop_length)
     chroma = librosa.feature.chroma_stft(
         y=y,
@@ -368,15 +378,22 @@ def analyze_audio_with_envelope(
 
     raw_bpm = _estimate_tempo(onset_env, sr=sr, hop_length=cfg.hop_length)
 
+    progress("Beat and downbeat detection")
     beat_track = infer_beats(resolved, y, sr, onset_env, hop_length=cfg.hop_length)
     global_bpm = beat_track.global_bpm
+    progress(
+        f"Beat engine {beat_track.engine} — {global_bpm:.1f} BPM, "
+        f"{beat_track.beat_times_s.size} beats"
+    )
     if abs(global_bpm - raw_bpm) > 5.0:
         logger.info("Beat engine BPM %.1f (tempo estimate %.1f)", global_bpm, raw_bpm)
 
+    progress("Beat-synced RMS, MFCC, and tonal features")
     beat_features = compute_beat_sync_features(
         y, sr, beat_track, hop_length=cfg.hop_length, n_fft=cfg.n_fft
     )
 
+    progress("Onset peak detection")
     onsets_s = librosa.onset.onset_detect(
         onset_envelope=onset_env,
         sr=sr,
@@ -409,6 +426,7 @@ def analyze_audio_with_envelope(
     )
     freqs = librosa.fft_frequencies(sr=sr, n_fft=cfg.n_fft)
 
+    progress("Scope lanes — loudness, bands, build, drop salience, flux, pacing")
     scope_lanes = _compute_scope_lanes(
         y,
         stft_mag,
@@ -419,6 +437,7 @@ def analyze_audio_with_envelope(
         onsets_s=onsets_s,
     )
 
+    progress("Classifying accents and drops")
     downbeats = beat_features.downbeat_times_s.tolist()
     transients = classify_accents(
         onsets_s,
@@ -446,6 +465,12 @@ def analyze_audio_with_envelope(
             freqs,
             config=cfg,
         )
+
+    drop_count = sum(1 for item in transients if item.type == "drop")
+    progress(
+        f"{len(onsets_s)} onsets → {len(transients)} accents ({drop_count} drops), "
+        f"key {beat_features.meta.key}"
+    )
 
     timeline = AudioTimeline(
         global_bpm=round(global_bpm, 2),
