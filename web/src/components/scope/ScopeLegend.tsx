@@ -29,7 +29,7 @@ export const AUDIO_SCOPE_LEGEND: ScopeLegendItem[] = [
     id: "section",
     color: "rgba(56,189,248,0.35)",
     label: "Section",
-    description: "Structure segment · extra rows when overlapping",
+    description: "Structure segment · duration, drops, energy, repeats",
     kind: "ribbon",
   },
   {

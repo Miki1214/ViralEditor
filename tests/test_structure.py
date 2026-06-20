@@ -88,3 +88,20 @@ def test_short_track_returns_single_section() -> None:
     sections = analyze_structure(features, transients=[], duration_s=8.0)
     assert len(sections) == 1
     assert sections[0].label == "Full track"
+
+
+def test_section_labels_include_duration_energy_and_drops() -> None:
+    features = _synthetic_abab_features(n_beats=80)
+    sections = analyze_structure(
+        features,
+        transients=[
+            Transient(timestamp_ms=5000, amplitude_normalized=0.9, type="drop"),
+            Transient(timestamp_ms=9000, amplitude_normalized=0.85, type="drop"),
+        ],
+        duration_s=float(features.beat_times_s[-1] + 60.0 / features.meta.global_bpm),
+    )
+    assert sections
+    for section in sections:
+        assert " · " in section.label
+        assert any(token.endswith("s") or ":" in token for token in section.label.split(" · "))
+        assert any(token in section.label for token in ("loud", "mid", "quiet"))

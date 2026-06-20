@@ -1,8 +1,14 @@
 import type { MusicSection } from "../../types";
 import { SECTION_FILLS, SCOPE_PAD_X } from "./scopeTheme";
+import {
+  formatSectionRibbonDetail,
+  laneHeightForLineCount,
+  SECTION_MIN_LANE_HEIGHT,
+  wrapRibbonLabel,
+} from "./sectionLabels";
 import { timeToX, type ScopeWindow } from "./scopeWindow";
 
-export const SECTION_LANE_HEIGHT = 14;
+export const SECTION_LANE_HEIGHT = SECTION_MIN_LANE_HEIGHT;
 export const SECTION_LANE_GAP = 2;
 export const SECTION_RIBBON_PAD = 2;
 
@@ -13,40 +19,37 @@ export interface SectionSwimlaneSegment {
   w: number;
   lane: number;
   fill: string;
-  label: string;
+  labelLines: string[];
 }
 
 export interface SectionSwimlaneLayout {
   segments: SectionSwimlaneSegment[];
   laneCount: number;
+  laneHeights: number[];
   height: number;
 }
 
-export function measureSectionRibbonHeight(laneCount: number): number {
-  if (laneCount <= 0) {
+export function measureSectionRibbonHeight(laneHeights: number[]): number {
+  if (laneHeights.length === 0) {
     return 0;
   }
   return (
     SECTION_RIBBON_PAD * 2 +
-    laneCount * SECTION_LANE_HEIGHT +
-    Math.max(0, laneCount - 1) * SECTION_LANE_GAP
+    laneHeights.reduce((total, laneHeight) => total + laneHeight, 0) +
+    Math.max(0, laneHeights.length - 1) * SECTION_LANE_GAP
   );
 }
 
-function sectionLabelText(label: string, widthPx: number): string {
-  const available = widthPx - 8;
-  if (available < 14) {
-    return "";
+export function laneTopY(
+  baseY: number,
+  lane: number,
+  laneHeights: number[],
+): number {
+  let offset = SECTION_RIBBON_PAD;
+  for (let index = 0; index < lane; index += 1) {
+    offset += (laneHeights[index] ?? SECTION_MIN_LANE_HEIGHT) + SECTION_LANE_GAP;
   }
-  const upper = label.toUpperCase();
-  const maxChars = Math.floor(available / 5);
-  if (maxChars < 2) {
-    return "";
-  }
-  if (upper.length <= maxChars) {
-    return upper;
-  }
-  return `${upper.slice(0, maxChars - 1)}…`;
+  return baseY + offset;
 }
 
 export function layoutSectionSwimlanes(
@@ -56,7 +59,7 @@ export function layoutSectionSwimlanes(
 ): SectionSwimlaneLayout {
   const durationS = window.endS - window.startS;
   if (durationS <= 0 || sections.length === 0) {
-    return { segments: [], laneCount: 0, height: 0 };
+    return { segments: [], laneCount: 0, laneHeights: [], height: 0 };
   }
 
   const innerW = viewWidth - SCOPE_PAD_X * 2;
@@ -105,18 +108,27 @@ export function layoutSectionSwimlanes(
       w,
       lane,
       fill: SECTION_FILLS[entry.index % SECTION_FILLS.length] ?? SECTION_FILLS[0]!,
-      label: sectionLabelText(entry.section.label, w),
+      labelLines: wrapRibbonLabel(formatSectionRibbonDetail(entry.section), w),
     });
   }
 
   const laneCount = laneEnds.length;
+  const maxLinesPerLane = Array.from({ length: laneCount }, () => 0);
+  for (const segment of segments) {
+    maxLinesPerLane[segment.lane] = Math.max(
+      maxLinesPerLane[segment.lane] ?? 0,
+      segment.labelLines.length,
+    );
+  }
+
+  const laneHeights = maxLinesPerLane.map((lineCount) =>
+    laneHeightForLineCount(lineCount),
+  );
+
   return {
     segments,
     laneCount,
-    height: measureSectionRibbonHeight(laneCount),
+    laneHeights,
+    height: measureSectionRibbonHeight(laneHeights),
   };
-}
-
-export function laneTopY(baseY: number, lane: number): number {
-  return baseY + SECTION_RIBBON_PAD + lane * (SECTION_LANE_HEIGHT + SECTION_LANE_GAP);
 }

@@ -16,14 +16,48 @@ def _snap_time_to_downbeat(time_s: float, downbeats: np.ndarray) -> float:
     return float(downbeats[index])
 
 
-def _section_label(index: int, repetition_count: int, energy: float) -> str:
-    if repetition_count >= 2 and energy >= 0.55:
-        return f"Hook {index + 1}"
-    if repetition_count >= 2:
-        return f"Repeated {index + 1}"
+def _format_section_duration(duration_s: float) -> str:
+    if duration_s >= 60.0:
+        minutes = int(duration_s // 60)
+        seconds = int(round(duration_s % 60))
+        if seconds == 60:
+            minutes += 1
+            seconds = 0
+        return f"{minutes}:{seconds:02d}"
+    return f"{int(round(duration_s))}s"
+
+
+def _energy_descriptor(energy: float) -> str:
     if energy >= 0.65:
-        return f"Peak {index + 1}"
-    return f"Section {index + 1}"
+        return "loud"
+    if energy >= 0.4:
+        return "mid"
+    return "quiet"
+
+
+def _section_label(
+    repetition_count: int,
+    energy: float,
+    *,
+    duration_s: float,
+    drop_count: int,
+) -> str:
+    if repetition_count >= 2 and energy >= 0.55:
+        kind = "Hook"
+    elif repetition_count >= 2:
+        kind = "Repeated"
+    elif energy >= 0.65:
+        kind = "Peak"
+    else:
+        kind = "Section"
+
+    parts = [kind, _format_section_duration(duration_s)]
+    if drop_count > 0:
+        parts.append(f"{drop_count} drop{'s' if drop_count != 1 else ''}")
+    parts.append(_energy_descriptor(energy))
+    if repetition_count > 1:
+        parts.append(f"×{repetition_count} in track")
+    return " · ".join(parts)
 
 
 def analyze_structure(
@@ -128,6 +162,7 @@ def analyze_structure(
             if t.type == "drop" and start_s <= t.timestamp_ms / 1000.0 < end_s
         )
         rep_count = label_counts.get(label, 1)
+        section_duration_s = max(end_s - start_s, 0.0)
         sections.append(
             MusicSection(
                 id=f"section_{chr(ord('a') + index)}",
@@ -135,7 +170,12 @@ def analyze_structure(
                 end_s=round(end_s, 3),
                 start_beat=start_beat,
                 end_beat=end_beat,
-                label=_section_label(index, rep_count, energy),
+                label=_section_label(
+                    rep_count,
+                    energy,
+                    duration_s=section_duration_s,
+                    drop_count=drop_count,
+                ),
                 repetition_count=rep_count,
                 energy=round(energy, 3),
                 drop_count=drop_count,

@@ -373,9 +373,9 @@ export function AudioScopePanel({
               playingBlockId={playingBlockId}
               onSelectBlock={switchingTarget ? undefined : onSelectBlock}
             />
-            <ScopeLegend embedded />
           </div>
         </div>
+        <ScopeLegend />
         {showDetailRack && (
           <MusicDetailRackToggle
             open={detailOpen}
