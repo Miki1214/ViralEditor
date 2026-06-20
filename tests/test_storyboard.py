@@ -747,3 +747,66 @@ def test_assign_slot_clip_keeps_spatial_crop() -> None:
     slot = next(item for item in updated.slots if item.id == hook.id)
     assert slot.spatial_crop == crop
     assert slot.rotation_deg == 90
+
+
+def test_remap_fx_events_for_composite_skips_unassigned_slots() -> None:
+    from viral_editor.audio.storyboard import (
+        remap_fx_events_for_composite,
+        storyboard_time_to_composite_time,
+    )
+    from viral_editor.models import FxEvent, Storyboard, StorySlot
+
+    hook_start = StorySlot(
+        id="slot_0_hook_start",
+        order=0,
+        label="Hook · start",
+        role="hook_start",
+        out_start_s=0.0,
+        out_end_s=2.0,
+        target_duration_s=2.0,
+        transition_in="cut",
+        assigned_clip_id="slot_0_clip",
+    )
+    middle = StorySlot(
+        id="slot_1",
+        order=1,
+        label="Clip 1",
+        role="clip",
+        out_start_s=2.0,
+        out_end_s=6.0,
+        target_duration_s=4.0,
+        transition_in="xfade",
+        assigned_clip_id=None,
+    )
+    hook_end = StorySlot(
+        id="slot_0_hook_end",
+        order=2,
+        label="Hook · end",
+        role="hook_end",
+        out_start_s=6.0,
+        out_end_s=8.0,
+        target_duration_s=2.0,
+        transition_in="xfade",
+        assigned_clip_id="slot_0_clip",
+    )
+    storyboard = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=8.0,
+        total_duration_s=8.0,
+        slots=[hook_start, middle, hook_end],
+    )
+
+    events = [
+        FxEvent(timestamp_s=1.0, kind="zoom", magnitude=1.07, decay_frames=4),
+        FxEvent(timestamp_s=3.0, kind="zoom", magnitude=1.06, decay_frames=4),
+        FxEvent(timestamp_s=7.0, kind="rotate", magnitude=1.2, decay_frames=4),
+    ]
+    remapped = remap_fx_events_for_composite(events, storyboard)
+
+    assert len(remapped) == 2
+    assert remapped[0].kind == "zoom"
+    assert remapped[0].timestamp_s == pytest.approx(1.0)
+    assert remapped[1].kind == "rotate"
+    assert remapped[1].timestamp_s == pytest.approx(2.75)
+    assert storyboard_time_to_composite_time(storyboard, 3.0) is None

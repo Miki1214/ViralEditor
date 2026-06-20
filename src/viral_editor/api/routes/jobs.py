@@ -93,6 +93,7 @@ from viral_editor.config import ConfigError
 from viral_editor.models import ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
 from viral_editor.audio.storyboard import (
     assigned_storyboard_slots,
+    remap_fx_events_for_composite,
     storyboard_filled_enough,
     storyboard_to_segments,
 )
@@ -1208,6 +1209,7 @@ def get_composite_preview(
         if primary_media is not None
         else []
     )
+    fx_events = remap_fx_events_for_composite(fx_events, storyboard)
 
     import hashlib
     import json

@@ -17,6 +17,7 @@ from viral_editor.editing.retention_policy import (
     score_plan,
 )
 from viral_editor.models import (
+    FxEvent,
     MediaInfo,
     MusicBlock,
     MusicSection,
@@ -829,6 +830,89 @@ def assigned_storyboard_slots(storyboard: Storyboard) -> list[StorySlot]:
         for slot in sorted(storyboard.slots, key=lambda item: item.order)
         if slot.assigned_clip_id
     ]
+
+
+def slot_at_storyboard_time(storyboard: Storyboard, time_s: float) -> StorySlot | None:
+    """Return the storyboard slot whose output window contains ``time_s``."""
+    ordered = sorted(storyboard.slots, key=lambda item: item.order)
+    for slot in ordered:
+        if slot.out_start_s <= time_s + 1e-6 and time_s < slot.out_end_s - 1e-6:
+            return slot
+    if ordered and time_s >= ordered[-1].out_start_s - 1e-6:
+        return ordered[-1]
+    return None
+
+
+def _composite_video_start_for_assigned_index(
+    assigned: list[StorySlot],
+    index: int,
+    *,
+    xfade_s: float = _DEFAULT_XFADE_S,
+) -> float:
+    video_start = 0.0
+    for i in range(index):
+        video_start += assigned[i].target_duration_s
+        if i + 1 < len(assigned) and assigned[i + 1].transition_in == "xfade":
+            video_start -= xfade_s
+    return video_start
+
+
+def storyboard_time_to_composite_time(
+    storyboard: Storyboard,
+    time_s: float,
+    *,
+    xfade_s: float = _DEFAULT_XFADE_S,
+) -> float | None:
+    """Map block playhead time to packed composited preview video time."""
+    assigned = assigned_storyboard_slots(storyboard)
+    if not assigned:
+        return None
+
+    for index, slot in enumerate(assigned):
+        in_slot = time_s >= slot.out_start_s - 1e-6 and (
+            time_s < slot.out_end_s - 1e-6 or index == len(assigned) - 1
+        )
+        if not in_slot:
+            continue
+        slot_span = slot.out_end_s - slot.out_start_s
+        ratio = (
+            max(0.0, min(1.0, (time_s - slot.out_start_s) / slot_span))
+            if slot_span > 1e-9
+            else 0.0
+        )
+        video_start = _composite_video_start_for_assigned_index(
+            assigned,
+            index,
+            xfade_s=xfade_s,
+        )
+        return video_start + ratio * slot.target_duration_s
+
+    return None
+
+
+def remap_fx_events_for_composite(
+    fx_events: list[FxEvent],
+    storyboard: Storyboard,
+    *,
+    xfade_s: float = _DEFAULT_XFADE_S,
+) -> list[FxEvent]:
+    """Keep FX only for assigned slots; remap timestamps to packed composite time."""
+    remapped: list[FxEvent] = []
+    for event in fx_events:
+        slot = slot_at_storyboard_time(storyboard, event.timestamp_s)
+        if slot is None or not slot.assigned_clip_id:
+            continue
+        composite_t = storyboard_time_to_composite_time(
+            storyboard,
+            event.timestamp_s,
+            xfade_s=xfade_s,
+        )
+        if composite_t is None:
+            continue
+        remapped.append(
+            event.model_copy(update={"timestamp_s": round(composite_t, 6)})
+        )
+    return remapped
 
 
 def storyboard_filled_enough(storyboard: Storyboard) -> bool:
