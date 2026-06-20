@@ -131,6 +131,7 @@ def test_analyze_audio_with_envelope_writes_npy(tmp_path: Path) -> None:
         "flux_low",
         "flux_high",
         "pacing_density",
+        "vocal",
     }
     for lane in result.scope_lanes.values():
         assert lane.ndim == 1

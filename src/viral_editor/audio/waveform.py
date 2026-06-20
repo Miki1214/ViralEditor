@@ -32,6 +32,7 @@ SCOPE_LANE_LABELS = {
     "flux_low": "Low flux",
     "flux_high": "High flux",
     "pacing_density": "Pacing",
+    "vocal": "Vocal",
 }
 SCOPE_LANE_ORDER = (
     "rms",
@@ -43,6 +44,7 @@ SCOPE_LANE_ORDER = (
     "flux_low",
     "flux_high",
     "pacing_density",
+    "vocal",
 )
 
 
@@ -168,7 +170,12 @@ def build_waveform_payload(
     if features is not None:
         sections = structure.sections if structure is not None else []
         if loop_qualities is None:
-            loop_qualities = list_target_loop_qualities(timeline, features, sections)
+            loop_qualities = list_target_loop_qualities(
+                timeline,
+                features,
+                sections,
+                scope_lanes=scope_lanes,
+            )
         matchable_targets = [entry.target_duration_s for entry in loop_qualities]
         if loop_qualities:
             max_loop_pct = max(entry.loop_quality_pct for entry in loop_qualities)

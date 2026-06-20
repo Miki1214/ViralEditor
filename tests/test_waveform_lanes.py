@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+
 from viral_editor.audio.beat_detector import AudioDspConfig, analyze_audio_with_envelope
 from viral_editor.audio.waveform import build_scope_lane_series, build_waveform_payload
 from viral_editor.models import MusicBlockPlan
@@ -39,14 +41,36 @@ def test_waveform_payload_includes_beats_lanes_and_chroma() -> None:
 
     assert payload.beats
     assert payload.downbeats
-    assert len(payload.lanes) == 9
+    assert len(payload.lanes) == 10
     lane_ids = {lane.id for lane in payload.lanes}
+    assert "vocal" in lane_ids
     assert "build" in lane_ids
     assert "drop_salience" in lane_ids
     assert "pacing_density" in lane_ids
     assert payload.chroma is not None
     assert len(payload.chroma.pitch_classes) == 12
     assert payload.chroma.tonic is not None
+
+
+def test_waveform_payload_includes_vocal_lane_when_present() -> None:
+    result, payload = _fixture_payload("validation_clicks.wav")
+    result.scope_lanes["vocal"] = np.linspace(0.0, 1.0, len(result.scope_lanes["rms"]), dtype=np.float32)
+    payload = build_waveform_payload(
+        result.timeline,
+        result.onset_envelope,
+        MusicBlockPlan(
+            target_duration_s=10.0,
+            track_duration_s=result.timeline.audio_duration_seconds,
+            blocks=[],
+        ),
+        features=result.beat_features,
+        scope_lanes=result.scope_lanes,
+    )
+    lane_ids = {lane.id for lane in payload.lanes}
+    assert "vocal" in lane_ids
+    vocal_lane = next(lane for lane in payload.lanes if lane.id == "vocal")
+    assert vocal_lane.label == "Vocal"
+    assert vocal_lane.points
 
     for lane in payload.lanes:
         assert lane.points

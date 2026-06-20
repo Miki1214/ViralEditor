@@ -14,6 +14,7 @@ from viral_editor.audio.features import BeatSyncFeatures
 from viral_editor.editing.retention_policy import (
     pacing_density_score,
     retention_bonus_for_window,
+    vocal_boundary_penalty,
 )
 from viral_editor.models import (
     AudioTimeline,
@@ -32,6 +33,7 @@ CANONICAL_TARGET_DURATIONS_S = (5, 10, 15, 20, 25, 30, 45, 60)
 # Longest short-form window we score during catalog precompute (60s chip + headroom).
 CATALOG_MAX_WINDOW_S = 75.0
 CATALOG_POLICY_RESCORE_TOP_N = 60
+VOCAL_SEAM_WEIGHT = 0.5
 
 
 def target_duration_bounds(target_duration_s: float) -> tuple[float, float]:
@@ -80,6 +82,7 @@ class _Candidate:
     transient_count: int
     label: str
     reason: str
+    vocal_penalty: float = 0.0
 
 
 def _format_timestamp(time_s: float) -> str:
@@ -156,6 +159,7 @@ def _classify_candidate(
     section: MusicSection | None,
     loop_quality: float,
     key: str,
+    vocal_penalty: float = 0.0,
 ) -> tuple[str, str]:
     range_label = f"{_format_timestamp(start_s)}–{_format_timestamp(end_s)}"
     if section and section.is_repeated:
@@ -172,6 +176,10 @@ def _classify_candidate(
         reason = f"{range_label} · {phrase_bars}-bar phrase"
     quality = "seamless" if loop_quality >= 0.78 else "smooth" if loop_quality >= 0.62 else "aligned"
     reason += f" · {quality} repeat ({key})"
+    if vocal_penalty <= 0.15:
+        reason += " · clean vocal seam"
+    elif vocal_penalty >= 0.55:
+        reason += " · vocal-aware seam"
     return label, reason
 
 
@@ -218,7 +226,17 @@ def _build_phrase_candidate(
     scope_lanes: dict[str, np.ndarray] | None,
     include_policy_scoring: bool,
 ) -> _Candidate:
-    loop_q = _loop_quality(start_idx, end_idx, features)
+    acoustic_loop_q = _loop_quality(start_idx, end_idx, features)
+    vocal_pen = 0.0
+    if scope_lanes is not None and scope_lanes.get("vocal") is not None:
+        vocal_pen = vocal_boundary_penalty(
+            scope_lanes,
+            start_s,
+            end_s,
+            hop_length=features.meta.hop_length,
+            sr=features.meta.sample_rate,
+        )
+    loop_q = acoustic_loop_q * (1.0 - VOCAL_SEAM_WEIGHT * vocal_pen)
     window_trans = _transients_in_window(timeline.transients, start_s, end_s)
     drops = [t for t in window_trans if t.type == "drop"]
     section = _section_for_window(sections, start_s, end_s)
@@ -255,6 +273,7 @@ def _build_phrase_candidate(
         section=section,
         loop_quality=loop_q,
         key=features.meta.key,
+        vocal_penalty=vocal_pen,
     )
     return _Candidate(
         start_s=start_s,
@@ -270,6 +289,7 @@ def _build_phrase_candidate(
         transient_count=len(window_trans),
         label=label,
         reason=reason,
+        vocal_penalty=vocal_pen,
     )
 
 
@@ -557,6 +577,8 @@ def list_target_loop_qualities(
     timeline: AudioTimeline,
     features: BeatSyncFeatures,
     sections: list[MusicSection],
+    *,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> list[TargetLoopQuality]:
     """Score each preset length by its best phrase-aligned seamless loop quality."""
     track_duration = timeline.audio_duration_seconds
@@ -564,6 +586,7 @@ def list_target_loop_qualities(
         timeline,
         features,
         sections,
+        scope_lanes=scope_lanes,
         include_policy_scoring=False,
         max_duration_s=CATALOG_MAX_WINDOW_S,
     )
@@ -592,11 +615,18 @@ def list_matchable_target_durations(
     timeline: AudioTimeline,
     features: BeatSyncFeatures,
     sections: list[MusicSection],
+    *,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> list[float]:
     """Preset short lengths that have at least one phrase-aligned loop window."""
     return [
         profile.target_duration_s
-        for profile in list_target_loop_qualities(timeline, features, sections)
+        for profile in list_target_loop_qualities(
+            timeline,
+            features,
+            sections,
+            scope_lanes=scope_lanes,
+        )
     ]
 
 
@@ -606,13 +636,19 @@ def find_nearest_matchable_target(
     sections: list[MusicSection],
     *,
     requested_target_s: float,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> float | None:
     """Pick the preset duration closest to ``requested_target_s`` that has phrase-aligned loops."""
     track_duration = timeline.audio_duration_seconds
     if track_duration <= requested_target_s:
         return None
 
-    matchable = list_matchable_target_durations(timeline, features, sections)
+    matchable = list_matchable_target_durations(
+        timeline,
+        features,
+        sections,
+        scope_lanes=scope_lanes,
+    )
     if not matchable:
         return None
 
@@ -639,7 +675,12 @@ def suggest_music_blocks_advanced(
     )
     matchable_targets: list[float] | None = None
     if not candidates:
-        matchable_targets = list_matchable_target_durations(timeline, features, sections)
+        matchable_targets = list_matchable_target_durations(
+            timeline,
+            features,
+            sections,
+            scope_lanes=scope_lanes,
+        )
     return _select_block_plan_from_candidates(
         timeline,
         features,

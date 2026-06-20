@@ -30,6 +30,7 @@ export const LANE_COLORS: Record<string, string> = {
   band_low: BASS,
   band_mid: TRACE,
   band_high: DROP,
+  vocal: "rgba(248,113,113,0.9)",
 };
 
 export const TICK_INTERVALS_S = [1, 2, 5, 10, 15, 30, 60, 120, 300];

@@ -562,6 +562,56 @@ def select_payoff_downbeat_s(
     return round(best, 6)
 
 
+VOCAL_BOUNDARY_WINDOW_S = 0.12
+
+
+def _mean_lane_window(
+    lane: np.ndarray,
+    center_s: float,
+    *,
+    window_s: float,
+    hop_length: int,
+    sr: int,
+) -> float:
+    half_frames = max(1, int(round(window_s * sr / hop_length / 2.0)))
+    center = _time_to_frame(center_s, hop_length=hop_length, sr=sr)
+    start = max(0, center - half_frames)
+    end = min(lane.size, center + half_frames + 1)
+    if start >= end:
+        return 0.0
+    return float(lane[start:end].mean())
+
+
+def vocal_boundary_penalty(
+    scope_lanes: dict[str, np.ndarray] | None,
+    start_s: float,
+    end_s: float,
+    *,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> float:
+    """Return 0 when loop boundaries sit in vocal gaps, 1 when both cut mid-phrase."""
+    vocal = _lane_array(scope_lanes, "vocal")
+    if vocal is None:
+        return 0.0
+
+    start_activity = _mean_lane_window(
+        vocal,
+        start_s,
+        window_s=VOCAL_BOUNDARY_WINDOW_S,
+        hop_length=hop_length,
+        sr=sr,
+    )
+    end_activity = _mean_lane_window(
+        vocal,
+        end_s,
+        window_s=VOCAL_BOUNDARY_WINDOW_S,
+        hop_length=hop_length,
+        sr=sr,
+    )
+    return max(0.0, min(1.0, max(start_activity, end_activity)))
+
+
 def retention_bonus_for_window(
     scope_lanes: dict[str, np.ndarray] | None,
     downbeats: list[float] | np.ndarray,

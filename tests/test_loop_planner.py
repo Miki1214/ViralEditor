@@ -469,3 +469,53 @@ def test_plan_from_catalog_matches_fresh_plan() -> None:
     assert cached is not None
     fresh = suggest_music_blocks_advanced(timeline, features, [], target_duration_s=20.0)
     assert cached.model_dump() == fresh.model_dump()
+
+
+def test_vocal_penalty_reduces_loop_quality_for_mid_phrase_cuts() -> None:
+    from viral_editor.audio.loop_planner import VOCAL_SEAM_WEIGHT, _build_phrase_candidate
+
+    features = _synthetic_abab_features(n_beats=64, bpm=120.0)
+    timeline = _timeline(32.0, bpm=120.0)
+    start_idx = 0
+    end_idx = 32
+    start_s = float(features.beat_times_s[start_idx])
+    end_s = float(features.beat_times_s[min(end_idx, features.beat_times_s.size - 1)])
+
+    baseline = _build_phrase_candidate(
+        timeline=timeline,
+        features=features,
+        sections=[],
+        start_idx=start_idx,
+        end_idx=end_idx,
+        phrase_bars=4,
+        start_s=start_s,
+        end_s=end_s,
+        scope_lanes=None,
+        include_policy_scoring=False,
+    )
+
+    n_frames = 200
+    scope_lanes = {
+        "vocal": np.ones(n_frames, dtype=np.float32),
+        "rms": np.ones(n_frames, dtype=np.float32),
+    }
+
+    penalized = _build_phrase_candidate(
+        timeline=timeline,
+        features=features,
+        sections=[],
+        start_idx=start_idx,
+        end_idx=end_idx,
+        phrase_bars=4,
+        start_s=start_s,
+        end_s=end_s,
+        scope_lanes=scope_lanes,
+        include_policy_scoring=False,
+    )
+
+    assert penalized.vocal_penalty > 0.5
+    assert penalized.loop_quality < baseline.loop_quality
+    assert penalized.loop_quality == pytest.approx(
+        baseline.loop_quality * (1.0 - VOCAL_SEAM_WEIGHT * penalized.vocal_penalty),
+        rel=1e-4,
+    )

@@ -11,6 +11,7 @@ import numpy as np
 
 from viral_editor.audio.beat_tracker import infer_beats
 from viral_editor.audio.features import BeatSyncFeatures, compute_beat_sync_features, save_features
+from viral_editor.audio.vocal_separation import VOCAL_ACTIVITY_FLOOR, compute_vocal_activity, peak_normalize_lane
 from viral_editor.editing.retention_policy import classify_accents
 from viral_editor.models import AudioTimeline, DomainModel, Transient, TransientType
 from viral_editor.utils.logging import get_logger
@@ -37,6 +38,7 @@ class AudioDspConfig(DomainModel):
     tempo_max_bpm: float = 180.0
     duration_tolerance_s: float = 0.5
     feature_workers: int | None = None
+    vocal_separation_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ _SCOPE_LANE_KEYS = (
     "flux_low",
     "flux_high",
     "pacing_density",
+    "vocal",
 )
 _LEGACY_SCOPE_LANE_KEYS = ("rms", "band_low", "band_mid", "band_high")
 
@@ -443,6 +446,29 @@ def analyze_audio_with_envelope(
         bass_band_hz=cfg.bass_band_hz,
         onsets_s=onsets_s,
     )
+
+    if cfg.vocal_separation_enabled:
+        progress("Separating vocal stem (Demucs)")
+        vocal_lane = compute_vocal_activity(
+            resolved,
+            hop_length=cfg.hop_length,
+            sr=sr,
+            n_frames=len(scope_lanes["rms"]),
+            target_samples=int(y.size),
+            frame_length=cfg.n_fft,
+        )
+        if float(vocal_lane.max()) < VOCAL_ACTIVITY_FLOOR:
+            logger.warning(
+                "Demucs vocal stem near-silent (peak %.4f) — using mid-band energy as vocal proxy",
+                float(vocal_lane.max()),
+            )
+            mid = scope_lanes.get("band_mid")
+            if mid is not None and mid.size > 0:
+                vocal_lane = peak_normalize_lane(mid[: len(scope_lanes["rms"])])
+            else:
+                vocal_lane = peak_normalize_lane(scope_lanes["rms"])
+        scope_lanes["vocal"] = vocal_lane
+        progress("Vocal activity lane ready")
 
     progress("Classifying accents and drops")
     downbeats = beat_features.downbeat_times_s.tolist()

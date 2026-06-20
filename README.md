@@ -77,14 +77,9 @@ Open http://127.0.0.1:8765. Bind-mounts:
 - `./output` — rendered results
 - `./temp` — job workspaces (optional inspection)
 
-Native dev without torch still works via the librosa fallback:
+**Demucs vocal separation:** loop planning uses the `htdemucs` model (via `demucs` + `torch`, installed by default). Weights download on first analysis and cache under `TORCH_HOME` (default `~/.cache/torch`). Set `DEMUCS_MODEL_CACHE` to pin the cache directory (e.g. a Docker volume).
 
-```powershell
-pip install -e ".[ui,dev]"
-python -m viral_editor serve
-```
-
-For neural beat tracking locally (optional):
+For neural beat tracking locally (optional extra):
 
 ```powershell
 pip install -e ".[ui,dev,audio-nn]" --extra-index-url https://download.pytorch.org/whl/cpu

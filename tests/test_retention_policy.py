@@ -137,3 +137,39 @@ def test_score_plan_is_bounded(tmp_path: Path) -> None:
         window_end_s=result.timeline.audio_duration_seconds,
     )
     assert 0.0 <= score.overall <= 1.0
+
+
+def test_vocal_boundary_penalty_is_zero_without_lane() -> None:
+    from viral_editor.editing.retention_policy import vocal_boundary_penalty
+
+    assert vocal_boundary_penalty(None, 1.0, 5.0) == 0.0
+    assert vocal_boundary_penalty({"rms": np.ones(100)}, 1.0, 5.0) == 0.0
+
+
+def test_vocal_boundary_penalty_prefers_gaps() -> None:
+    from viral_editor.editing.retention_policy import vocal_boundary_penalty
+
+    hop_length = 512
+    sr = 22050
+    n_frames = 300
+    vocal = np.zeros(n_frames, dtype=np.float32)
+    vocal[80:220] = 1.0
+
+    scope_lanes = {"vocal": vocal}
+    gap_penalty = vocal_boundary_penalty(
+        scope_lanes,
+        0.5,
+        1.0,
+        hop_length=hop_length,
+        sr=sr,
+    )
+    mid_phrase_s = 80 * hop_length / sr
+    mid_penalty = vocal_boundary_penalty(
+        scope_lanes,
+        mid_phrase_s,
+        mid_phrase_s + 0.5,
+        hop_length=hop_length,
+        sr=sr,
+    )
+    assert gap_penalty < 0.15
+    assert mid_penalty > 0.55
