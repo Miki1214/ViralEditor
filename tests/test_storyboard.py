@@ -147,6 +147,45 @@ def test_apply_hook_inversion_layout_splits_hook_slots() -> None:
     assert hook_end.crop_end_s == pytest.approx(hook_start.crop_start_s)
 
 
+def test_hook_split_uses_full_clip_span_when_assigned() -> None:
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    hook = storyboard.slots[0].model_copy(
+        update={
+            "assigned_clip_id": "slot_0_clip",
+            "crop_start_s": 0.0,
+            "crop_end_s": 1.7,
+        }
+    )
+    storyboard = storyboard.model_copy(update={"slots": [hook, *storyboard.slots[1:]]})
+    clip_media = {
+        "slot_0_clip": MediaInfo(
+            path=__import__("pathlib").Path("hook.mp4"),
+            duration_s=7.0,
+            has_video=True,
+        )
+    }
+    split = apply_hook_inversion_layout(
+        storyboard,
+        enabled=True,
+        payoff_duration_s=1.0,
+        clip_media=clip_media,
+    )
+    hook_start = next(slot for slot in split.slots if slot.role == "hook_start")
+    hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
+    hook_budget = hook_start.target_duration_s + hook_end.target_duration_s
+    assert hook_end.crop_end_s - hook_end.crop_start_s == pytest.approx(
+        hook_end.target_duration_s,
+        abs=0.01,
+    )
+    assert hook_start.crop_end_s - hook_start.crop_start_s == pytest.approx(
+        hook_start.target_duration_s,
+        abs=0.01,
+    )
+    assert hook_end.crop_end_s == pytest.approx(hook_start.crop_start_s)
+    assert hook_start.crop_end_s == pytest.approx(min(7.0, hook_budget))
+
+
 def test_hook_inversion_realigns_slot_boundaries_to_downbeats() -> None:
     block = _block(24.0)
     features = _features([10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 34.0])

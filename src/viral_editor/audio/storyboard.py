@@ -436,12 +436,53 @@ def _full_hook_crop(start: StorySlot | None, end: StorySlot | None) -> tuple[flo
     return min(starts), max(ends)
 
 
+def _hook_assigned_clip_id(
+    hook: StorySlot | None,
+    hook_start: StorySlot | None,
+    hook_end: StorySlot | None,
+) -> str | None:
+    for slot in (hook, hook_start, hook_end):
+        if slot is not None and slot.assigned_clip_id:
+            return slot.assigned_clip_id
+    return None
+
+
+def _hook_source_range_for_split(
+    *,
+    hook_budget: float,
+    hook: StorySlot | None,
+    hook_start: StorySlot | None,
+    hook_end: StorySlot | None,
+    clip_media: dict[str, MediaInfo] | None = None,
+) -> tuple[float, float]:
+    """Contiguous hook source span for 1:1 payoff/build crop windows."""
+    clip_id = _hook_assigned_clip_id(hook, hook_start, hook_end)
+    if clip_id and clip_media and clip_id in clip_media:
+        media = clip_media[clip_id]
+        span = min(media.duration_s, hook_budget)
+        return 0.0, round(max(span, _HOOK_MIN_PART_S * 2), 6)
+
+    if hook is not None:
+        crop_start = hook.crop_start_s if hook.crop_start_s is not None else 0.0
+        crop_end = hook.crop_end_s if hook.crop_end_s is not None else crop_start + hook_budget
+    else:
+        crop_start, crop_end = _full_hook_crop(hook_start, hook_end)
+
+    crop_span = max(crop_end - crop_start, 0.0)
+    if crop_span <= 1e-6:
+        return 0.0, round(hook_budget, 6)
+
+    effective = min(hook_budget, crop_span)
+    return round(crop_start, 6), round(crop_start + effective, 6)
+
+
 def apply_hook_inversion_layout(
     storyboard: Storyboard,
     *,
     enabled: bool,
     payoff_duration_s: float,
     features: BeatSyncFeatures | None = None,
+    clip_media: dict[str, MediaInfo] | None = None,
 ) -> Storyboard:
     """Split the hook into start/end storyboard slots aligned to the music block."""
     slots = sorted(storyboard.slots, key=lambda slot: slot.order)
@@ -498,19 +539,19 @@ def apply_hook_inversion_layout(
     root_id = base.id.replace("_hook_start", "").replace("_hook_end", "")
     if hook is not None:
         hook_budget = hook.target_duration_s
-        crop_start = hook.crop_start_s if hook.crop_start_s is not None else 0.0
-        crop_end = hook.crop_end_s if hook.crop_end_s is not None else crop_start + hook_budget
     else:
         hook_budget = (hook_start.target_duration_s if hook_start else 0.0) + (
             hook_end.target_duration_s if hook_end else 0.0
         )
-        crop_start, crop_end = _full_hook_crop(hook_start, hook_end)
 
-    crop_span = max(crop_end - crop_start, 0.0)
-    effective_budget = hook_budget
-    if crop_span > 1e-6:
-        effective_budget = min(hook_budget, crop_span)
-        crop_end = crop_start + effective_budget
+    crop_start, crop_end = _hook_source_range_for_split(
+        hook_budget=hook_budget,
+        hook=hook,
+        hook_start=hook_start,
+        hook_end=hook_end,
+        clip_media=clip_media,
+    )
+    effective_budget = max(crop_end - crop_start, 0.0)
 
     payoff_d = min(
         max(payoff_duration_s, _HOOK_MIN_PART_S),

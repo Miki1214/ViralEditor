@@ -48,6 +48,7 @@ def refresh_hook_inversion_layout(
         enabled=config.teaser.enabled,
         payoff_duration_s=config.teaser.duration_s,
         features=features,
+        clip_media=clip_media_for_storyboard(config, storyboard),
     )
 
 

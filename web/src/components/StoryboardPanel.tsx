@@ -7,6 +7,22 @@ import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
 
+function hookSourceBudgetS(storyboard: StoryboardPayload, slot: StorySlot): number {
+  if (slot.role === "hook") {
+    return slot.target_duration_s;
+  }
+  if (slot.role === "hook_start" || slot.role === "hook_end") {
+    const hookStart = storyboard.slots.find((entry) => entry.role === "hook_start");
+    const hookEnd = storyboard.slots.find((entry) => entry.role === "hook_end");
+    return (hookStart?.target_duration_s ?? 0) + (hookEnd?.target_duration_s ?? 0);
+  }
+  return slot.target_duration_s;
+}
+
+function isHookFamilyRole(role: StorySlot["role"]): boolean {
+  return role === "hook" || role === "hook_start" || role === "hook_end";
+}
+
 interface StoryboardPanelProps {
   jobId: string;
   storyboard: StoryboardPayload;
@@ -181,11 +197,14 @@ export function StoryboardPanel({
       if (saving) return;
       assignTargetRef.current = slot;
       const objectUrl = URL.createObjectURL(file);
-      let endS = slot.target_duration_s;
+      const sourceBudget = isHookFamilyRole(slot.role)
+        ? hookSourceBudgetS(storyboard, slot)
+        : slot.target_duration_s;
+      let endS = sourceBudget;
       try {
         const duration = await probeVideoDuration(objectUrl);
         if (duration != null) {
-          endS = Math.min(duration, slot.target_duration_s);
+          endS = Math.min(duration, sourceBudget);
         }
       } finally {
         URL.revokeObjectURL(objectUrl);
@@ -204,7 +223,7 @@ export function StoryboardPanel({
         });
       }
     },
-    [draftTransforms, onAssignClip, saving],
+    [draftTransforms, onAssignClip, saving, storyboard],
   );
 
   const pickFile = useCallback(
