@@ -22,7 +22,7 @@ export const AUDIO_SCOPE_LEGEND: ScopeLegendItem[] = [
     color: "rgba(244,196,48,0.35)",
     borderColor: DROP,
     label: "Loop block",
-    description: "Suggested edit window",
+    description: "Suggested edit window · click to select",
     kind: "block",
   },
   {

@@ -371,6 +371,7 @@ export function AudioScopePanel({
               blocks={blocks}
               selectedBlockId={selectedBlockId}
               playingBlockId={playingBlockId}
+              onSelectBlock={switchingTarget ? undefined : onSelectBlock}
             />
             <ScopeLegend embedded />
           </div>

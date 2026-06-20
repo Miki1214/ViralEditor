@@ -30,6 +30,29 @@ interface ScopeCanvasProps {
   selectedBlockId: string | null;
   playingBlockId: string | null;
   window?: ScopeWindow;
+  onSelectBlock?: (block: MusicBlock) => void;
+}
+
+function blockWaveformRect(
+  block: MusicBlock,
+  scopeWindow: ScopeWindow,
+  windowDurationS: number,
+  padX: number,
+  innerW: number,
+  waveformTop: number,
+  padY: number,
+  innerH: number,
+): { x: number; y: number; w: number } | null {
+  if (block.end_s <= scopeWindow.startS || block.start_s >= scopeWindow.endS) {
+    return null;
+  }
+  const localStart = Math.max(block.start_s, scopeWindow.startS) - scopeWindow.startS;
+  const localEnd = Math.min(block.end_s, scopeWindow.endS) - scopeWindow.startS;
+  return {
+    x: padX + (localStart / windowDurationS) * innerW,
+    y: waveformTop + padY,
+    w: Math.max(2, ((localEnd - localStart) / windowDurationS) * innerW),
+  };
 }
 
 const WAVEFORM_HEIGHT = 140;
@@ -44,6 +67,7 @@ export function ScopeCanvas({
   selectedBlockId,
   playingBlockId,
   window,
+  onSelectBlock,
 }: ScopeCanvasProps) {
   const scopeWindow: ScopeWindow = window ?? { startS: 0, endS: durationS };
   const windowDurationS = Math.max(scopeWindow.endS - scopeWindow.startS, durationS);
@@ -127,18 +151,24 @@ export function ScopeCanvas({
       />
 
       {blocks.map((block) => {
-        if (block.end_s <= scopeWindow.startS || block.start_s >= scopeWindow.endS) return null;
-        const localStart = Math.max(block.start_s, scopeWindow.startS) - scopeWindow.startS;
-        const localEnd = Math.min(block.end_s, scopeWindow.endS) - scopeWindow.startS;
-        const x = padX + (localStart / windowDurationS) * innerW;
-        const w = Math.max(2, ((localEnd - localStart) / windowDurationS) * innerW);
+        const geometry = blockWaveformRect(
+          block,
+          scopeWindow,
+          windowDurationS,
+          padX,
+          innerW,
+          waveformTop,
+          padY,
+          innerH,
+        );
+        if (!geometry) return null;
         const selected = block.id === activeId;
         return (
           <rect
             key={block.id}
-            x={x}
-            y={waveformTop + padY}
-            width={w}
+            x={geometry.x}
+            y={geometry.y}
+            width={geometry.w}
             height={innerH}
             fill={selected ? "rgba(244,196,48,0.22)" : "rgba(244,196,48,0.08)"}
             stroke={selected ? DROP : "rgba(244,196,48,0.35)"}
@@ -156,8 +186,49 @@ export function ScopeCanvas({
           strokeWidth={1.75}
           strokeLinejoin="round"
           strokeLinecap="round"
+          pointerEvents="none"
         />
       )}
+
+      {onSelectBlock &&
+        blocks.map((block) => {
+          const geometry = blockWaveformRect(
+            block,
+            scopeWindow,
+            windowDurationS,
+            padX,
+            innerW,
+            waveformTop,
+            padY,
+            innerH,
+          );
+          if (!geometry) return null;
+          const selected = block.id === activeId;
+          return (
+            <rect
+              key={`hit-${block.id}`}
+              x={geometry.x}
+              y={geometry.y}
+              width={geometry.w}
+              height={innerH}
+              fill="transparent"
+              stroke="transparent"
+              rx={2}
+              className="cursor-pointer"
+              role="button"
+              tabIndex={0}
+              aria-label={`Select ${block.label}, ${formatScopeTime(block.start_s)} to ${formatScopeTime(block.end_s)}`}
+              aria-pressed={selected}
+              onClick={() => onSelectBlock(block)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelectBlock(block);
+                }
+              }}
+            />
+          );
+        })}
 
       <rect x={0} y={rulerTop} width={width} height={SCOPE_RULER_HEIGHT} fill={RULER_BG} />
       <line
