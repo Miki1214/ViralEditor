@@ -9,6 +9,8 @@ export interface FxMarker {
   reason?: string;
 }
 
+const SURGE_SCORE_THRESHOLD = 0.45;
+const SURGE_MAGNITUDE_BOOST = 0.12;
 const MERGE_WINDOW_S = 0.05;
 const INTERRUPT_MIN_GAP_S = 3.0;
 const INTERRUPT_MAX_GAP_S = 5.0;
@@ -71,34 +73,81 @@ function snapToDownbeat(timeS: number, downbeats: number[]): { timeS: number; on
   return { timeS, onDownbeat: false };
 }
 
+function surgeCandidatePoints(
+  points: WaveformPoint[],
+  threshold = SURGE_SCORE_THRESHOLD,
+  halfWindow = 3,
+): WaveformPoint[] {
+  const candidates: WaveformPoint[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    if (current.v < threshold) continue;
+    const lo = Math.max(0, index - halfWindow);
+    const hi = Math.min(points.length, index + halfWindow + 1);
+    const localMax = Math.max(...points.slice(lo, hi).map((point) => point.v));
+    if (current.v >= localMax - 1e-6) {
+      candidates.push(current);
+    }
+  }
+  return candidates;
+}
+
 function energyPeaks(
   lanes: ScopeLaneSeries[] | undefined,
   downbeats: number[],
   musicStartS: number,
   musicEndS: number,
-): Array<{ timeS: number; magnitude: number; onDownbeat: boolean }> {
+): Array<{ timeS: number; magnitude: number; onDownbeat: boolean; surgeScore: number }> {
   const rms = lanePoints(lanes, "rms");
   const build = lanePoints(lanes, "build");
   const dropSalience = lanePoints(lanes, "drop_salience");
-  const signal =
+  const surge = lanePoints(lanes, "surge");
+  const surgeNorm = surge.length > 0 ? surge : null;
+  let signal =
     dropSalience.length > 0
       ? dropSalience
-      : build.length > 0
-        ? build.map((point, index) => ({
+      : surgeNorm
+        ? surgeNorm.map((point, index) => ({
             t: point.t,
             v: point.v * 0.6 + (rms[index]?.v ?? 0) * 0.4,
           }))
-        : rms;
+        : build.length > 0
+          ? build.map((point, index) => ({
+              t: point.t,
+              v: point.v * 0.6 + (rms[index]?.v ?? 0) * 0.4,
+            }))
+          : rms;
+  if (dropSalience.length > 0 && surgeNorm) {
+    signal = signal.map((point, index) => ({
+      t: point.t,
+      v: point.v * 0.65 + (surgeNorm[index]?.v ?? 0) * 0.35,
+    }));
+  }
   const window = signal.filter((point) => point.t >= musicStartS && point.t < musicEndS);
   const windowMax = window.reduce((max, point) => Math.max(max, point.v), 0);
-  const peaks = localMaxima(window)
-    .filter((point) => windowMax <= 0 || point.v >= windowMax * 0.35)
+  const surgeWindow = surgeNorm?.filter((point) => point.t >= musicStartS && point.t < musicEndS) ?? [];
+  const candidatePoints = [
+    ...localMaxima(window),
+    ...(surgeWindow.length > 0 ? surgeCandidatePoints(surgeWindow) : []),
+  ].filter(
+    (point, index, list) =>
+      list.findIndex((other) => Math.abs(other.t - point.t) < 0.02) === index,
+  );
+  const peaks = candidatePoints
+    .filter((point) => windowMax <= 0 || sampleLane(window, point.t) >= windowMax * 0.35)
     .map((point) => {
       const snapped = snapToDownbeat(point.t, downbeats);
+      const signalVal = sampleLane(window, point.t);
+      const surgeScore = surgeNorm ? sampleLane(surgeNorm, point.t) : 0;
+      let magnitude = snapped.onDownbeat ? Math.min(1, signalVal + 0.08) : signalVal;
+      if (surgeScore >= SURGE_SCORE_THRESHOLD) {
+        magnitude = Math.min(1, magnitude + surgeScore * SURGE_MAGNITUDE_BOOST);
+      }
       return {
         timeS: snapped.timeS - musicStartS,
-        magnitude: snapped.onDownbeat ? Math.min(1, point.v + 0.08) : point.v,
+        magnitude,
         onDownbeat: snapped.onDownbeat,
+        surgeScore,
       };
     });
   peaks.sort((a, b) => b.magnitude - a.magnitude || a.timeS - b.timeS);
@@ -136,7 +185,10 @@ function planPolicyMarkers(
     timeS: peak.timeS,
     kind: "zoom" as const,
     magnitude: Math.round(zoomMagnitude(peak.magnitude) * 10000) / 10000,
-    reason: `RMS peak @ ${(musicStartS + peak.timeS).toFixed(2)}s${peak.onDownbeat ? " on downbeat" : ""}`,
+    reason:
+      peak.surgeScore >= SURGE_SCORE_THRESHOLD
+        ? `Energy surge @ ${(musicStartS + peak.timeS).toFixed(2)}s${peak.onDownbeat ? " on downbeat" : ""}`
+        : `RMS peak @ ${(musicStartS + peak.timeS).toFixed(2)}s${peak.onDownbeat ? " on downbeat" : ""}`,
   }));
   const rotateCandidates = fluxPeaks(lanes, "low", musicStartS, musicEndS)
     .filter((peak) => !zoomCandidates.some((zoom) => Math.abs(zoom.timeS - peak.timeS) <= 0.12))

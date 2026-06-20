@@ -32,6 +32,7 @@ export const LANE_COLORS: Record<string, string> = {
   band_low: BASS,
   band_mid: TRACE,
   band_high: DROP,
+  surge: "rgba(251,146,60,0.95)",
   vocal: "rgba(248,113,113,0.9)",
 };
 

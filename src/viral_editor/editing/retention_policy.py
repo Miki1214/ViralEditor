@@ -17,6 +17,8 @@ EARLY_HOOK_FX_BY_S = 2.0
 PEAK_SNAP_TOLERANCE_S = 0.15
 TRANSIENT_ALIGN_TOLERANCE_S = 0.12
 BASS_BAND_RATIO = 0.6
+SURGE_SCORE_THRESHOLD = 0.45
+SURGE_MAGNITUDE_BOOST = 0.12
 DEFAULT_HOP_LENGTH = 512
 DEFAULT_SR = 22050
 
@@ -36,6 +38,7 @@ class _Peak:
     magnitude: float
     on_downbeat: bool
     frame: int
+    surge_score: float = 0.0
 
 
 def _time_to_frame(time_s: float, *, hop_length: int, sr: int) -> int:
@@ -94,6 +97,28 @@ def _snap_to_downbeat(
     return time_s, False
 
 
+def _surge_candidate_frames(
+    surge_norm: np.ndarray,
+    *,
+    start_frame: int,
+    end_frame: int,
+    threshold: float = SURGE_SCORE_THRESHOLD,
+    half_window: int = 3,
+) -> list[int]:
+    """Frames where surge is high and locally maximal (handles monotonic ramps)."""
+    segment = surge_norm[start_frame:end_frame]
+    frames: list[int] = []
+    for local_index in range(segment.size):
+        value = float(segment[local_index])
+        if value < threshold:
+            continue
+        lo = max(0, local_index - half_window)
+        hi = min(segment.size, local_index + half_window + 1)
+        if value >= float(segment[lo:hi].max()) - 1e-6:
+            frames.append(start_frame + local_index)
+    return frames
+
+
 def find_energy_peaks(
     scope_lanes: dict[str, np.ndarray] | None,
     downbeats: list[float] | np.ndarray,
@@ -103,15 +128,21 @@ def find_energy_peaks(
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
 ) -> list[_Peak]:
-    """Ranked RMS/build peaks snapped to nearby downbeats when possible."""
+    """Ranked RMS/build/surge peaks snapped to nearby downbeats when possible."""
     rms = _lane_array(scope_lanes, "rms")
     build = _lane_array(scope_lanes, "build")
     drop_salience = _lane_array(scope_lanes, "drop_salience")
+    surge = _lane_array(scope_lanes, "surge")
     if rms is None:
         return []
 
+    surge_norm = _normalize_lane(surge) if surge is not None and surge.size == rms.size else None
     if drop_salience is not None and drop_salience.size == rms.size:
         signal = _normalize_lane(drop_salience)
+        if surge_norm is not None:
+            signal = signal * 0.65 + surge_norm * 0.35
+    elif surge_norm is not None:
+        signal = surge_norm * 0.6 + _normalize_lane(rms) * 0.4
     elif build is not None and build.size == rms.size:
         signal = _normalize_lane(build) * 0.6 + _normalize_lane(rms) * 0.4
     else:
@@ -130,8 +161,18 @@ def find_energy_peaks(
     downbeat_list = [float(t) for t in np.asarray(downbeats).tolist()]
     peaks: list[_Peak] = []
     window_signal = signal[start_frame:end_frame]
+    peak_frames: set[int] = set()
     for local_frame in _local_maxima(window_signal):
-        frame = start_frame + local_frame
+        peak_frames.add(start_frame + local_frame)
+    if surge_norm is not None:
+        for frame in _surge_candidate_frames(
+            surge_norm,
+            start_frame=start_frame,
+            end_frame=end_frame,
+        ):
+            peak_frames.add(frame)
+
+    for frame in sorted(peak_frames):
         time_s = _frame_to_time(frame, hop_length=hop_length, sr=sr)
         if time_s < window_start_s - 1e-6 or time_s >= end_s - 1e-6:
             continue
@@ -139,7 +180,13 @@ def find_energy_peaks(
         if window_max > 0 and rms_val < window_max * 0.35:
             continue
         snapped, on_downbeat = _snap_to_downbeat(time_s, downbeat_list)
+        if snapped < window_start_s - 1e-6 or snapped >= end_s - 1e-6:
+            snapped = time_s
+            on_downbeat = False
         magnitude = float(signal[frame])
+        surge_score = float(surge_norm[frame]) if surge_norm is not None and frame < surge_norm.size else 0.0
+        if surge_score >= SURGE_SCORE_THRESHOLD:
+            magnitude = min(1.0, magnitude + surge_score * SURGE_MAGNITUDE_BOOST)
         if on_downbeat:
             magnitude = min(1.0, magnitude + 0.08)
         peaks.append(
@@ -148,6 +195,7 @@ def find_energy_peaks(
                 magnitude=magnitude,
                 on_downbeat=on_downbeat,
                 frame=frame,
+                surge_score=surge_score,
             )
         )
 
@@ -157,6 +205,20 @@ def find_energy_peaks(
         if all(abs(peak.time_s - kept.time_s) >= 0.08 for kept in deduped):
             deduped.append(peak)
     return deduped
+
+
+def _relative_interrupt_time(
+    time_s: float,
+    *,
+    window_start_s: float,
+    window_end_s: float,
+) -> float | None:
+    """Map an absolute peak time to window-relative seconds, or skip if out of range."""
+    rel = time_s - window_start_s
+    duration = max(window_end_s - window_start_s, 0.0)
+    if rel < -1e-6 or rel > duration + 1e-6:
+        return None
+    return round(max(0.0, min(duration, rel)), 6)
 
 
 def find_flux_peaks(
@@ -386,27 +448,44 @@ def place_interrupts(
         sr=sr,
     )
 
-    zoom_candidates = [
-        PlannedInterrupt(
-            timestamp_s=round(peak.time_s - window_start_s, 6),
-            kind="zoom",
-            magnitude=round(1.05 + peak.magnitude * 0.03, 4),
-            reason=(
-                f"RMS peak @ {peak.time_s:.2f}s"
-                + (" on downbeat" if peak.on_downbeat else "")
-            ),
+    zoom_candidates: list[PlannedInterrupt] = []
+    for peak in energy_peaks:
+        rel_ts = _relative_interrupt_time(
+            peak.time_s,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
         )
-        for peak in energy_peaks
-    ]
+        if rel_ts is None:
+            continue
+        zoom_candidates.append(
+            PlannedInterrupt(
+                timestamp_s=rel_ts,
+                kind="zoom",
+                magnitude=round(1.05 + peak.magnitude * 0.03, 4),
+                reason=(
+                    f"Energy surge @ {peak.time_s:.2f}s"
+                    if peak.surge_score >= SURGE_SCORE_THRESHOLD
+                    else f"RMS peak @ {peak.time_s:.2f}s"
+                )
+                + (" on downbeat" if peak.on_downbeat else ""),
+            )
+        )
 
-    rotate_candidates = []
+    rotate_candidates: list[PlannedInterrupt] = []
     zoom_abs_times = {peak.time_s for peak in energy_peaks}
     for peak in low_flux:
         if any(abs(peak.time_s - zt) <= 0.12 for zt in zoom_abs_times):
             continue
+        rel_ts = _relative_interrupt_time(
+            peak.time_s,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+        )
+        if rel_ts is None:
+            continue
         rotate_candidates.append(
             PlannedInterrupt(
-                timestamp_s=round(peak.time_s - window_start_s, 6),
+                timestamp_s=rel_ts,
                 kind="rotate",
                 magnitude=round(max(0.1, peak.magnitude * 1.5), 4),
                 reason=f"Low-band flux @ {peak.time_s:.2f}s",

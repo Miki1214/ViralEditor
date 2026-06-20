@@ -45,6 +45,124 @@ def test_find_energy_peaks_prefers_loud_hit(tmp_path: Path) -> None:
     assert any(abs(peak.time_s - 2.5) <= 0.25 for peak in peaks)
 
 
+def test_surge_lane_peaks_after_quiet_rise(tmp_path: Path) -> None:
+    sr = 22050
+    duration_s = 4.0
+    y = np.zeros(int(sr * duration_s), dtype=np.float32)
+    ramp_start = int(2.0 * sr)
+    ramp_end = int(3.0 * sr)
+    y[ramp_start:ramp_end] = np.linspace(0.02, 0.95, ramp_end - ramp_start, dtype=np.float32)
+    y[ramp_end:] = 0.95
+    wav = tmp_path / "surge.wav"
+    sf.write(wav, y, sr)
+
+    result = analyze_audio_with_envelope(wav)
+    surge = result.scope_lanes["surge"]
+    hop = 512
+    peak_frame = int(np.argmax(surge))
+    peak_time_s = peak_frame * hop / sr
+    assert peak_time_s >= 2.5
+    assert peak_time_s <= 3.2
+    assert float(surge.max()) >= 0.8
+
+
+def test_find_energy_peaks_surge_score_on_ramp() -> None:
+    hop, sr = 512, 22050
+    rms = np.concatenate(
+        [
+            np.full(200, 0.08, dtype=np.float32),
+            np.linspace(0.08, 0.95, 120, dtype=np.float32),
+            np.full(80, 0.95, dtype=np.float32),
+        ]
+    )
+    rms_norm = rms / float(rms.max())
+    from viral_editor.audio.beat_detector import _compute_surge_lane
+
+    surge = _compute_surge_lane(rms_norm, hop_length=hop, sr=sr)
+    build = np.maximum(0.0, np.diff(rms_norm, prepend=rms_norm[0])).astype(np.float32)
+    drop_salience = (build * rms_norm).astype(np.float32)
+    scope = {
+        "rms": rms,
+        "surge": surge,
+        "drop_salience": drop_salience,
+        "build": build,
+    }
+    duration_s = rms.size * hop / sr
+    peaks = find_energy_peaks(scope, [], window_end_s=duration_s)
+    assert peaks
+    top = peaks[0]
+    assert top.surge_score >= 0.45
+    assert 5.5 <= top.time_s <= 6.5
+
+
+def test_place_interrupts_labels_energy_surge() -> None:
+    hop, sr = 512, 22050
+    rms = np.concatenate(
+        [
+            np.full(200, 0.08, dtype=np.float32),
+            np.linspace(0.08, 0.95, 120, dtype=np.float32),
+            np.full(180, 0.95, dtype=np.float32),
+        ]
+    )
+    rms_norm = rms / float(rms.max())
+    from viral_editor.audio.beat_detector import _compute_surge_lane
+
+    surge = _compute_surge_lane(rms_norm, hop_length=hop, sr=sr)
+    build = np.maximum(0.0, np.diff(rms_norm, prepend=rms_norm[0])).astype(np.float32)
+    drop_salience = (build * rms_norm).astype(np.float32)
+    scope = {
+        "rms": rms,
+        "surge": surge,
+        "drop_salience": drop_salience,
+        "build": build,
+    }
+    duration_s = rms.size * hop / sr
+    events = place_interrupts(
+        scope,
+        [],
+        window_start_s=0.0,
+        window_end_s=duration_s,
+    )
+    zooms = [event for event in events if event.kind == "zoom"]
+    assert zooms
+    assert any("Energy surge" in event.reason for event in zooms)
+
+
+def test_place_interrupts_keeps_relative_timestamps_non_negative() -> None:
+    hop, sr = 512, 22050
+    rms = np.concatenate(
+        [
+            np.full(120, 0.2, dtype=np.float32),
+            np.full(80, 0.95, dtype=np.float32),
+        ]
+    )
+    rms_norm = rms / float(rms.max())
+    from viral_editor.audio.beat_detector import _compute_surge_lane
+
+    surge = _compute_surge_lane(rms_norm, hop_length=hop, sr=sr)
+    build = np.maximum(0.0, np.diff(rms_norm, prepend=rms_norm[0])).astype(np.float32)
+    drop_salience = (build * rms_norm).astype(np.float32)
+    scope = {
+        "rms": rms,
+        "surge": surge,
+        "drop_salience": drop_salience,
+        "build": build,
+    }
+    peak_time_s = 120 * hop / sr
+    downbeats = [peak_time_s - 0.12]
+    window_start_s = peak_time_s + 0.01
+    window_end_s = rms.size * hop / sr
+
+    events = place_interrupts(
+        scope,
+        downbeats,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+    )
+    for event in events:
+        assert event.timestamp_s >= 0.0
+
+
 def test_zoom_not_placed_in_rms_valley(tmp_path: Path) -> None:
     wav = _write_drop_fixture(tmp_path / "drop.wav")
     result = analyze_audio_with_envelope(wav)

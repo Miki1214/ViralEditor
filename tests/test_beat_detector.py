@@ -128,6 +128,7 @@ def test_analyze_audio_with_envelope_writes_npy(tmp_path: Path) -> None:
         "band_high",
         "build",
         "drop_salience",
+        "surge",
         "flux_low",
         "flux_high",
         "pacing_density",

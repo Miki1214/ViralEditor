@@ -65,6 +65,7 @@ _SCOPE_LANE_KEYS = (
     "band_high",
     "build",
     "drop_salience",
+    "surge",
     "flux_low",
     "flux_high",
     "pacing_density",
@@ -97,6 +98,43 @@ def _compute_pacing_density(
         )
         pacing[frame] = count / max(window_s, 1e-6)
     return pacing
+
+
+def _compute_surge_lane(
+    rms_norm: np.ndarray,
+    *,
+    hop_length: int,
+    sr: int,
+    rise_window_s: float = 0.75,
+    min_rise: float = 0.15,
+) -> np.ndarray:
+    """Windowed low→high RMS rise — peaks at steep surges that land loud."""
+    n = rms_norm.size
+    if n < 2:
+        return np.zeros(n, dtype=np.float32)
+
+    window_frames = max(2, int(round(rise_window_s * sr / hop_length)))
+    rms = rms_norm.astype(np.float32)
+    surge = np.zeros(n, dtype=np.float32)
+
+    for index in range(n):
+        start = max(0, index - window_frames + 1)
+        segment = rms[start : index + 1]
+        valley = float(segment.min())
+        current = float(rms[index])
+        rise = current - valley
+        if rise < min_rise:
+            continue
+        valley_frame = start + int(np.argmin(segment))
+        span = max(1, index - valley_frame)
+        steepness = rise / span
+        quiet_gate = max(0.0, 1.0 - valley * 1.25)
+        surge[index] = rise * steepness * quiet_gate * current
+
+    peak = float(surge.max()) if surge.size else 1.0
+    if peak > 1e-9:
+        surge = (surge / peak).astype(np.float32)
+    return surge
 
 
 def _compute_scope_lanes(
@@ -132,6 +170,11 @@ def _compute_scope_lanes(
     rms_norm = rms / rms_peak
     build = np.maximum(0.0, np.diff(rms_norm, prepend=rms_norm[0])).astype(np.float32)
     drop_salience = (build * rms_norm).astype(np.float32)
+    surge = _compute_surge_lane(
+        rms_norm,
+        hop_length=hop_length,
+        sr=sr,
+    )
 
     flux_low = np.maximum(0.0, np.diff(band_low, prepend=band_low[0])).astype(np.float32)
     flux_high = np.maximum(0.0, np.diff(band_high, prepend=band_high[0])).astype(np.float32)
@@ -156,6 +199,7 @@ def _compute_scope_lanes(
         "band_high": band_high,
         "build": build,
         "drop_salience": drop_salience,
+        "surge": surge,
         "flux_low": flux_low,
         "flux_high": flux_high,
         "pacing_density": pacing,

@@ -359,7 +359,7 @@ export function RetentionFxPanel({
             checked={spatialFx.enabled}
             disabled={saving}
             label="Spatial FX"
-            hint="Zoom on RMS peaks / downbeats; rotate on low-band flux hits."
+            hint="Zoom on energy surges / RMS peaks; rotate on low-band flux hits."
             onChange={(enabled) => void onPatch({ spatial_fx: { enabled } })}
           />
           <label className="block">
