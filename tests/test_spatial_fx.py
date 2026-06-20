@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from viral_editor.models import AudioTimeline, MediaInfo, Transient
+from viral_editor.config import SpatialFxConfig
+from viral_editor.models import AudioTimeline, FxEvent, MediaInfo, Transient
 from viral_editor.video.spatial_fx import (
     ROTATE_MAX_DEG,
     ZOOM_MAX,
@@ -129,6 +130,58 @@ def test_cap_limits_dense_events() -> None:
     )
     bucket_count = sum(1 for event in events if 1.0 <= event.timestamp_s < 2.0)
     assert bucket_count <= 4
+
+
+def test_policy_includes_translate_events() -> None:
+    import numpy as np
+
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.8, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+    downbeats = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+    timeline = AudioTimeline(
+        global_bpm=128.0,
+        audio_duration_seconds=duration_s,
+        sample_rate=sr,
+        transients=[],
+    )
+    events = plan_spatial_fx(
+        timeline,
+        _video(),
+        seed=1,
+        scope_lanes=scope,
+        downbeats=downbeats,
+        beats=[t + 0.25 for t in downbeats],
+        window_start_s=0.0,
+        window_end_s=min(4.0, duration_s),
+        max_events_per_second=8.0,
+        spatial_fx=SpatialFxConfig(translate_enabled=True, pan_beat_mode="beats"),
+    )
+    translate_events = [event for event in events if event.kind == "translate"]
+    assert translate_events
+    assert translate_events[0].direction in (-1, 1)
+
+
+def test_merge_keeps_opposite_direction_translations() -> None:
+    from viral_editor.video.spatial_fx import _merge_nearby
+
+    left = FxEvent(
+        timestamp_s=1.0,
+        kind="translate",
+        magnitude=0.8,
+        decay_frames=4,
+        direction=-1,
+    )
+    right = FxEvent(
+        timestamp_s=1.02,
+        kind="translate",
+        magnitude=0.7,
+        decay_frames=4,
+        direction=1,
+    )
+    merged = _merge_nearby([left, right], merge_window_s=0.05)
+    assert len(merged) == 2
 
 
 def test_rotate_direction_is_deterministic() -> None:

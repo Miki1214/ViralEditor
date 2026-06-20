@@ -91,6 +91,7 @@ export function StoryboardBlockPlayer({
   const scrubValueRef = useRef(0);
   const activeSlotRef = useRef<HTMLSpanElement>(null);
   const orderedSlotsRef = useRef<StorySlot[]>([]);
+  const mountedRef = useRef(true);
   const [playing, setPlaying] = useState(false);
   const [loopMode, setLoopMode] = useState<StoryboardLoopMode>("block");
   const [ready, setReady] = useState(false);
@@ -117,13 +118,6 @@ export function StoryboardBlockPlayer({
       ) ?? null,
     [orderedSlots],
   );
-
-  const activeSlot = slotAtTime(playheadS);
-  const activeSlotIndex = activeSlot
-    ? orderedSlots.findIndex((slot) => slot.id === activeSlot.id)
-    : -1;
-  const activeSlotColor =
-    activeSlotIndex >= 0 ? slotColorForIndex(activeSlotIndex).stroke : undefined;
 
   loopModeRef.current = loopMode;
   selectedSlotRef.current = selectedSlot;
@@ -159,8 +153,15 @@ export function StoryboardBlockPlayer({
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     return subscribePlayhead((timeS) => {
-      if (scrubbingRef.current) return;
+      if (!mountedRef.current || scrubbingRef.current) return;
       updatePlayheadDom(timeS);
       updateActiveSlotLabel(timeS);
     });
@@ -169,7 +170,8 @@ export function StoryboardBlockPlayer({
   useEffect(() => {
     if (scrubbingRef.current) return;
     updatePlayheadDom(playheadS);
-  }, [playheadS, blockDurationS, updatePlayheadDom]);
+    updateActiveSlotLabel(playheadS);
+  }, [playheadS, blockDurationS, updatePlayheadDom, updateActiveSlotLabel]);
 
   const setLoopModeAndNotify = useCallback(
     (mode: StoryboardLoopMode) => {
@@ -239,8 +241,10 @@ export function StoryboardBlockPlayer({
     setScrubbing(false);
     scrubbingRef.current = false;
     prevAudioTimeRef.current = 0;
+    updatePlayheadDom(0);
+    updateActiveSlotLabel(0);
     publishPlayhead(0, { commit: true });
-  }, [audioUrl, publishPlayhead]);
+  }, [audioUrl, publishPlayhead, updatePlayheadDom, updateActiveSlotLabel]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -486,8 +490,6 @@ export function StoryboardBlockPlayer({
     return () => registerBlockSetLoopMode?.(null);
   }, [registerBlockSetLoopMode, setLoopModeAndNotify]);
 
-  const displayActiveSlot = activeSlot;
-
   return (
     <div className="space-y-2 rounded border border-monitor-border bg-monitor-bg/50 p-3">
       <audio ref={audioRef} src={audioUrl} preload="metadata" />
@@ -521,7 +523,6 @@ export function StoryboardBlockPlayer({
           />
         </div>
         <input
-          key={audioUrl}
           ref={sliderRef}
           type="range"
           className="field-range relative z-[1]"
@@ -569,17 +570,8 @@ export function StoryboardBlockPlayer({
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-monitor-muted">
-        <span ref={timeDisplayRef}>
-          {formatTime(playheadS)} / {formatTime(blockDurationS)}
-        </span>
-        {displayActiveSlot ? (
-          <span ref={activeSlotRef} style={{ color: activeSlotColor }}>
-            {displayActiveSlot.label} ·{" "}
-            {formatTime(displayActiveSlot.out_end_s - displayActiveSlot.out_start_s)}
-          </span>
-        ) : (
-          <span ref={activeSlotRef}>No slot</span>
-        )}
+        <span ref={timeDisplayRef} />
+        <span ref={activeSlotRef} />
         {transportPlaying && loopMode === "slot" && selectedSlot ? (
           <span className="text-scope-dim">
             looping {selectedSlot.label.toLowerCase()}

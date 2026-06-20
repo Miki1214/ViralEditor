@@ -1,13 +1,30 @@
-import type { ScopeLaneSeries, Transient, WaveformPoint } from "../types";
+import type { PanBeatMode, ScopeLaneSeries, Transient, WaveformPoint } from "../types";
 
-export type FxMarkerKind = "zoom" | "rotate";
+export type FxMarkerKind = "zoom" | "rotate" | "translate";
 
 export interface FxMarker {
   timeS: number;
   kind: FxMarkerKind;
   magnitude: number;
+  direction?: number;
   reason?: string;
 }
+
+export interface PanPlanSettings {
+  translateEnabled: boolean;
+  panBeatMode: PanBeatMode;
+  panEnergyThreshold: number;
+  panEnergyFloor: number;
+  panHookByS: number;
+}
+
+const DEFAULT_PAN_SETTINGS: PanPlanSettings = {
+  translateEnabled: true,
+  panBeatMode: "auto",
+  panEnergyThreshold: 0.45,
+  panEnergyFloor: 0.2,
+  panHookByS: 1.0,
+};
 
 const SURGE_SCORE_THRESHOLD = 0.45;
 const SURGE_MAGNITUDE_BOOST = 0.12;
@@ -16,6 +33,10 @@ const INTERRUPT_MIN_GAP_S = 3.0;
 const INTERRUPT_MAX_GAP_S = 5.0;
 const EARLY_HOOK_FX_BY_S = 2.0;
 const PEAK_SNAP_TOLERANCE_S = 0.15;
+const PAN_BEAT_MIN_GAP_S = 0.25;
+const PAN_DOWNBEAT_MIN_GAP_S = 0.5;
+const PAN_MAGNITUDE_MIN = 0.35;
+const PAN_MAGNITUDE_MAX = 1.0;
 
 function zoomMagnitude(amplitude: number): number {
   const amp = Math.max(0, Math.min(1, amplitude));
@@ -25,6 +46,22 @@ function zoomMagnitude(amplitude: number): number {
 function rotateMagnitude(amplitude: number): number {
   const amp = Math.max(0, Math.min(1, amplitude));
   return Math.max(0.1, amp * 1.5);
+}
+
+function panMagnitude(amplitude: number): number {
+  const amp = Math.max(0, Math.min(1, amplitude));
+  return PAN_MAGNITUDE_MIN + amp * (PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN);
+}
+
+function laneAmplitudeAt(
+  lanes: ScopeLaneSeries[] | undefined,
+  timeS: number,
+): number {
+  const rms = lanePoints(lanes, "rms");
+  const bandLow = lanePoints(lanes, "band_low");
+  const rmsVal = rms.length > 0 ? sampleLane(rms, timeS) : 0.5;
+  const lowVal = bandLow.length > 0 ? sampleLane(bandLow, timeS) : rmsVal;
+  return rmsVal * 0.65 + lowVal * 0.35;
 }
 
 function lanePoints(lanes: ScopeLaneSeries[] | undefined, id: string): WaveformPoint[] {
@@ -173,11 +210,166 @@ function fluxPeaks(
   }));
 }
 
+function surgeAt(lanes: ScopeLaneSeries[] | undefined, timeS: number): number {
+  return sampleLane(lanePoints(lanes, "surge"), timeS);
+}
+
+type PanEnergyTier = "dense" | "sparse" | "off";
+
+function panEnergyTier(
+  lanes: ScopeLaneSeries[] | undefined,
+  timeS: number,
+  energyThreshold: number,
+  energyFloor: number,
+): PanEnergyTier {
+  const amp = laneAmplitudeAt(lanes, timeS);
+  const surge = surgeAt(lanes, timeS);
+  if (surge >= SURGE_SCORE_THRESHOLD || amp >= energyThreshold) {
+    return "dense";
+  }
+  if (amp >= energyFloor) {
+    return "sparse";
+  }
+  return "off";
+}
+
+function isDownbeatTime(timeS: number, downbeats: number[]): boolean {
+  return downbeats.some((downbeat) => Math.abs(timeS - downbeat) <= PEAK_SNAP_TOLERANCE_S);
+}
+
+function ensureHookPan(
+  selected: FxMarker[],
+  lanes: ScopeLaneSeries[] | undefined,
+  beatTimes: number[],
+  downbeatTimes: number[],
+  musicStartS: number,
+  musicEndS: number,
+  panHookByS: number,
+): FxMarker[] {
+  if (selected.some((event) => event.timeS <= panHookByS + 1e-6)) {
+    return selected;
+  }
+
+  const duration = musicEndS - musicStartS;
+  const hookDeadline = musicStartS + panHookByS;
+  const hookCandidates = (beatTimes.length > 0 ? beatTimes : downbeatTimes).filter(
+    (t) => t >= musicStartS - 1e-6 && t <= hookDeadline + 1e-6,
+  );
+  const hookAbs =
+    hookCandidates[0] ?? musicStartS + Math.min(0.5, duration * 0.25);
+  const relTs = hookAbs - musicStartS;
+  if (relTs < -1e-6 || relTs > duration) {
+    return selected;
+  }
+
+  const amp = laneAmplitudeAt(lanes, hookAbs);
+  const hookAmp = Math.max(amp, 0.35);
+  return [
+    ...selected,
+    {
+      timeS: relTs,
+      kind: "translate",
+      magnitude: Math.round(panMagnitude(hookAmp) * 10000) / 10000,
+      direction: 1,
+      reason: `Hook pan @ ${hookAbs.toFixed(2)}s`,
+    },
+  ].sort((a, b) => a.timeS - b.timeS);
+}
+
+function planTranslationMarkers(
+  lanes: ScopeLaneSeries[] | undefined,
+  downbeats: number[],
+  beats: number[],
+  musicStartS: number,
+  musicEndS: number,
+  pan: PanPlanSettings,
+): FxMarker[] {
+  if (!pan.translateEnabled) {
+    return [];
+  }
+
+  const duration = musicEndS - musicStartS;
+  if (duration <= 0) return [];
+
+  const downbeatTimes = downbeats.filter((t) => t >= musicStartS && t < musicEndS);
+  const beatTimes = beats.filter((t) => t >= musicStartS && t < musicEndS);
+
+  let candidates: number[];
+  if (pan.panBeatMode === "downbeats") {
+    candidates = downbeatTimes;
+  } else if (pan.panBeatMode === "beats") {
+    candidates = beatTimes.length > 0 ? beatTimes : downbeatTimes;
+  } else {
+    candidates = beatTimes.length > 0 ? beatTimes : downbeatTimes;
+  }
+
+  if (candidates.length === 0) {
+    const step = Math.max(PAN_DOWNBEAT_MIN_GAP_S, duration / 8);
+    candidates = [];
+    for (let t = musicStartS; t < musicEndS - 1e-6; t += step) {
+      candidates.push(t);
+    }
+  }
+
+  const selected: FxMarker[] = [];
+  let direction = 1;
+  let lastRel = -PAN_BEAT_MIN_GAP_S;
+  for (const absT of [...candidates].sort((a, b) => a - b)) {
+    const tier = panEnergyTier(
+      lanes,
+      absT,
+      pan.panEnergyThreshold,
+      pan.panEnergyFloor,
+    );
+    if (tier === "off") continue;
+
+    if (pan.panBeatMode === "auto" && tier === "sparse" && !isDownbeatTime(absT, downbeatTimes)) {
+      continue;
+    }
+    if (pan.panBeatMode === "downbeats" && !isDownbeatTime(absT, downbeatTimes)) {
+      continue;
+    }
+
+    const relTs = absT - musicStartS;
+    if (relTs < -1e-6 || relTs > duration) continue;
+
+    const minGap =
+      tier === "dense" || pan.panBeatMode === "beats"
+        ? PAN_BEAT_MIN_GAP_S
+        : PAN_DOWNBEAT_MIN_GAP_S;
+    if (relTs - lastRel < minGap - 0.01) continue;
+
+    const amp = laneAmplitudeAt(lanes, absT);
+    const tierLabel = tier === "dense" ? "beat" : "downbeat";
+    selected.push({
+      timeS: relTs,
+      kind: "translate",
+      magnitude: Math.round(panMagnitude(amp) * 10000) / 10000,
+      direction,
+      reason: `Pan (${tierLabel}) @ ${absT.toFixed(2)}s`,
+    });
+    direction *= -1;
+    lastRel = relTs;
+  }
+
+  return ensureHookPan(
+    selected,
+    lanes,
+    beatTimes,
+    downbeatTimes,
+    musicStartS,
+    musicEndS,
+    pan.panHookByS,
+  );
+}
+
 function planPolicyMarkers(
   lanes: ScopeLaneSeries[] | undefined,
   downbeats: number[],
+  beats: number[],
   musicStartS: number,
   musicEndS: number,
+  pan: PanPlanSettings = DEFAULT_PAN_SETTINGS,
 ): FxMarker[] {
   const duration = musicEndS - musicStartS;
   const absDownbeats = downbeats.filter((t) => t >= musicStartS && t < musicEndS);
@@ -224,6 +416,17 @@ function planPolicyMarkers(
     }
   }
 
+  selected.push(
+    ...planTranslationMarkers(
+      lanes,
+      downbeats,
+      beats,
+      musicStartS,
+      musicEndS,
+      pan,
+    ),
+  );
+
   return selected.sort((a, b) => a.timeS - b.timeS);
 }
 
@@ -254,6 +457,13 @@ function transientEvents(transient: Transient): FxMarker[] {
   return [];
 }
 
+function mergeKey(marker: FxMarker): string {
+  if (marker.kind === "translate") {
+    return `${marker.kind}:${marker.direction ?? 0}`;
+  }
+  return marker.kind;
+}
+
 function mergeNearby(events: FxMarker[]): FxMarker[] {
   if (events.length === 0) return [];
   const ordered = [...events].sort(
@@ -262,7 +472,10 @@ function mergeNearby(events: FxMarker[]): FxMarker[] {
   const merged: FxMarker[] = [ordered[0]];
   for (const event of ordered.slice(1)) {
     const prev = merged[merged.length - 1];
-    if (event.kind === prev.kind && event.timeS - prev.timeS <= MERGE_WINDOW_S) {
+    if (
+      mergeKey(event) === mergeKey(prev) &&
+      event.timeS - prev.timeS <= MERGE_WINDOW_S
+    ) {
       if (event.magnitude >= prev.magnitude) {
         merged[merged.length - 1] = event;
       }
@@ -303,17 +516,23 @@ export function planSpatialFxMarkers(
     enabled: boolean;
     lanes?: ScopeLaneSeries[];
     downbeats?: number[];
+    beats?: number[];
+    pan?: Partial<PanPlanSettings>;
   },
 ): FxMarker[] {
   if (!options.enabled) return [];
+
+  const pan: PanPlanSettings = { ...DEFAULT_PAN_SETTINGS, ...options.pan };
 
   let events: FxMarker[] = [];
   if (options.lanes && options.lanes.length > 0 && options.downbeats) {
     events = planPolicyMarkers(
       options.lanes,
       options.downbeats,
+      options.beats ?? [],
       options.musicStartS,
       options.musicEndS,
+      pan,
     );
   } else {
     for (const transient of transients) {
@@ -333,14 +552,20 @@ export function planSpatialFxMarkers(
   return capEventsPerSecond(mergeNearby(events), options.maxEventsPerSecond);
 }
 
-export function countSpatialFxMarkers(markers: FxMarker[]): { zoom: number; rotate: number } {
+export function countSpatialFxMarkers(markers: FxMarker[]): {
+  zoom: number;
+  rotate: number;
+  translate: number;
+} {
   let zoom = 0;
   let rotate = 0;
+  let translate = 0;
   for (const marker of markers) {
     if (marker.kind === "zoom") zoom += 1;
-    else rotate += 1;
+    else if (marker.kind === "rotate") rotate += 1;
+    else translate += 1;
   }
-  return { zoom, rotate };
+  return { zoom, rotate, translate };
 }
 
 export function isRmsValley(

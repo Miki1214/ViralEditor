@@ -432,9 +432,15 @@ def run_pipeline(
                 if ramp_features is not None
                 else []
             ),
+            beats=(
+                ramp_features.beat_times_s.tolist()
+                if ramp_features is not None
+                else None
+            ),
             window_start_s=loaded.music.start_s or 0.0,
             window_end_s=loaded.music.end_s or output_duration_s,
             retention=loaded.retention,
+            spatial_fx=loaded.spatial_fx,
         ) if loaded.spatial_fx.enabled else []
         fx_path = write_artifact_list(fx_events, "fx_events", work_temp)
         artifacts.append(fx_path.name)

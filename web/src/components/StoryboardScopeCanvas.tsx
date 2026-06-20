@@ -29,6 +29,7 @@ interface StoryboardScopeCanvasProps {
 
 const ZOOM = "#F4C430";
 const ROTATE = "#38BDF8";
+const TRANSLATE = "#A78BFA";
 const WAVEFORM_HEIGHT = 72;
 const PAD_X = SCOPE_PAD_X;
 const PAD_Y = 8;
@@ -80,15 +81,28 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
         enabled: fxSettings.enabled,
         lanes: waveform.lanes,
         downbeats: waveform.downbeats,
+        beats: waveform.beats,
+        pan: {
+          translateEnabled: fxSettings.translate_enabled ?? true,
+          panBeatMode: fxSettings.pan_beat_mode ?? "auto",
+          panEnergyThreshold: fxSettings.pan_energy_threshold ?? 0.45,
+          panEnergyFloor: fxSettings.pan_energy_floor ?? 0.2,
+          panHookByS: fxSettings.pan_hook_by_s ?? 1.0,
+        },
       }),
     [
       waveform.transients,
       waveform.lanes,
       waveform.downbeats,
+      waveform.beats,
       storyboard.music_start_s,
       storyboard.music_end_s,
       fxSettings.enabled,
       fxSettings.max_events_per_second,
+      fxSettings.translate_enabled,
+      fxSettings.pan_beat_mode,
+      fxSettings.pan_energy_threshold,
+      fxSettings.pan_hook_by_s,
     ],
   );
 
@@ -167,6 +181,13 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
               aria-hidden
             />
             Rotate
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full bg-[#A78BFA]"
+              aria-hidden
+            />
+            Pan
           </span>
         </div>
       )}
@@ -326,14 +347,30 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
               </g>
             );
           }
+          if (marker.kind === "rotate") {
+            return (
+              <g key={`fx-rotate-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={baselineY - Math.round(tickHeight * 0.65)}
+                  y2={baselineY}
+                  stroke={ROTATE}
+                  strokeWidth={1.75}
+                  opacity={0.9}
+                />
+              </g>
+            );
+          }
+          const panOffset = marker.direction === -1 ? -3 : 3;
           return (
-            <g key={`fx-rotate-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
+            <g key={`fx-pan-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
               <line
                 x1={x}
-                x2={x}
-                y1={baselineY - Math.round(tickHeight * 0.65)}
+                x2={x + panOffset}
+                y1={baselineY - Math.round(tickHeight * 0.5)}
                 y2={baselineY}
-                stroke={ROTATE}
+                stroke={TRANSLATE}
                 strokeWidth={1.75}
                 opacity={0.9}
               />

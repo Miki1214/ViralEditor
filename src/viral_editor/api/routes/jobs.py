@@ -704,6 +704,12 @@ def _storyboard_response(
             enabled=config.spatial_fx.enabled,
             intensity=config.spatial_fx.intensity,
             max_events_per_second=config.spatial_fx.max_events_per_second,
+            translate_enabled=config.spatial_fx.translate_enabled,
+            pan_beat_mode=config.spatial_fx.pan_beat_mode,
+            pan_min_decay_s=config.spatial_fx.pan_min_decay_s,
+            pan_energy_threshold=config.spatial_fx.pan_energy_threshold,
+            pan_energy_floor=config.spatial_fx.pan_energy_floor,
+            pan_hook_by_s=config.spatial_fx.pan_hook_by_s,
         ),
         retention=RetentionSettingsResponse(
             interrupt_min_gap_s=config.retention.interrupt_min_gap_s,

@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from viral_editor.models import BudgetPolicy, ClipInput, ClipRole, DomainModel, TeaserMask
+
+PanBeatMode = Literal["auto", "beats", "downbeats"]
 
 _HEX_COLOR = re.compile(r"^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
 _RGBA_COLOR = re.compile(
@@ -130,11 +133,17 @@ class TeaserConfig(DomainModel):
 
 
 class SpatialFxConfig(DomainModel):
-    """Beat-synced zoom punches and rotation shakes."""
+    """Beat-synced zoom punches, rotation shakes, and horizontal pan."""
 
     enabled: bool = True
     intensity: float = Field(default=1.0, ge=0, le=1)
     max_events_per_second: float = Field(default=8.0, gt=0, le=30)
+    translate_enabled: bool = True
+    pan_beat_mode: PanBeatMode = "auto"
+    pan_min_decay_s: float = Field(default=0.2, ge=0.1, le=0.5)
+    pan_energy_threshold: float = Field(default=0.45, ge=0.15, le=0.85)
+    pan_energy_floor: float = Field(default=0.2, ge=0, le=0.5)
+    pan_hook_by_s: float = Field(default=1.0, gt=0, le=3)
 
 
 class RetentionConfig(DomainModel):

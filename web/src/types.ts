@@ -245,10 +245,18 @@ export interface TeaserSettings {
   payoff_downbeats_s?: number[];
 }
 
+export type PanBeatMode = "auto" | "beats" | "downbeats";
+
 export interface SpatialFxSettings {
   enabled: boolean;
   intensity: number;
   max_events_per_second: number;
+  translate_enabled: boolean;
+  pan_beat_mode: PanBeatMode;
+  pan_min_decay_s: number;
+  pan_energy_threshold: number;
+  pan_energy_floor: number;
+  pan_hook_by_s: number;
 }
 
 export interface ClipInfo {

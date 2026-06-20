@@ -158,6 +158,12 @@ class SpatialFxSettingsResponse(BaseModel):
     enabled: bool
     intensity: float
     max_events_per_second: float
+    translate_enabled: bool = True
+    pan_beat_mode: Literal["auto", "beats", "downbeats"] = "auto"
+    pan_min_decay_s: float = 0.2
+    pan_energy_threshold: float = 0.45
+    pan_energy_floor: float = 0.2
+    pan_hook_by_s: float = 1.0
 
 
 class StoryboardSegmentDebugRow(BaseModel):
@@ -207,6 +213,12 @@ class SpatialFxSettingsPatch(BaseModel):
     enabled: bool | None = None
     intensity: float | None = Field(default=None, ge=0, le=1)
     max_events_per_second: float | None = Field(default=None, gt=0, le=30)
+    translate_enabled: bool | None = None
+    pan_beat_mode: Literal["auto", "beats", "downbeats"] | None = None
+    pan_min_decay_s: float | None = Field(default=None, ge=0.1, le=0.5)
+    pan_energy_threshold: float | None = Field(default=None, ge=0.15, le=0.85)
+    pan_energy_floor: float | None = Field(default=None, ge=0, le=0.5)
+    pan_hook_by_s: float | None = Field(default=None, gt=0, le=3)
 
 
 class RetentionSettingsPatch(BaseModel):

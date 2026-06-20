@@ -106,6 +106,11 @@ def spatial_fx_for_preview(
         if features is not None
         else []
     )
+    beats = (
+        features.beat_times_s.tolist()
+        if features is not None
+        else None
+    )
     return plan_spatial_fx(
         windowed,
         media,
@@ -113,9 +118,11 @@ def spatial_fx_for_preview(
         max_events_per_second=config.spatial_fx.max_events_per_second,
         scope_lanes=scope_lanes,
         downbeats=downbeats,
+        beats=beats,
         window_start_s=music_start_s,
         window_end_s=music_end_s,
         retention=config.retention,
+        spatial_fx=config.spatial_fx,
     )
 
 

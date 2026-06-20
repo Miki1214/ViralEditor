@@ -198,6 +198,93 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
     assert "[outv]" in graph
 
 
+def test_build_composite_filtergraph_translate_pan() -> None:
+    from viral_editor.models import FxEvent
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=5.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+    ]
+    fx_events = [
+        FxEvent(
+            timestamp_s=1.0,
+            kind="translate",
+            magnitude=0.9,
+            decay_frames=4,
+            direction=1,
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        fx_events=fx_events,
+        fx_seed=7,
+        fx_intensity=1.0,
+    )
+    assert "crop=360:640:x='(iw-ow)/2+(if(between(t," in graph
+    assert graph.count("trunc(iw*1.150000)") == 1
+    assert "rotate=" not in graph
+    assert "[outv]" in graph
+
+
+def test_build_composite_filtergraph_translate_pan_many_beats() -> None:
+    from viral_editor.models import FxEvent
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=5.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+    ]
+    fx_events = [
+        FxEvent(
+            timestamp_s=1.0,
+            kind="translate",
+            magnitude=0.9,
+            decay_frames=6,
+            direction=1,
+        ),
+        FxEvent(
+            timestamp_s=1.5,
+            kind="translate",
+            magnitude=0.85,
+            decay_frames=6,
+            direction=-1,
+        ),
+        FxEvent(
+            timestamp_s=2.0,
+            kind="translate",
+            magnitude=0.9,
+            decay_frames=6,
+            direction=1,
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        fx_events=fx_events,
+        fx_seed=7,
+        fx_intensity=1.0,
+    )
+    assert graph.count("trunc(iw*1.150000)") == 1
+    assert graph.count("if(between(t,") >= 3
+    assert "[outv]" in graph
+
+
 def test_composite_output_duration_uses_segment_timeline() -> None:
     from viral_editor.video.proxy_render import composite_output_duration_s
 

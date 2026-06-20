@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 from pydantic import Field
@@ -19,16 +20,23 @@ TRANSIENT_ALIGN_TOLERANCE_S = 0.12
 BASS_BAND_RATIO = 0.6
 SURGE_SCORE_THRESHOLD = 0.45
 SURGE_MAGNITUDE_BOOST = 0.12
+PAN_MIN_GAP_S = 0.5
+PAN_BEAT_MIN_GAP_S = 0.25
+PAN_DOWNBEAT_MIN_GAP_S = 0.5
+PAN_MAGNITUDE_MIN = 0.35
+PAN_MAGNITUDE_MAX = 1.0
+PanBeatMode = Literal["auto", "beats", "downbeats"]
 DEFAULT_HOP_LENGTH = 512
 DEFAULT_SR = 22050
 
 
 class PlannedInterrupt(DomainModel):
-    """One pattern interrupt (zoom or rotate) with human-readable rationale."""
+    """One pattern interrupt (zoom, rotate, or translate) with human-readable rationale."""
 
     timestamp_s: float = Field(ge=0)
     kind: FxKind
     magnitude: float = Field(gt=0)
+    direction: int = 0  # -1 left, +1 right for translate
     reason: str
 
 
@@ -409,16 +417,251 @@ def classify_accents(
     return transients
 
 
+def _lane_amplitude_at(
+    scope_lanes: dict[str, np.ndarray] | None,
+    time_s: float,
+    *,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> float:
+    """Normalized RMS + low-band blend at an absolute time."""
+    rms = _lane_array(scope_lanes, "rms")
+    band_low = _lane_array(scope_lanes, "band_low")
+    frame = _time_to_frame(time_s, hop_length=hop_length, sr=sr)
+    rms_val = 0.5
+    if rms is not None and 0 <= frame < rms.size:
+        rms_val = float(_normalize_lane(rms)[frame])
+    low_val = rms_val
+    if band_low is not None and 0 <= frame < band_low.size:
+        low_val = float(_normalize_lane(band_low)[frame])
+    return rms_val * 0.65 + low_val * 0.35
+
+
+def _surge_at(
+    scope_lanes: dict[str, np.ndarray] | None,
+    time_s: float,
+    *,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> float:
+    surge = _lane_array(scope_lanes, "surge")
+    if surge is None:
+        return 0.0
+    frame = _time_to_frame(time_s, hop_length=hop_length, sr=sr)
+    if 0 <= frame < surge.size:
+        return float(_normalize_lane(surge)[frame])
+    return 0.0
+
+
+def _pan_energy_tier(
+    scope_lanes: dict[str, np.ndarray] | None,
+    time_s: float,
+    *,
+    energy_threshold: float,
+    energy_floor: float,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> Literal["dense", "sparse", "off"]:
+    amp = _lane_amplitude_at(scope_lanes, time_s, hop_length=hop_length, sr=sr)
+    surge = _surge_at(scope_lanes, time_s, hop_length=hop_length, sr=sr)
+    if surge >= SURGE_SCORE_THRESHOLD or amp >= energy_threshold:
+        return "dense"
+    if amp >= energy_floor:
+        return "sparse"
+    return "off"
+
+
+def _is_downbeat_time(
+    time_s: float,
+    downbeat_times: list[float],
+    *,
+    tolerance_s: float = PEAK_SNAP_TOLERANCE_S,
+) -> bool:
+    return any(abs(time_s - downbeat) <= tolerance_s for downbeat in downbeat_times)
+
+
+def _ensure_hook_pan(
+    selected: list[PlannedInterrupt],
+    *,
+    scope_lanes: dict[str, np.ndarray] | None,
+    beat_times: list[float],
+    downbeat_times: list[float],
+    window_start_s: float,
+    window_end_s: float,
+    pan_hook_by_s: float,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> list[PlannedInterrupt]:
+    """Guarantee at least one pan impulse within the hook window."""
+    if any(event.timestamp_s <= pan_hook_by_s + 1e-6 for event in selected):
+        return selected
+
+    duration = max(window_end_s - window_start_s, 0.0)
+    hook_deadline = window_start_s + pan_hook_by_s
+    hook_candidates = [
+        t
+        for t in beat_times or downbeat_times
+        if window_start_s - 1e-6 <= t <= hook_deadline + 1e-6
+    ]
+    if hook_candidates:
+        hook_abs = hook_candidates[0]
+    else:
+        hook_abs = window_start_s + min(0.5, duration * 0.25)
+
+    rel_ts = _relative_interrupt_time(
+        hook_abs,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+    )
+    if rel_ts is None:
+        return selected
+
+    amp = _lane_amplitude_at(scope_lanes, hook_abs, hop_length=hop_length, sr=sr)
+    hook_amp = max(amp, 0.35)
+    magnitude = round(
+        PAN_MAGNITUDE_MIN + hook_amp * (PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN),
+        4,
+    )
+    hook = PlannedInterrupt(
+        timestamp_s=rel_ts,
+        kind="translate",
+        magnitude=magnitude,
+        direction=1,
+        reason=f"Hook pan @ {hook_abs:.2f}s",
+    )
+    merged = sorted([*selected, hook], key=lambda event: event.timestamp_s)
+    return merged
+
+
+def place_translations(
+    scope_lanes: dict[str, np.ndarray] | None,
+    downbeats: list[float] | np.ndarray,
+    *,
+    window_start_s: float,
+    window_end_s: float,
+    beats: list[float] | np.ndarray | None = None,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+    pan_beat_mode: PanBeatMode = "auto",
+    pan_energy_threshold: float = 0.45,
+    pan_energy_floor: float = 0.2,
+    pan_hook_by_s: float = 1.0,
+) -> list[PlannedInterrupt]:
+    """Beat-synced horizontal pan impulses with energy gating and hook boost."""
+    duration = max(window_end_s - window_start_s, 0.0)
+    if duration <= 0:
+        return []
+
+    downbeat_times = sorted(
+        float(t)
+        for t in np.asarray(downbeats).tolist()
+        if window_start_s - 1e-6 <= float(t) < window_end_s - 1e-6
+    )
+    beat_times = sorted(
+        float(t)
+        for t in np.asarray(beats).tolist()
+        if window_start_s - 1e-6 <= float(t) < window_end_s - 1e-6
+    ) if beats is not None else []
+
+    if pan_beat_mode == "downbeats":
+        candidates = downbeat_times
+    elif pan_beat_mode == "beats":
+        candidates = beat_times or downbeat_times
+    else:
+        candidates = beat_times or downbeat_times
+
+    if not candidates:
+        step = max(PAN_DOWNBEAT_MIN_GAP_S, duration / 8.0)
+        candidates = [
+            window_start_s + index * step
+            for index in range(int(duration / step) + 1)
+            if window_start_s + index * step < window_end_s - 1e-6
+        ]
+
+    selected: list[PlannedInterrupt] = []
+    direction = 1
+    last_rel = -PAN_BEAT_MIN_GAP_S
+    for abs_t in sorted(candidates):
+        tier = _pan_energy_tier(
+            scope_lanes,
+            abs_t,
+            energy_threshold=pan_energy_threshold,
+            energy_floor=pan_energy_floor,
+            hop_length=hop_length,
+            sr=sr,
+        )
+        if tier == "off":
+            continue
+
+        if pan_beat_mode == "auto" and tier == "sparse":
+            if not _is_downbeat_time(abs_t, downbeat_times):
+                continue
+        elif pan_beat_mode == "downbeats" and not _is_downbeat_time(abs_t, downbeat_times):
+            continue
+
+        rel_ts = _relative_interrupt_time(
+            abs_t,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+        )
+        if rel_ts is None:
+            continue
+
+        min_gap = (
+            PAN_BEAT_MIN_GAP_S
+            if tier == "dense" or pan_beat_mode == "beats"
+            else PAN_DOWNBEAT_MIN_GAP_S
+        )
+        if rel_ts - last_rel < min_gap - 0.01:
+            continue
+
+        amp = _lane_amplitude_at(scope_lanes, abs_t, hop_length=hop_length, sr=sr)
+        magnitude = round(
+            PAN_MAGNITUDE_MIN + amp * (PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN),
+            4,
+        )
+        tier_label = "beat" if tier == "dense" else "downbeat"
+        selected.append(
+            PlannedInterrupt(
+                timestamp_s=rel_ts,
+                kind="translate",
+                magnitude=magnitude,
+                direction=direction,
+                reason=f"Pan ({tier_label}) @ {abs_t:.2f}s",
+            )
+        )
+        direction *= -1
+        last_rel = rel_ts
+
+    return _ensure_hook_pan(
+        selected,
+        scope_lanes=scope_lanes,
+        beat_times=beat_times,
+        downbeat_times=downbeat_times,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+        pan_hook_by_s=pan_hook_by_s,
+        hop_length=hop_length,
+        sr=sr,
+    )
+
+
 def place_interrupts(
     scope_lanes: dict[str, np.ndarray] | None,
     downbeats: list[float] | np.ndarray,
     *,
     window_start_s: float,
     window_end_s: float,
+    beats: list[float] | np.ndarray | None = None,
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
     min_gap_s: float = INTERRUPT_MIN_GAP_S,
     max_gap_s: float = INTERRUPT_MAX_GAP_S,
+    translate_enabled: bool = True,
+    pan_beat_mode: PanBeatMode = "auto",
+    pan_energy_threshold: float = 0.45,
+    pan_energy_floor: float = 0.2,
+    pan_hook_by_s: float = 1.0,
 ) -> list[PlannedInterrupt]:
     """Place zoom/rotate interrupts on energy peaks with 3–5 s cadence and early hook."""
     duration = max(window_end_s - window_start_s, 0.0)
@@ -522,6 +765,23 @@ def place_interrupts(
 
     if not selected and zoom_candidates:
         selected.append(zoom_candidates[0])
+
+    if translate_enabled:
+        selected.extend(
+            place_translations(
+                scope_lanes,
+                downbeats,
+                window_start_s=window_start_s,
+                window_end_s=window_end_s,
+                beats=beats,
+                hop_length=hop_length,
+                sr=sr,
+                pan_beat_mode=pan_beat_mode,
+                pan_energy_threshold=pan_energy_threshold,
+                pan_energy_floor=pan_energy_floor,
+                pan_hook_by_s=pan_hook_by_s,
+            )
+        )
 
     selected.sort(key=lambda event: event.timestamp_s)
     return selected

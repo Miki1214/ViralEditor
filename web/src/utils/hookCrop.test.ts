@@ -65,7 +65,17 @@ function hookSplitStoryboard(
       duration_s: payoffOut,
       mask: "vignette",
     },
-    spatial_fx: { enabled: false, intensity: 1, max_events_per_second: 4 },
+    spatial_fx: {
+      enabled: false,
+      intensity: 1,
+      max_events_per_second: 4,
+      translate_enabled: true,
+      pan_beat_mode: "auto",
+      pan_min_decay_s: 0.2,
+      pan_energy_threshold: 0.45,
+      pan_energy_floor: 0.2,
+      pan_hook_by_s: 1.0,
+    },
     retention: {
       interrupt_min_gap_s: 2,
       interrupt_max_gap_s: 5,

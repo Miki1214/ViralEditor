@@ -9,12 +9,15 @@ import pytest
 import soundfile as sf
 
 from viral_editor.audio.beat_detector import analyze_audio_with_envelope
+from viral_editor.config import SpatialFxConfig
 from viral_editor.editing.retention_policy import (
     EARLY_HOOK_FX_BY_S,
     INTERRUPT_MIN_GAP_S,
+    PAN_BEAT_MIN_GAP_S,
     classify_accents,
     find_energy_peaks,
     place_interrupts,
+    place_translations,
     score_plan,
 )
 from viral_editor.video.spatial_fx import plan_spatial_fx
@@ -193,8 +196,9 @@ def test_interrupt_cadence_respects_min_gap(tmp_path: Path) -> None:
         window_start_s=0.0,
         window_end_s=result.timeline.audio_duration_seconds,
     )
-    for index in range(1, len(events)):
-        gap = events[index].timestamp_s - events[index - 1].timestamp_s
+    zoom_rotate = [event for event in events if event.kind != "translate"]
+    for index in range(1, len(zoom_rotate)):
+        gap = zoom_rotate[index].timestamp_s - zoom_rotate[index - 1].timestamp_s
         assert gap >= INTERRUPT_MIN_GAP_S - 0.05 or index == 1
 
 
@@ -255,6 +259,97 @@ def test_score_plan_is_bounded(tmp_path: Path) -> None:
         window_end_s=result.timeline.audio_duration_seconds,
     )
     assert 0.0 <= score.overall <= 1.0
+
+
+def test_place_translations_alternates_direction() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.8, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+    downbeats = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+
+    events = place_translations(
+        scope,
+        downbeats,
+        window_start_s=0.0,
+        window_end_s=duration_s,
+        beats=[t + 0.25 for t in downbeats],
+        pan_beat_mode="beats",
+    )
+    assert len(events) >= 2
+    assert all(event.kind == "translate" for event in events)
+    assert events[0].direction == 1
+    assert events[1].direction == -1
+    for index in range(1, len(events)):
+        gap = events[index].timestamp_s - events[index - 1].timestamp_s
+        assert gap >= PAN_BEAT_MIN_GAP_S - 0.01
+
+
+def test_place_translations_respects_min_gap() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.8, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+    beats = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
+
+    events = place_translations(
+        scope,
+        [],
+        window_start_s=0.0,
+        window_end_s=min(2.0, duration_s),
+        beats=beats,
+        pan_beat_mode="beats",
+    )
+    for index in range(1, len(events)):
+        gap = events[index].timestamp_s - events[index - 1].timestamp_s
+        assert gap >= PAN_BEAT_MIN_GAP_S - 0.01
+
+
+def test_place_translations_guarantees_hook_pan() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.05, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+
+    events = place_translations(
+        scope,
+        [],
+        window_start_s=0.0,
+        window_end_s=min(3.0, duration_s),
+        beats=[1.5, 2.0, 2.5],
+        pan_beat_mode="beats",
+        pan_energy_floor=0.9,
+        pan_hook_by_s=1.0,
+    )
+    assert events
+    assert any(event.timestamp_s <= 1.0 for event in events)
+    assert any("Hook pan" in event.reason for event in events)
+
+
+def test_place_interrupts_includes_translate_when_enabled() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.8, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+    downbeats = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+
+    with_translate = place_interrupts(
+        scope,
+        downbeats,
+        window_start_s=0.0,
+        window_end_s=min(4.0, duration_s),
+        translate_enabled=True,
+    )
+    without_translate = place_interrupts(
+        scope,
+        downbeats,
+        window_start_s=0.0,
+        window_end_s=min(4.0, duration_s),
+        translate_enabled=False,
+    )
+    assert any(event.kind == "translate" for event in with_translate)
+    assert not any(event.kind == "translate" for event in without_translate)
+    assert len(without_translate) <= len(with_translate)
 
 
 def test_vocal_boundary_penalty_is_zero_without_lane() -> None:

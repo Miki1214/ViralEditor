@@ -13,6 +13,10 @@ COMPOSITE_FPS = 30
 # Preview proxy is small — boost rotation so sub-degree shakes read on a phone frame.
 PREVIEW_ROTATE_GAIN = 3.0
 MIN_ROTATE_DECAY_S = 0.15
+MIN_PAN_DECAY_S = 0.15
+PAN_HEADROOM = 0.15
+PAN_MAX_FRACTION = 0.95
+PREVIEW_PAN_GAIN = 1.5
 
 
 def _fx_decay_ramp(t0: float, dur: float) -> str:
@@ -24,6 +28,40 @@ def _zoom_scale_factor(t0: float, dur: float, zoom: float) -> str:
     t1 = t0 + dur
     ramp = _fx_decay_ramp(t0, dur)
     return f"if(between(t,{t0:.6f},{t1:.6f}),1+({zoom:.6f}-1)*{ramp},1)"
+
+
+def _pan_event_duration(event: FxEvent, fps: float) -> float:
+    return max(
+        event.decay_frames / max(fps, 1.0),
+        MIN_PAN_DECAY_S,
+        1.0 / fps,
+    )
+
+
+def _combined_pan_x_expression(
+    translate_events: list[FxEvent],
+    *,
+    fps: float,
+    intensity: float,
+) -> str:
+    """Sum time-gated horizontal offsets; input is already headroom-scaled."""
+    terms: list[str] = []
+    for event in translate_events:
+        t0 = event.timestamp_s
+        dur = _pan_event_duration(event, fps)
+        t1 = t0 + dur
+        sign = event.direction if event.direction != 0 else 1
+        ramp = _fx_decay_ramp(t0, dur)
+        pan_strength = (
+            event.magnitude * intensity * PAN_MAX_FRACTION * PREVIEW_PAN_GAIN
+        )
+        terms.append(
+            f"if(between(t,{t0:.6f},{t1:.6f}),"
+            f"{sign}*((iw-ow)/2)*{pan_strength:.6f}*{ramp},0)"
+        )
+    if not terms:
+        return "(iw-ow)/2"
+    return f"(iw-ow)/2+({'+' .join(terms)})"
 
 
 def _normalize_segment_timeline(parts: list[str], input_ref: str, label: str) -> str:
@@ -316,7 +354,13 @@ def _apply_spatial_fx_chain(
     if current.startswith("["):
         current = input_ref.strip("[]")
 
-    for index, event in enumerate(fx_events[:max_events]):
+    capped = fx_events[:max_events]
+    translate_events = [event for event in capped if event.kind == "translate"]
+    fx_index = 0
+
+    for event in capped:
+        if event.kind == "translate":
+            continue
         t0 = event.timestamp_s
         if event.kind == "rotate":
             dur = max(
@@ -327,7 +371,8 @@ def _apply_spatial_fx_chain(
         else:
             dur = max(event.decay_frames / max(fps, 1.0), 1.0 / fps)
         t1 = t0 + dur
-        out_label = f"fx{index}"
+        out_label = f"fx{fx_index}"
+        fx_index += 1
         if event.kind == "zoom":
             zoom = 1.0 + (event.magnitude - 1.0) * intensity
             factor = _zoom_scale_factor(t0, dur, zoom)
@@ -350,6 +395,20 @@ def _apply_spatial_fx_chain(
                 f"[{current}]rotate=enable='between(t,{t0:.6f},{t1:.6f})':"
                 f"a='{radians:.8f}*{ramp}':c=none:ow={width}:oh={height}[{out_label}]"
             )
+        current = out_label
+
+    if translate_events:
+        headroom = 1.0 + PAN_HEADROOM
+        x_expr = _combined_pan_x_expression(
+            translate_events,
+            fps=fps,
+            intensity=intensity,
+        )
+        out_label = f"fx{fx_index}"
+        parts.append(
+            f"[{current}]scale=w='trunc(iw*{headroom:.6f})':h='trunc(ih*{headroom:.6f})',"
+            f"crop={width}:{height}:x='{x_expr}':y='(ih-oh)/2'[{out_label}]"
+        )
         current = out_label
 
     parts.append(f"[{current}]copy[outv]")

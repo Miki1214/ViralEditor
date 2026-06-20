@@ -100,13 +100,23 @@ interface RetentionFxPanelProps {
   }) => void | Promise<void>;
 }
 
+function panPlanFromSpatialFx(spatialFx: SpatialFxSettings) {
+  return {
+    translateEnabled: spatialFx.translate_enabled ?? true,
+    panBeatMode: spatialFx.pan_beat_mode ?? "auto",
+    panEnergyThreshold: spatialFx.pan_energy_threshold ?? 0.45,
+    panEnergyFloor: spatialFx.pan_energy_floor ?? 0.2,
+    panHookByS: spatialFx.pan_hook_by_s ?? 1.0,
+  };
+}
+
 function countFxCandidates(
   waveform: WaveformPayload | null,
   musicStartS: number,
   musicEndS: number,
   spatialFx: SpatialFxSettings,
-): { zoom: number; rotate: number } {
-  if (!waveform) return { zoom: 0, rotate: 0 };
+): { zoom: number; rotate: number; translate: number } {
+  if (!waveform) return { zoom: 0, rotate: 0, translate: 0 };
   const markers = planSpatialFxMarkers(waveform.transients, {
     musicStartS,
     musicEndS,
@@ -114,6 +124,8 @@ function countFxCandidates(
     enabled: spatialFx.enabled,
     lanes: waveform.lanes,
     downbeats: waveform.downbeats,
+    beats: waveform.beats,
+    pan: panPlanFromSpatialFx(spatialFx),
   });
   return countSpatialFxMarkers(markers);
 }
@@ -207,11 +219,31 @@ export function RetentionFxPanel({
     debouncedPatch,
     (value) => ({ spatial_fx: { max_events_per_second: value } }),
   );
+  const panHoldSplit = useSliderDraft(
+    Math.round((spatialFx.pan_min_decay_s ?? 0.2) * 1000),
+    debouncedPatch,
+    (value) => ({ spatial_fx: { pan_min_decay_s: value / 1000 } }),
+  );
+  const panEnergySplit = useSliderDraft(
+    Math.round((spatialFx.pan_energy_threshold ?? 0.45) * 100),
+    debouncedPatch,
+    (value) => ({ spatial_fx: { pan_energy_threshold: value / 100 } }),
+  );
+  const panHookSplit = useSliderDraft(
+    Math.round((spatialFx.pan_hook_by_s ?? 1.0) * 10),
+    debouncedPatch,
+    (value) => ({ spatial_fx: { pan_hook_by_s: value / 10 } }),
+  );
 
   const hookEndSlot = storyboard.slots.find((slot) => slot.role === "hook_end");
   const payoffS = serverPayoffS;
   const intensityPct = intensitySplit.localValue;
   const maxEventsPerSecond = densitySplit.localValue;
+  const panHoldMs = panHoldSplit.localValue;
+  const panEnergyPct = panEnergySplit.localValue;
+  const panHookTenths = panHookSplit.localValue;
+  const panEnabled = spatialFx.translate_enabled ?? true;
+  const panBeatMode = spatialFx.pan_beat_mode ?? "auto";
 
   const buildupFromSlots = hookEndSlot?.target_duration_s;
   const buildupS =
@@ -243,6 +275,10 @@ export function RetentionFxPanel({
       storyboard.music_end_s,
       spatialFx.enabled,
       spatialFx.max_events_per_second,
+      spatialFx.translate_enabled,
+      spatialFx.pan_beat_mode,
+      spatialFx.pan_energy_threshold,
+      spatialFx.pan_hook_by_s,
     ],
   );
 
@@ -359,7 +395,7 @@ export function RetentionFxPanel({
             checked={spatialFx.enabled}
             disabled={saving}
             label="Spatial FX"
-            hint="Zoom on energy surges / RMS peaks; rotate on low-band flux hits."
+            hint="Zoom on energy surges; rotate on low-band flux; beat-synced left/right pan."
             onChange={(enabled) => void onPatch({ spatial_fx: { enabled } })}
           />
           <label className="block">
@@ -406,10 +442,104 @@ export function RetentionFxPanel({
               </span>
             </div>
           </label>
+          <div className="space-y-3 rounded border border-monitor-border/60 bg-monitor-bg/30 p-3">
+            <Toggle
+              checked={panEnabled}
+              disabled={saving || !spatialFx.enabled}
+              label="Beat pan"
+              hint="Left/right whip on beats when energy is high; downbeats when quieter."
+              onChange={(translate_enabled) => void onPatch({ spatial_fx: { translate_enabled } })}
+            />
+            <label className="block">
+              <span className="field-label">Pan cadence</span>
+              <select
+                className="field-input mt-1 w-full font-mono text-xs"
+                disabled={saving || !spatialFx.enabled || !panEnabled}
+                value={panBeatMode}
+                onChange={(event) =>
+                  void onPatch({
+                    spatial_fx: {
+                      pan_beat_mode: event.target.value as SpatialFxSettings["pan_beat_mode"],
+                    },
+                  })
+                }
+              >
+                <option value="auto">Auto — beats when hot, downbeats when calm</option>
+                <option value="beats">Every beat</option>
+                <option value="downbeats">Downbeats only</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="field-label">Pan hold</span>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="range"
+                  min={150}
+                  max={400}
+                  step={25}
+                  disabled={saving || !spatialFx.enabled || !panEnabled}
+                  value={panHoldMs}
+                  className="flex-1"
+                  {...sliderReleaseHandlers(
+                    panHoldSplit.setValue,
+                    panHoldSplit.commit,
+                    panHoldSplit.cancelDrag,
+                  )}
+                />
+                <span className="w-12 font-mono text-[10px] tabular-nums text-scope-trace">
+                  {panHoldMs}ms
+                </span>
+              </div>
+            </label>
+            <label className="block">
+              <span className="field-label">Energy gate</span>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="range"
+                  min={25}
+                  max={70}
+                  step={5}
+                  disabled={saving || !spatialFx.enabled || !panEnabled}
+                  value={panEnergyPct}
+                  className="flex-1"
+                  {...sliderReleaseHandlers(
+                    panEnergySplit.setValue,
+                    panEnergySplit.commit,
+                    panEnergySplit.cancelDrag,
+                  )}
+                />
+                <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
+                  {panEnergyPct}%
+                </span>
+              </div>
+            </label>
+            <label className="block">
+              <span className="field-label">First pan by</span>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="range"
+                  min={5}
+                  max={20}
+                  step={1}
+                  disabled={saving || !spatialFx.enabled || !panEnabled}
+                  value={panHookTenths}
+                  className="flex-1"
+                  {...sliderReleaseHandlers(
+                    panHookSplit.setValue,
+                    panHookSplit.commit,
+                    panHookSplit.cancelDrag,
+                  )}
+                />
+                <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
+                  {(panHookTenths / 10).toFixed(1)}s
+                </span>
+              </div>
+            </label>
+          </div>
           <p className="font-mono text-[10px] text-monitor-muted">
             {spatialFx.enabled ? (
               <>
-                ~{fxCounts.zoom} zoom · ~{fxCounts.rotate} rotate in this music window
+                ~{fxCounts.zoom} zoom · ~{fxCounts.rotate} rotate · ~{fxCounts.translate} pan in this music window
               </>
             ) : (
               "Enable to sync impulses to analyzed transients"

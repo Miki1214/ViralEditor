@@ -91,6 +91,8 @@ export function PhonePreview({
   const lastPreviewCommitRef = useRef(0);
   const ignorePauseRef = useRef(false);
   const transportReadyRef = useRef(false);
+  const mountedRef = useRef(true);
+  const lastVideoSrcRef = useRef<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
 
   const selectedSlot = useMemo(() => {
@@ -104,10 +106,34 @@ export function PhonePreview({
   onPlayheadRef.current = onBlockPlayheadChange;
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     setLoadFailed(false);
     transportReadyRef.current = false;
     ignorePauseRef.current = previewRestoreRef?.current != null;
   }, [videoPreviewUrl, previewRestoreRef, loadErrorMessage]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!videoPreviewUrl) {
+      lastVideoSrcRef.current = null;
+      if (video) {
+        video.removeAttribute("src");
+        video.load();
+      }
+      return;
+    }
+    if (lastVideoSrcRef.current === videoPreviewUrl) return;
+    if (!video) return;
+    lastVideoSrcRef.current = videoPreviewUrl;
+    video.src = videoPreviewUrl;
+    video.load();
+  }, [videoPreviewUrl]);
 
   const showPreviewError = loadFailed || Boolean(loadErrorMessage);
   const previewErrorText =
@@ -220,8 +246,10 @@ export function PhonePreview({
 
     const onSeeked = () => emitPlayhead(true);
 
+    let cancelled = false;
     let frameId = 0;
     const tick = () => {
+      if (cancelled || !mountedRef.current) return;
       if (!video.paused) {
         emitPlayhead();
       }
@@ -231,6 +259,7 @@ export function PhonePreview({
 
     video.addEventListener("seeked", onSeeked);
     return () => {
+      cancelled = true;
       cancelAnimationFrame(frameId);
       video.removeEventListener("seeked", onSeeked);
     };
@@ -248,8 +277,6 @@ export function PhonePreview({
           <>
             <video
               ref={videoRef}
-              key={videoPreviewUrl}
-              src={videoPreviewUrl}
               className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
               playsInline
               loop={videoLoop}

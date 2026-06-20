@@ -12,7 +12,7 @@ T = TypeVar("T", bound=BaseModel)
 
 TransientType = Literal["percussive", "bass", "drop"]
 BudgetPolicy = Literal["scale", "loop", "trim"]
-FxKind = Literal["zoom", "rotate"]
+FxKind = Literal["zoom", "rotate", "translate"]
 TeaserMask = Literal["vignette", "dir_blur"]
 ClipRole = Literal["clip", "hook", "filler"]
 SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
@@ -319,12 +319,13 @@ class SpeedRampOptionSet(DomainModel):
 
 
 class FxEvent(DomainModel):
-    """Spatial effect impulse (zoom punch or rotation shake) at a timestamp."""
+    """Spatial effect impulse (zoom punch, rotation shake, or horizontal pan) at a timestamp."""
 
     timestamp_s: float = Field(ge=0)
     kind: FxKind
     magnitude: float = Field(gt=0)
     decay_frames: int = Field(ge=1)
+    direction: int = 0  # -1 left, +1 right; 0 = derive at render for zoom/rotate
     reason: str | None = None
 
 

@@ -7,8 +7,12 @@ from collections import defaultdict
 
 import numpy as np
 
-from viral_editor.config import RetentionConfig
-from viral_editor.editing.retention_policy import place_interrupts
+from viral_editor.config import RetentionConfig, SpatialFxConfig
+from viral_editor.editing.retention_policy import (
+    PAN_MAGNITUDE_MAX,
+    PAN_MAGNITUDE_MIN,
+    place_interrupts,
+)
 from viral_editor.models import AudioTimeline, FxEvent, MediaInfo, Transient
 
 ZOOM_MIN = 1.05
@@ -66,20 +70,45 @@ def _transient_events(transient: Transient) -> list[FxEvent]:
     return []
 
 
-def _interrupt_to_fx_event(interrupt) -> FxEvent:
+DEFAULT_FPS = 30.0
+
+
+def _interrupt_to_fx_event(interrupt, *, pan_min_decay_s: float = 0.2) -> FxEvent:
     if interrupt.kind == "zoom":
         amp = (interrupt.magnitude - ZOOM_MIN) / max(ZOOM_MAX - ZOOM_MIN, 1e-9)
         magnitude = round(_zoom_magnitude(amp), 4)
+        decay_frames = _decay_frames(amp)
+    elif interrupt.kind == "translate":
+        amp = (interrupt.magnitude - PAN_MAGNITUDE_MIN) / max(
+            PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN,
+            1e-9,
+        )
+        magnitude = round(
+            PAN_MAGNITUDE_MIN + amp * (PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN),
+            4,
+        )
+        decay_frames = max(
+            _decay_frames(amp),
+            round(pan_min_decay_s * DEFAULT_FPS),
+        )
     else:
         amp = interrupt.magnitude / ROTATE_MAX_DEG
         magnitude = round(_rotate_magnitude(amp), 4)
+        decay_frames = _decay_frames(amp)
     return FxEvent(
         timestamp_s=interrupt.timestamp_s,
         kind=interrupt.kind,
         magnitude=magnitude,
-        decay_frames=_decay_frames(amp),
+        decay_frames=decay_frames,
+        direction=interrupt.direction,
         reason=interrupt.reason,
     )
+
+
+def _merge_key(event: FxEvent) -> tuple[str, int]:
+    if event.kind == "translate":
+        return (event.kind, event.direction)
+    return (event.kind, 0)
 
 
 def _merge_nearby(events: list[FxEvent], merge_window_s: float) -> list[FxEvent]:
@@ -90,7 +119,7 @@ def _merge_nearby(events: list[FxEvent], merge_window_s: float) -> list[FxEvent]
     for event in ordered[1:]:
         prev = merged[-1]
         if (
-            event.kind == prev.kind
+            _merge_key(event) == _merge_key(prev)
             and event.timestamp_s - prev.timestamp_s <= merge_window_s
         ):
             if event.magnitude >= prev.magnitude:
@@ -134,14 +163,19 @@ def plan_spatial_fx(
     merge_window_s: float = DEFAULT_MERGE_WINDOW_S,
     scope_lanes: dict[str, np.ndarray] | None = None,
     downbeats: list[float] | np.ndarray | None = None,
+    beats: list[float] | np.ndarray | None = None,
     window_start_s: float = 0.0,
     window_end_s: float | None = None,
     retention: RetentionConfig | None = None,
+    spatial_fx: SpatialFxConfig | None = None,
+    translate_enabled: bool | None = None,
 ) -> list[FxEvent]:
-    """Map retention-policy interrupts to zoom/rotate impulses on the output clock."""
+    """Map retention-policy interrupts to zoom/rotate/pan impulses on the output clock."""
     del media, seed  # reserved for future fps snapping / rotate sign
     end_s = window_end_s if window_end_s is not None else timeline.audio_duration_seconds
     cfg = retention or RetentionConfig()
+    fx_cfg = spatial_fx or SpatialFxConfig()
+    pan_enabled = fx_cfg.translate_enabled if translate_enabled is None else translate_enabled
 
     if scope_lanes and downbeats is not None:
         interrupts = place_interrupts(
@@ -149,10 +183,19 @@ def plan_spatial_fx(
             downbeats,
             window_start_s=window_start_s,
             window_end_s=end_s,
+            beats=beats,
             min_gap_s=cfg.interrupt_min_gap_s,
             max_gap_s=cfg.interrupt_max_gap_s,
+            translate_enabled=pan_enabled,
+            pan_beat_mode=fx_cfg.pan_beat_mode,
+            pan_energy_threshold=fx_cfg.pan_energy_threshold,
+            pan_energy_floor=fx_cfg.pan_energy_floor,
+            pan_hook_by_s=fx_cfg.pan_hook_by_s,
         )
-        events = [_interrupt_to_fx_event(item) for item in interrupts]
+        events = [
+            _interrupt_to_fx_event(item, pan_min_decay_s=fx_cfg.pan_min_decay_s)
+            for item in interrupts
+        ]
     else:
         events: list[FxEvent] = []
         for transient in timeline.transients:
