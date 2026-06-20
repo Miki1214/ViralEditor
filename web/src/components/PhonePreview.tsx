@@ -129,13 +129,16 @@ export function PhonePreview({
         video.currentTime = blockPlayheadToCompositeVideoTime(restore.playheadS, sb);
         previewRestoreRef.current = null;
         ignorePauseRef.current = false;
-        transportReadyRef.current = true;
         if (restore.playing) {
           void video.play().catch(() => undefined);
         } else {
           onPreviewPlayingChange?.(false);
         }
+      } else {
+        video.currentTime = 0;
+        onPlayheadRef.current?.(0, { commit: true });
       }
+      transportReadyRef.current = true;
     };
 
     const onLoaded = () => restorePosition();

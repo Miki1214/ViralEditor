@@ -222,19 +222,24 @@ export default function App() {
     async (job: JobSummary) => {
       eventsUnsubRef.current?.();
       eventsUnsubRef.current = null;
+      previewRestoreRef.current = null;
       setError(null);
       setAnalyzing(false);
       setRestoreLoading(true);
       setRestoreMenuOpen(false);
       setEvents([]);
+      setSelectedSlotId(null);
       setActiveJobId(job.id);
       setJobStatus(job.status);
       setJobArtifacts(job.artifacts);
       setHasOutput(job.has_output);
       patchForm({ projectName: job.project_name });
+      setPreviewLoopMode("block");
+      blockSetLoopModeRef.current?.("block");
       setPreviewVersion(0);
       setPreviewReady(false);
       setCompositePreviewPlaying(false);
+      blockPauseRef.current?.();
       setBlockPlayheadS(0);
       blockPlayheadRef.current = 0;
       emitPlayheadUi(0);
@@ -313,7 +318,7 @@ export default function App() {
   })();
 
   const loadScope = (jobId: string) => {
-    fetchWaveform(jobId)
+    return fetchWaveform(jobId)
       .then((payload) => {
         if (activeJobIdRef.current !== jobId) return;
         setWaveform(payload);
@@ -325,23 +330,27 @@ export default function App() {
         }
       })
       .catch(() => {
-        window.setTimeout(() => {
-          fetchWaveform(jobId)
+        return new Promise<void>((resolve, reject) => {
+          window.setTimeout(() => {
+            fetchWaveform(jobId)
             .then((payload) => {
               if (activeJobIdRef.current !== jobId) return;
               setWaveform(payload);
               setSelectedBlockId(payload.selected_block_id);
+              resolve();
             })
             .catch((err) => {
               if (activeJobIdRef.current !== jobId) return;
               setError(err instanceof Error ? err.message : "Could not load audio scope");
+              reject(err);
             });
-        }, 500);
+          }, 500);
+        });
       });
   };
 
   const loadStoryboard = (jobId: string) => {
-    fetchStoryboard(jobId)
+    return fetchStoryboard(jobId)
       .then((payload) => {
         if (activeJobIdRef.current !== jobId) return;
         setStoryboard(payload);
@@ -719,6 +728,9 @@ export default function App() {
 
   useEffect(() => {
     setBlockPlayheadS(0);
+    blockPlayheadRef.current = 0;
+    emitPlayheadUi(0);
+    blockSeekRef.current?.(0);
     setCompositePreviewPlaying(false);
   }, [activeJobId, storyboard?.music_start_s, storyboard?.total_duration_s, phonePreviewUrl]);
 
