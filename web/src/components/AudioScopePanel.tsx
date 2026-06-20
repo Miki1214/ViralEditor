@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { loopSeamPreviewUrl, previewAudioUrl } from "../api/client";
 import { TARGET_DURATION_PRESETS } from "../constants/durations";
 import type { MusicBlock, WaveformPayload } from "../types";
 import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
 import { ScopeCanvas, blockPixelRange, scopeWidth } from "./ScopeCanvas";
-import { MusicDetailRack } from "./scope/MusicDetailRack";
+import {
+  MusicDetailRackChart,
+  MusicDetailRackToggle,
+  musicDetailHasContent,
+  musicDetailLaneCount,
+} from "./scope/MusicDetailRack";
 import { ScopeLegend } from "./scope/ScopeLegend";
 
 interface AudioScopePanelProps {
@@ -105,6 +110,9 @@ export function AudioScopePanel({
 }: AudioScopePanelProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scopeScrollRef = useRef<HTMLDivElement>(null);
+  const detailScrollRef = useRef<HTMLDivElement>(null);
+  const detailPanelId = useId();
+  const [detailOpen, setDetailOpen] = useState(false);
   const [playingBlockId, setPlayingBlockId] = useState<string | null>(null);
   const [playingMode, setPlayingMode] = useState<PreviewMode | null>(null);
 
@@ -230,6 +238,24 @@ export function AudioScopePanel({
 
   const tiedBestLoop = bestLoopPresets.size > 1;
 
+  const scopeContentWidth = scopeWidth(waveform.duration_s);
+  const detailLanes = waveform.lanes ?? [];
+  const detailChroma = waveform.chroma ?? null;
+  const showDetailRack = musicDetailHasContent(detailLanes, detailChroma);
+  const detailLaneCount = musicDetailLaneCount(detailLanes, detailChroma);
+
+  const syncHorizontalScroll = useCallback(
+    (source: "scope" | "detail") => (event: React.UIEvent<HTMLDivElement>) => {
+      const scrollLeft = event.currentTarget.scrollLeft;
+      const target =
+        source === "scope" ? detailScrollRef.current : scopeScrollRef.current;
+      if (target != null && target.scrollLeft !== scrollLeft) {
+        target.scrollLeft = scrollLeft;
+      }
+    },
+    [],
+  );
+
   return (
     <section
       className={
@@ -321,15 +347,19 @@ export function AudioScopePanel({
       </div>
 
       <div className="space-y-1">
-        {scopeWidth(waveform.duration_s) > 960 && (
+        {scopeContentWidth > 960 && (
           <p className="font-mono text-[10px] text-monitor-muted">
             Scroll horizontally to inspect the full track
           </p>
         )}
-        <div ref={scopeScrollRef} className="space-y-2 overflow-x-auto pb-1">
+        <div
+          ref={scopeScrollRef}
+          className="overflow-x-auto pb-1"
+          onScroll={detailOpen ? syncHorizontalScroll("scope") : undefined}
+        >
           <div
             className="overflow-hidden rounded border border-monitor-border bg-[#141618]"
-            style={{ width: scopeWidth(waveform.duration_s) }}
+            style={{ width: scopeContentWidth }}
           >
             <ScopeCanvas
               durationS={waveform.duration_s}
@@ -344,13 +374,30 @@ export function AudioScopePanel({
             />
             <ScopeLegend embedded />
           </div>
-          <MusicDetailRack
-            lanes={waveform.lanes ?? []}
-            chroma={waveform.chroma ?? null}
-            window={{ startS: 0, endS: waveform.duration_s }}
-            viewWidth={scopeWidth(waveform.duration_s)}
-          />
         </div>
+        {showDetailRack && (
+          <MusicDetailRackToggle
+            open={detailOpen}
+            laneCount={detailLaneCount}
+            onToggle={() => setDetailOpen((value) => !value)}
+            panelId={detailPanelId}
+          />
+        )}
+        {showDetailRack && detailOpen && (
+          <div
+            ref={detailScrollRef}
+            className="overflow-x-auto pb-1"
+            onScroll={syncHorizontalScroll("detail")}
+          >
+            <MusicDetailRackChart
+              lanes={detailLanes}
+              chroma={detailChroma}
+              window={{ startS: 0, endS: waveform.duration_s }}
+              viewWidth={scopeContentWidth}
+              panelId={detailPanelId}
+            />
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
