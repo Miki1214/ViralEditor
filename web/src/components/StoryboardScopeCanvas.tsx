@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { SpatialFxSettings, StoryboardPayload, WaveformPayload } from "../types";
+import { subscribePlayhead } from "../utils/playheadBus";
 import { planSpatialFxMarkers } from "../utils/spatialFxMarkers";
 import { slotColorForIndex } from "../utils/slotColors";
 import { ScopeBeatGrid } from "./scope/ScopeBeatGrid";
@@ -21,7 +22,6 @@ interface StoryboardScopeCanvasProps {
   waveform: WaveformPayload;
   storyboard: StoryboardPayload;
   selectedSlotId: string | null;
-  playheadS?: number;
   spatialFx?: SpatialFxSettings;
   onSelectSlot?: (slotId: string) => void;
 }
@@ -44,11 +44,10 @@ function blockPoints(
     .map((point) => ({ t: point.t - blockStartS, v: point.v }));
 }
 
-export function StoryboardScopeCanvas({
+export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
   waveform,
   storyboard,
   selectedSlotId,
-  playheadS = 0,
   spatialFx,
   onSelectSlot,
 }: StoryboardScopeCanvasProps) {
@@ -100,6 +99,20 @@ export function StoryboardScopeCanvas({
   const viewWidth = 640;
   const innerW = viewWidth - PAD_X * 2;
   const innerH = WAVEFORM_HEIGHT - PAD_Y * 2;
+  const playheadLineRef = useRef<SVGLineElement>(null);
+  const blockDurationRef = useRef(blockDurationS);
+  blockDurationRef.current = blockDurationS;
+
+  useEffect(() => {
+    return subscribePlayhead((timeS) => {
+      const duration = blockDurationRef.current;
+      const line = playheadLineRef.current;
+      if (!line || duration <= 0) return;
+      const x = PAD_X + (timeS / duration) * innerW;
+      line.setAttribute("x1", String(x));
+      line.setAttribute("x2", String(x));
+    });
+  }, [innerW]);
 
   const timeTicks = useMemo(
     () => buildTimeTicks(blockDurationS, innerW),
@@ -344,8 +357,9 @@ export function StoryboardScopeCanvas({
 
         {blockDurationS > 0 && (
           <line
-            x1={PAD_X + (playheadS / blockDurationS) * innerW}
-            x2={PAD_X + (playheadS / blockDurationS) * innerW}
+            ref={playheadLineRef}
+            x1={PAD_X}
+            x2={PAD_X}
             y1={WAVEFORM_TOP + PAD_Y}
             y2={WAVEFORM_TOP + PAD_Y + innerH}
             stroke="#E8EAED"
@@ -383,4 +397,4 @@ export function StoryboardScopeCanvas({
       </svg>
     </div>
   );
-}
+});

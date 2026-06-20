@@ -4,7 +4,7 @@ import {
   blockPlayheadToCompositeVideoTime,
   compositeVideoTimeToBlockPlayhead,
 } from "../utils/compositePlayhead";
-import type { StoryboardLoopMode } from "./StoryboardBlockPlayer";
+import type { StoryboardLoopMode, BlockPlayheadChangeHandler } from "./StoryboardBlockPlayer";
 
 export interface PreviewTransportRestore {
   playheadS: number;
@@ -26,7 +26,7 @@ interface PhonePreviewProps {
   storyboard?: StoryboardPayload | null;
   loopMode?: StoryboardLoopMode;
   selectedSlotId?: string | null;
-  onBlockPlayheadChange?: (seconds: number) => void;
+  onBlockPlayheadChange?: BlockPlayheadChangeHandler;
   onPreviewPlayingChange?: (playing: boolean) => void;
   previewRestoreRef?: React.MutableRefObject<PreviewTransportRestore | null>;
   onApplyPreviewRestore?: (restore: PreviewTransportRestore) => void;
@@ -85,6 +85,7 @@ export function PhonePreview({
   const loopModeRef = useRef(loopMode);
   const loopSlotRef = useRef<StorySlot | null>(null);
   const onPlayheadRef = useRef(onBlockPlayheadChange);
+  const lastPreviewCommitRef = useRef(0);
   const ignorePauseRef = useRef(false);
   const transportReadyRef = useRef(false);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -180,7 +181,7 @@ export function PhonePreview({
     const video = videoRef.current;
     if (!video) return;
 
-    const emitPlayhead = () => {
+    const emitPlayhead = (forceCommit = false) => {
       if (!transportReadyRef.current) return;
       const sb = storyboardRef.current;
       const onChange = onPlayheadRef.current;
@@ -193,12 +194,20 @@ export function PhonePreview({
       if (mode === "slot" && slot && blockPlayhead >= slot.out_end_s - 0.04) {
         const seekTo = blockPlayheadToCompositeVideoTime(slot.out_start_s, sb);
         video.currentTime = seekTo;
-        onChange(slot.out_start_s);
+        onChange(slot.out_start_s, { commit: true });
+        lastPreviewCommitRef.current = performance.now();
         return;
       }
 
-      onChange(blockPlayhead);
+      const now = performance.now();
+      const commit = forceCommit || now - lastPreviewCommitRef.current >= 150;
+      onChange(blockPlayhead, { commit });
+      if (commit) {
+        lastPreviewCommitRef.current = now;
+      }
     };
+
+    const onSeeked = () => emitPlayhead(true);
 
     let frameId = 0;
     const tick = () => {
@@ -209,10 +218,10 @@ export function PhonePreview({
     };
     frameId = requestAnimationFrame(tick);
 
-    video.addEventListener("seeked", emitPlayhead);
+    video.addEventListener("seeked", onSeeked);
     return () => {
       cancelAnimationFrame(frameId);
-      video.removeEventListener("seeked", emitPlayhead);
+      video.removeEventListener("seeked", onSeeked);
     };
   }, [compositeMode, videoPreviewUrl, loopMode, selectedSlotId]);
 

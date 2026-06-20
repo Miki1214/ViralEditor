@@ -4,7 +4,7 @@ import { slotColorForIndex } from "../utils/slotColors";
 import { ClipCropTimeline } from "./ClipCropTimeline";
 import { RetentionFxPanel } from "./RetentionFxPanel";
 import { SpatialCropModal } from "./SpatialCropModal";
-import { StoryboardBlockPlayer, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
+import { StoryboardBlockPlayer, type BlockPlayheadChangeHandler, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
 import { MusicDetailRack } from "./scope/MusicDetailRack";
 
@@ -65,7 +65,7 @@ interface StoryboardPanelProps {
   }) => Promise<void>;
   saving?: boolean;
   blockPlayheadS: number;
-  onBlockPlayheadChange: (seconds: number) => void;
+  onBlockPlayheadChange: BlockPlayheadChangeHandler;
   compositePreviewActive?: boolean;
   compositePreviewPlaying?: boolean;
   onToggleCompositePreview?: () => void;
@@ -137,6 +137,13 @@ export function StoryboardPanel({
   registerBlockPlaySlot,
   registerBlockSetLoopMode,
 }: StoryboardPanelProps) {
+  const handleBlockPlayheadChange = useCallback<BlockPlayheadChangeHandler>(
+    (timeS, options) => {
+      onBlockPlayheadChange(timeS, options);
+    },
+    [onBlockPlayheadChange],
+  );
+
   const ordered = [...storyboard.slots].sort((a, b) => a.order - b.order);
   const active =
     ordered.find((slot) => slot.id === selectedSlotId) ?? ordered[0] ?? null;
@@ -341,7 +348,6 @@ export function StoryboardPanel({
             waveform={waveform}
             storyboard={storyboard}
             selectedSlotId={selectedSlotId}
-            playheadS={blockPlayheadS}
             onSelectSlot={selectSlotAndSeek}
           />
           <MusicDetailRack
@@ -352,14 +358,14 @@ export function StoryboardPanel({
               endS: storyboard.music_end_s,
             }}
             viewWidth={640}
-            playheadLocalS={blockPlayheadS}
+            playheadAnchorS={storyboard.music_start_s}
           />
           <StoryboardBlockPlayer
             jobId={jobId}
             storyboard={storyboard}
             selectedSlotId={selectedSlotId}
             playheadS={blockPlayheadS}
-            onPlayheadChange={onBlockPlayheadChange}
+            onPlayheadChange={handleBlockPlayheadChange}
             onSelectSlot={onSelectSlot}
             compositePreviewActive={compositePreviewActive}
             compositePreviewPlaying={compositePreviewPlaying}

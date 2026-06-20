@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewAudioUrl } from "../api/client";
 import type { StoryboardPayload, StorySlot } from "../types";
+import { subscribePlayhead } from "../utils/playheadBus";
 import { slotColorForIndex } from "../utils/slotColors";
 
 export type StoryboardLoopMode = "slot" | "block";
+
+export type PlayheadChangeOptions = {
+  /** When false, update storyboard UI only — skip App-level state (default true). */
+  commit?: boolean;
+};
+
+export type BlockPlayheadChangeHandler = (
+  seconds: number,
+  options?: PlayheadChangeOptions,
+) => void;
 
 interface StoryboardBlockPlayerProps {
   jobId: string;
   storyboard: StoryboardPayload;
   selectedSlotId: string | null;
   playheadS: number;
-  onPlayheadChange: (seconds: number) => void;
+  onPlayheadChange: BlockPlayheadChangeHandler;
   onSelectSlot?: (slotId: string) => void;
   /** Composed preview drives transport instead of block audio */
   compositePreviewActive?: boolean;
@@ -27,6 +38,24 @@ interface StoryboardBlockPlayerProps {
 
 function formatTime(seconds: number): string {
   return `${Math.max(0, seconds).toFixed(1)}s`;
+}
+
+function applyPlayheadDom(
+  timeS: number,
+  durationS: number,
+  slider: HTMLInputElement | null,
+  marker: HTMLDivElement | null,
+  timeEl: HTMLSpanElement | null,
+): void {
+  if (durationS <= 0) return;
+  const clamped = Math.max(0, Math.min(timeS, durationS));
+  if (slider) slider.value = String(clamped);
+  if (marker) {
+    marker.style.left = `${(clamped / durationS) * 100}%`;
+  }
+  if (timeEl) {
+    timeEl.textContent = `${formatTime(clamped)} / ${formatTime(durationS)}`;
+  }
 }
 
 export function StoryboardBlockPlayer({
@@ -48,14 +77,24 @@ export function StoryboardBlockPlayer({
   registerBlockSetLoopMode,
 }: StoryboardBlockPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const sliderRef = useRef<HTMLInputElement>(null);
+  const playheadMarkerRef = useRef<HTMLDivElement>(null);
+  const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const prevAudioTimeRef = useRef(0);
   const loopModeRef = useRef<StoryboardLoopMode>("block");
   const selectedSlotRef = useRef<StorySlot | null>(null);
   const onPlayheadChangeRef = useRef(onPlayheadChange);
   const blockDurationRef = useRef(0);
+  const scrubbingRef = useRef(false);
+  const pendingSlotIdRef = useRef<string | null>(null);
+  const lastAppCommitRef = useRef(0);
+  const scrubValueRef = useRef(0);
+  const activeSlotRef = useRef<HTMLSpanElement>(null);
+  const orderedSlotsRef = useRef<StorySlot[]>([]);
   const [playing, setPlaying] = useState(false);
   const [loopMode, setLoopMode] = useState<StoryboardLoopMode>("block");
   const [ready, setReady] = useState(false);
+  const [scrubbing, setScrubbing] = useState(false);
 
   const blockDurationS = storyboard.total_duration_s;
   const audioUrl = previewAudioUrl(jobId, storyboard.music_start_s, storyboard.music_end_s);
@@ -64,6 +103,7 @@ export function StoryboardBlockPlayer({
     () => [...storyboard.slots].sort((a, b) => a.order - b.order),
     [storyboard.slots],
   );
+  orderedSlotsRef.current = orderedSlots;
 
   const selectedSlot = useMemo(
     () => orderedSlots.find((slot) => slot.id === selectedSlotId) ?? null,
@@ -90,6 +130,47 @@ export function StoryboardBlockPlayer({
   onPlayheadChangeRef.current = onPlayheadChange;
   blockDurationRef.current = blockDurationS;
 
+  const updatePlayheadDom = useCallback((timeS: number) => {
+    applyPlayheadDom(
+      timeS,
+      blockDurationRef.current,
+      sliderRef.current,
+      playheadMarkerRef.current,
+      timeDisplayRef.current,
+    );
+  }, []);
+
+  const updateActiveSlotLabel = useCallback((timeS: number) => {
+    const el = activeSlotRef.current;
+    if (!el) return;
+    const hit = orderedSlotsRef.current.find(
+      (slot) => timeS >= slot.out_start_s - 0.001 && timeS < slot.out_end_s - 0.001,
+    );
+    if (hit) {
+      el.textContent = `${hit.label} · ${formatTime(hit.out_end_s - hit.out_start_s)}`;
+      const index = orderedSlotsRef.current.findIndex((slot) => slot.id === hit.id);
+      if (index >= 0) {
+        el.style.color = slotColorForIndex(index).stroke;
+      }
+    } else {
+      el.textContent = "No slot";
+      el.style.color = "";
+    }
+  }, []);
+
+  useEffect(() => {
+    return subscribePlayhead((timeS) => {
+      if (scrubbingRef.current) return;
+      updatePlayheadDom(timeS);
+      updateActiveSlotLabel(timeS);
+    });
+  }, [updatePlayheadDom, updateActiveSlotLabel]);
+
+  useEffect(() => {
+    if (scrubbingRef.current) return;
+    updatePlayheadDom(playheadS);
+  }, [playheadS, blockDurationS, updatePlayheadDom]);
+
   const setLoopModeAndNotify = useCallback(
     (mode: StoryboardLoopMode) => {
       loopModeRef.current = mode;
@@ -99,33 +180,50 @@ export function StoryboardBlockPlayer({
     [onLoopModeChange],
   );
 
+  const publishPlayhead = useCallback(
+    (timeS: number, options?: PlayheadChangeOptions) => {
+      onPlayheadChangeRef.current(timeS, options);
+    },
+    [],
+  );
+
   const syncPlayheadFromAudio = useCallback((audio: HTMLAudioElement) => {
     const t = audio.currentTime;
     const mode = loopModeRef.current;
     const slot = selectedSlotRef.current;
     const blockDuration = blockDurationRef.current;
 
+    const emit = (next: number, commit: boolean) => {
+      publishPlayhead(next, { commit });
+      if (commit) {
+        lastAppCommitRef.current = performance.now();
+      }
+    };
+
     if (mode === "slot" && slot && t >= slot.out_end_s - 0.04) {
       audio.currentTime = slot.out_start_s;
-      onPlayheadChangeRef.current(slot.out_start_s);
+      emit(slot.out_start_s, true);
       prevAudioTimeRef.current = slot.out_start_s;
       return;
     }
     if (mode === "block") {
       if (t >= blockDuration - 0.04) {
         audio.currentTime = 0;
-        onPlayheadChangeRef.current(0);
+        emit(0, true);
         prevAudioTimeRef.current = 0;
         return;
       }
-      onPlayheadChangeRef.current(t);
+      const now = performance.now();
+      const commit = now - lastAppCommitRef.current >= 150;
+      emit(t, commit);
       prevAudioTimeRef.current = t;
       return;
     }
     const clamped = Math.min(t, blockDuration);
-    onPlayheadChangeRef.current(clamped);
+    const now = performance.now();
+    emit(clamped, now - lastAppCommitRef.current >= 150);
     prevAudioTimeRef.current = clamped;
-  }, []);
+  }, [publishPlayhead]);
 
   useEffect(() => {
     if (!compositePreviewActive) return;
@@ -138,9 +236,11 @@ export function StoryboardBlockPlayer({
   useEffect(() => {
     setPlaying(false);
     setReady(false);
+    setScrubbing(false);
+    scrubbingRef.current = false;
     prevAudioTimeRef.current = 0;
-    onPlayheadChange(0);
-  }, [audioUrl, onPlayheadChange]);
+    publishPlayhead(0, { commit: true });
+  }, [audioUrl, publishPlayhead]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -155,7 +255,7 @@ export function StoryboardBlockPlayer({
     const onEnded = () => {
       if (loopModeRef.current === "block") {
         audio.currentTime = 0;
-        onPlayheadChangeRef.current(0);
+        onPlayheadChangeRef.current(0, { commit: true });
         prevAudioTimeRef.current = 0;
         void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
         return;
@@ -220,14 +320,14 @@ export function StoryboardBlockPlayer({
       setLoopModeAndNotify("slot");
       if (compositePreviewActive) {
         onSeekCompositePreview?.(slot.out_start_s);
-        onPlayheadChange(slot.out_start_s);
+        publishPlayhead(slot.out_start_s, { commit: true });
         onPlayCompositePreview?.();
         return;
       }
       const audio = audioRef.current;
       if (!audio || !ready) return;
       audio.currentTime = slot.out_start_s;
-      onPlayheadChange(slot.out_start_s);
+      publishPlayhead(slot.out_start_s, { commit: true });
       void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
     },
     [
@@ -238,7 +338,7 @@ export function StoryboardBlockPlayer({
       setLoopModeAndNotify,
       compositePreviewActive,
       onSeekCompositePreview,
-      onPlayheadChange,
+      publishPlayhead,
       onPlayCompositePreview,
       ready,
     ],
@@ -252,14 +352,14 @@ export function StoryboardBlockPlayer({
     setLoopModeAndNotify("block");
     if (compositePreviewActive) {
       onSeekCompositePreview?.(0);
-      onPlayheadChange(0);
+      publishPlayhead(0, { commit: true });
       onPlayCompositePreview?.();
       return;
     }
     const audio = audioRef.current;
     if (!audio || !ready) return;
     audio.currentTime = 0;
-    onPlayheadChange(0);
+    publishPlayhead(0, { commit: true });
     void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   };
 
@@ -269,38 +369,95 @@ export function StoryboardBlockPlayer({
   };
 
   const seek = useCallback(
-    (timeS: number) => {
+    (timeS: number, options?: { commit?: boolean; selectSlot?: boolean }) => {
+      const commit = options?.commit !== false;
+      const selectSlot = options?.selectSlot !== false;
       const clamped = Math.max(0, Math.min(timeS, blockDurationS));
+
       if (compositePreviewActive) {
-        onSeekCompositePreview?.(clamped);
-        onPlayheadChange(clamped);
+        if (commit) {
+          onSeekCompositePreview?.(clamped);
+        }
+        publishPlayhead(clamped, { commit });
         prevAudioTimeRef.current = clamped;
-        const hit = slotAtTime(clamped);
-        if (hit && hit.id !== selectedSlotId) {
-          onSelectSlot?.(hit.id);
+        if (selectSlot) {
+          const hit = slotAtTime(clamped);
+          if (hit && hit.id !== selectedSlotId) {
+            onSelectSlot?.(hit.id);
+          }
         }
         return;
       }
       const audio = audioRef.current;
-      if (!audio) return;
-      audio.currentTime = clamped;
-      onPlayheadChange(clamped);
+      if (audio) {
+        audio.currentTime = clamped;
+      }
+      publishPlayhead(clamped, { commit });
       prevAudioTimeRef.current = clamped;
-      const hit = slotAtTime(clamped);
-      if (hit && hit.id !== selectedSlotId) {
-        onSelectSlot?.(hit.id);
+      if (selectSlot) {
+        const hit = slotAtTime(clamped);
+        if (hit && hit.id !== selectedSlotId) {
+          onSelectSlot?.(hit.id);
+        }
       }
     },
     [
       blockDurationS,
       compositePreviewActive,
       onSeekCompositePreview,
-      onPlayheadChange,
+      publishPlayhead,
       slotAtTime,
       selectedSlotId,
       onSelectSlot,
     ],
   );
+
+  const finishScrub = useCallback(() => {
+    if (!scrubbingRef.current) return;
+    scrubbingRef.current = false;
+    setScrubbing(false);
+    const timeS = scrubValueRef.current;
+    if (pendingSlotIdRef.current) {
+      onSelectSlot?.(pendingSlotIdRef.current);
+      pendingSlotIdRef.current = null;
+    }
+    seek(timeS, { commit: true, selectSlot: false });
+  }, [onSelectSlot, seek]);
+
+  useEffect(() => {
+    if (!scrubbing) return;
+    const onPointerUp = () => finishScrub();
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [scrubbing, finishScrub]);
+
+  const handleScrubInput = useCallback(
+    (timeS: number) => {
+      const clamped = Math.max(0, Math.min(timeS, blockDurationS));
+      scrubValueRef.current = clamped;
+      scrubbingRef.current = true;
+      updatePlayheadDom(clamped);
+      updateActiveSlotLabel(clamped);
+      const hit = slotAtTime(clamped);
+      if (hit && hit.id !== selectedSlotId) {
+        pendingSlotIdRef.current = hit.id;
+      }
+      seek(clamped, { commit: false, selectSlot: false });
+    },
+    [blockDurationS, seek, slotAtTime, selectedSlotId, updatePlayheadDom, updateActiveSlotLabel],
+  );
+
+  const beginScrub = useCallback(() => {
+    if (scrubbingRef.current) return;
+    scrubbingRef.current = true;
+    setScrubbing(true);
+    pendingSlotIdRef.current = null;
+    scrubValueRef.current = Number(sliderRef.current?.value ?? playheadS);
+  }, [playheadS]);
 
   useEffect(() => {
     registerBlockSeek?.((timeS) => seek(timeS));
@@ -327,8 +484,7 @@ export function StoryboardBlockPlayer({
     return () => registerBlockSetLoopMode?.(null);
   }, [registerBlockSetLoopMode, setLoopModeAndNotify]);
 
-  const playheadPct =
-    blockDurationS > 0 ? Math.max(0, Math.min(100, (playheadS / blockDurationS) * 100)) : 0;
+  const displayActiveSlot = activeSlot;
 
   return (
     <div className="space-y-2 rounded border border-monitor-border bg-monitor-bg/50 p-3">
@@ -357,19 +513,22 @@ export function StoryboardBlockPlayer({
             );
           })}
           <div
+            ref={playheadMarkerRef}
             className="absolute inset-y-0 w-0.5 bg-monitor-text shadow-[0_0_6px_rgba(232,234,237,0.8)]"
-            style={{ left: `${playheadPct}%` }}
+            style={{ left: "0%" }}
           />
         </div>
         <input
+          ref={sliderRef}
           type="range"
           className="field-range relative z-[1]"
           min={0}
           max={blockDurationS}
           step={0.001}
-          value={playheadS}
+          defaultValue={playheadS}
           disabled={!transportReady}
-          onChange={(e) => seek(Number(e.target.value))}
+          onPointerDown={beginScrub}
+          onChange={(e) => handleScrubInput(Number(e.target.value))}
           aria-label="Block audio scrubber"
         />
       </div>
@@ -407,15 +566,16 @@ export function StoryboardBlockPlayer({
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-monitor-muted">
-        <span>
+        <span ref={timeDisplayRef}>
           {formatTime(playheadS)} / {formatTime(blockDurationS)}
         </span>
-        {activeSlot ? (
-          <span style={{ color: activeSlotColor }}>
-            {activeSlot.label} · {formatTime(activeSlot.out_end_s - activeSlot.out_start_s)}
+        {displayActiveSlot ? (
+          <span ref={activeSlotRef} style={{ color: activeSlotColor }}>
+            {displayActiveSlot.label} ·{" "}
+            {formatTime(displayActiveSlot.out_end_s - displayActiveSlot.out_start_s)}
           </span>
         ) : (
-          <span>No slot</span>
+          <span ref={activeSlotRef}>No slot</span>
         )}
         {transportPlaying && loopMode === "slot" && selectedSlot ? (
           <span className="text-scope-dim">

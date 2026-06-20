@@ -1,5 +1,6 @@
-import { useId, useMemo, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChromaGram, ScopeLaneSeries } from "../../types";
+import { subscribePlayhead, getLastPlayheadS } from "../../utils/playheadBus";
 import { ChromaHeatmap } from "./ChromaHeatmap";
 import { ScopeLane } from "./ScopeLane";
 import {
@@ -28,28 +29,54 @@ interface MusicDetailRackProps {
   chroma: ChromaGram | null;
   window: ScopeWindow;
   viewWidth: number;
-  playheadS?: number | null;
-  playheadLocalS?: number | null;
+  /** Absolute track time where block-local playhead 0 maps; omit to hide transport playhead. */
+  playheadAnchorS?: number;
   defaultOpen?: boolean;
 }
 
-export function MusicDetailRack({
+function syncPlayheadLine(
+  timeS: number,
+  line: SVGLineElement | null,
+  window: ScopeWindow,
+  plotX: number,
+  innerW: number,
+  playheadAnchorS: number,
+): void {
+  if (!line) return;
+  const duration = window.endS - window.startS;
+  // Playhead bus emits block-local output time; map into this window's local axis.
+  const localS = timeS + playheadAnchorS - window.startS;
+  if (localS < 0 || localS > duration + 0.001) {
+    line.setAttribute("opacity", "0");
+    return;
+  }
+  const x = timeToX(localS, duration, plotX, innerW);
+  line.setAttribute("x1", String(x));
+  line.setAttribute("x2", String(x));
+  line.setAttribute("opacity", "0.95");
+}
+
+export const MusicDetailRack = memo(function MusicDetailRack({
   lanes,
   chroma,
   window,
   viewWidth,
-  playheadS = null,
-  playheadLocalS = null,
+  playheadAnchorS,
   defaultOpen = false,
 }: MusicDetailRackProps) {
   const panelId = useId();
   const [open, setOpen] = useState(defaultOpen);
   const [hoverS, setHoverS] = useState<number | null>(null);
+  const playheadLineRef = useRef<SVGLineElement>(null);
+  const windowRef = useRef(window);
+  windowRef.current = window;
+  const playheadAnchorRef = useRef(playheadAnchorS);
+  playheadAnchorRef.current = playheadAnchorS;
+  const showPlayhead = playheadAnchorS != null;
 
   const durationS = windowDuration(window);
   const hasChroma = chroma != null && chroma.frames.length > 0;
   const hasContent = lanes.length > 0 || hasChroma;
-  if (!hasContent) return null;
 
   const plotX = SCOPE_GUTTER_WIDTH;
   const innerW = viewWidth - plotX - SCOPE_PAD_X;
@@ -76,12 +103,35 @@ export function MusicDetailRack({
     [durationS, innerW],
   );
 
-  const localPlayhead =
-    playheadLocalS != null
-      ? playheadLocalS
-      : playheadS != null && playheadS >= window.startS && playheadS <= window.endS
-        ? playheadS - window.startS
-        : null;
+  useEffect(() => {
+    if (!showPlayhead) return;
+    const onPlayhead = (timeS: number) => {
+      syncPlayheadLine(
+        timeS,
+        playheadLineRef.current,
+        windowRef.current,
+        plotX,
+        innerW,
+        playheadAnchorRef.current!,
+      );
+    };
+    const unsubscribe = subscribePlayhead(onPlayhead);
+    return unsubscribe;
+  }, [innerW, plotX, showPlayhead]);
+
+  useEffect(() => {
+    if (!open || !showPlayhead) return;
+    syncPlayheadLine(
+      getLastPlayheadS(),
+      playheadLineRef.current,
+      windowRef.current,
+      plotX,
+      innerW,
+      playheadAnchorRef.current!,
+    );
+  }, [open, innerW, plotX, showPlayhead]);
+
+  if (!hasContent) return null;
 
   const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -102,7 +152,6 @@ export function MusicDetailRack({
         viewWidth={viewWidth}
         height={SCOPE_LANE_HEIGHT}
         y={cursorY}
-        playheadS={localPlayhead}
         hoverS={hoverS}
       />
     );
@@ -147,7 +196,6 @@ export function MusicDetailRack({
                 window={{ startS: 0, endS: durationS }}
                 viewWidth={viewWidth}
                 y={cursorY}
-                playheadS={localPlayhead}
                 hoverS={hoverS}
               />
             )}
@@ -204,20 +252,20 @@ export function MusicDetailRack({
                 opacity={0.35}
               />
             )}
-            {localPlayhead != null && (
-              <line
-                x1={timeToX(localPlayhead, durationS, plotX, innerW)}
-                x2={timeToX(localPlayhead, durationS, plotX, innerW)}
-                y1={0}
-                y2={lanesHeight}
-                stroke="#E8EAED"
-                strokeWidth={1.25}
-                opacity={0.95}
-              />
-            )}
+            <line
+              ref={playheadLineRef}
+              x1={plotX}
+              x2={plotX}
+              y1={0}
+              y2={lanesHeight}
+              stroke="#E8EAED"
+              strokeWidth={1.25}
+              opacity={0}
+              style={{ pointerEvents: "none" }}
+            />
           </svg>
         </div>
       )}
     </div>
   );
-}
+});

@@ -26,7 +26,11 @@ import type { FormState } from "./components/JobForm";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { PhonePreview, type PreviewTransportRestore } from "./components/PhonePreview";
-import type { StoryboardLoopMode } from "./components/StoryboardBlockPlayer";
+import { emitPlayheadUi } from "./utils/playheadBus";
+import type {
+  BlockPlayheadChangeHandler,
+  StoryboardLoopMode,
+} from "./components/StoryboardBlockPlayer";
 import { StageTelemetry } from "./components/StageTelemetry";
 import { StoryboardPanel } from "./components/StoryboardPanel";
 
@@ -64,6 +68,7 @@ export default function App() {
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewReady, setPreviewReady] = useState(false);
   const [blockPlayheadS, setBlockPlayheadS] = useState(0);
+  const blockPlayheadRef = useRef(0);
   const [compositePreviewPlaying, setCompositePreviewPlaying] = useState(false);
   const [previewLoopMode, setPreviewLoopMode] = useState<StoryboardLoopMode>("block");
   const blockSeekRef = useRef<((timeS: number) => void) | null>(null);
@@ -99,18 +104,30 @@ export default function App() {
   const eventsUnsubRef = useRef<(() => void) | null>(null);
 
   activeJobIdRef.current = activeJobId;
+  blockPlayheadRef.current = blockPlayheadS;
+
+  const handleBlockPlayheadChange = useCallback<BlockPlayheadChangeHandler>(
+    (timeS, options) => {
+      blockPlayheadRef.current = timeS;
+      emitPlayheadUi(timeS);
+      if (options?.commit !== false) {
+        setBlockPlayheadS(timeS);
+      }
+    },
+    [],
+  );
 
   const capturePreviewTransport = useCallback(
     (overrides: Partial<PreviewTransportRestore> = {}) => {
       previewRestoreRef.current = {
-        playheadS: blockPlayheadS,
+        playheadS: blockPlayheadRef.current,
         playing: compositePreviewPlaying,
         loopMode: previewLoopMode,
         selectedSlotId,
         ...overrides,
       };
     },
-    [blockPlayheadS, compositePreviewPlaying, previewLoopMode, selectedSlotId],
+    [compositePreviewPlaying, previewLoopMode, selectedSlotId],
   );
 
   const refreshPreview = useCallback(
@@ -633,7 +650,7 @@ export default function App() {
                 onPatchEffects={handlePatchEffects}
                 saving={storyboardSaving}
                 blockPlayheadS={blockPlayheadS}
-                onBlockPlayheadChange={setBlockPlayheadS}
+                onBlockPlayheadChange={handleBlockPlayheadChange}
                 compositePreviewActive={previewReady && compositeUrl != null}
                 compositePreviewPlaying={compositePreviewPlaying}
                 onToggleCompositePreview={toggleCompositePreview}
@@ -700,7 +717,7 @@ export default function App() {
               storyboard={storyboard}
               loopMode={previewLoopMode}
               selectedSlotId={selectedSlotId}
-              onBlockPlayheadChange={setBlockPlayheadS}
+              onBlockPlayheadChange={handleBlockPlayheadChange}
               onPreviewPlayingChange={setCompositePreviewPlaying}
               previewRestoreRef={previewRestoreRef}
               onApplyPreviewRestore={applyPreviewRestore}
