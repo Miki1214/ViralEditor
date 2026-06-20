@@ -61,6 +61,8 @@ from viral_editor.api.schemas import (
     SlotCropPatchRequest,
     SlotTransformPatchRequest,
     SpatialCropInput,
+    RetentionPlanScoreResponse,
+    RetentionSettingsResponse,
     SpatialFxSettingsResponse,
     StageInfo,
     StoryboardPatchRequest,
@@ -674,6 +676,24 @@ def _storyboard_response(
             intensity=config.spatial_fx.intensity,
             max_events_per_second=config.spatial_fx.max_events_per_second,
         ),
+        retention=RetentionSettingsResponse(
+            interrupt_min_gap_s=config.retention.interrupt_min_gap_s,
+            interrupt_max_gap_s=config.retention.interrupt_max_gap_s,
+            hook_window_s=config.retention.hook_window_s,
+            early_hook_fx_by_s=config.retention.early_hook_fx_by_s,
+            peak_snap_tolerance_s=config.retention.peak_snap_tolerance_s,
+        ),
+        retention_score=(
+            RetentionPlanScoreResponse(
+                overall=storyboard.retention_score.overall,
+                hook_strength=storyboard.retention_score.hook_strength,
+                cadence_adherence=storyboard.retention_score.cadence_adherence,
+                beat_sync=storyboard.retention_score.beat_sync,
+                energy_coverage=storyboard.retention_score.energy_coverage,
+            )
+            if storyboard.retention_score is not None
+            else None
+        ),
         slots=[
             StorySlotResponse(
                 id=slot.id,
@@ -691,6 +711,7 @@ def _storyboard_response(
                 rotation_deg=slot.rotation_deg,
                 fit_mode=slot.fit_mode,
                 spatial_crop=_spatial_crop_response(slot.spatial_crop),
+                rationale=slot.rationale,
                 clip_source_url=(
                     f"/api/jobs/{job_id}/clips/{slot.assigned_clip_id}/source"
                     if slot.assigned_clip_id
@@ -742,7 +763,7 @@ def patch_effects(
     job = store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-    if not payload.teaser and not payload.spatial_fx:
+    if not payload.teaser and not payload.spatial_fx and not payload.retention:
         raise HTTPException(status_code=400, detail="No effect fields provided")
 
     temp_dir = job.workspace / "temp"

@@ -315,6 +315,7 @@ def test_no_match_suggests_nearest_duration(
         _sections: list[MusicSection],
         *,
         target_duration_s: float,
+        scope_lanes=None,
     ) -> list:
         from viral_editor.audio.loop_planner import _Candidate
 

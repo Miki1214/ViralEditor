@@ -137,6 +137,16 @@ class SpatialFxConfig(DomainModel):
     max_events_per_second: float = Field(default=8.0, gt=0, le=30)
 
 
+class RetentionConfig(DomainModel):
+    """Research-backed interrupt cadence and hook policy."""
+
+    interrupt_min_gap_s: float = Field(default=3.0, gt=0, le=10)
+    interrupt_max_gap_s: float = Field(default=5.0, gt=0, le=15)
+    hook_window_s: float = Field(default=3.0, gt=0, le=10)
+    early_hook_fx_by_s: float = Field(default=2.0, gt=0, le=10)
+    peak_snap_tolerance_s: float = Field(default=0.15, gt=0, le=1)
+
+
 class MusicSelectionConfig(DomainModel):
     """Target short length and selected music window for the render."""
 
@@ -167,6 +177,7 @@ class JobConfig(DomainModel):
     speed_ramp: SpeedRampConfig = Field(default_factory=SpeedRampConfig)
     teaser: TeaserConfig = Field(default_factory=TeaserConfig)
     spatial_fx: SpatialFxConfig = Field(default_factory=SpatialFxConfig)
+    retention: RetentionConfig = Field(default_factory=RetentionConfig)
     music: MusicSelectionConfig = Field(default_factory=MusicSelectionConfig)
 
     def effective_clips(self) -> list[ClipInput]:

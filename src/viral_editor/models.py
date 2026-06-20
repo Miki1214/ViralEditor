@@ -234,6 +234,17 @@ class StorySlot(DomainModel):
     rotation_deg: int = Field(default=0, ge=0, lt=360)
     fit_mode: SlotFitMode = "contain"
     spatial_crop: SpatialCrop | None = None
+    rationale: str | None = None
+
+
+class RetentionPlanScore(DomainModel):
+    """Viral-readiness score for a music window edit plan."""
+
+    overall: float = Field(ge=0, le=1)
+    hook_strength: float = Field(ge=0, le=1)
+    cadence_adherence: float = Field(ge=0, le=1)
+    beat_sync: float = Field(ge=0, le=1)
+    energy_coverage: float = Field(ge=0, le=1)
 
 
 class Storyboard(DomainModel):
@@ -245,6 +256,7 @@ class Storyboard(DomainModel):
     total_duration_s: float = Field(gt=0)
     loop_to_hook: bool = True
     slots: list[StorySlot] = Field(default_factory=list)
+    retention_score: RetentionPlanScore | None = None
 
 
 class SpeedSegment(DomainModel):
@@ -306,6 +318,7 @@ class FxEvent(DomainModel):
     kind: FxKind
     magnitude: float = Field(gt=0)
     decay_frames: int = Field(ge=1)
+    reason: str | None = None
 
 
 class TeaserSpec(DomainModel):

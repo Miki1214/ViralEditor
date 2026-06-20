@@ -4,11 +4,23 @@ from __future__ import annotations
 
 import bisect
 
+import numpy as np
+
 from viral_editor.audio.features import BeatSyncFeatures
+from viral_editor.editing.retention_policy import (
+    EARLY_HOOK_FX_BY_S,
+    HOOK_WINDOW_S,
+    INTERRUPT_MAX_GAP_S,
+    INTERRUPT_MIN_GAP_S,
+    find_energy_peaks,
+    place_interrupts,
+    score_plan,
+)
 from viral_editor.models import (
     MediaInfo,
     MusicBlock,
     MusicSection,
+    RetentionPlanScore,
     SpeedSegment,
     Storyboard,
     StorySlot,
@@ -75,6 +87,7 @@ def plan_storyboard(
     sections: list[MusicSection] | None = None,
     transients: list[Transient] | None = None,
     target_slot_count: int | None = None,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> Storyboard:
     """Partition a music block into downbeat-aligned slots."""
     del sections  # reserved for future section-aware labels
@@ -89,10 +102,23 @@ def plan_storyboard(
         window_end,
         downbeats,
         slot_count,
+        scope_lanes=scope_lanes,
+        absolute_downbeats=(
+            features.downbeat_times_s.tolist() if features is not None else []
+        ),
     )
 
     drop_counts = _drop_counts_by_slot(transients or [], boundaries)
     punch_index = drop_counts.index(max(drop_counts)) if drop_counts else -1
+
+    slot_rationales = _slot_rationales(
+        boundaries,
+        window_start,
+        scope_lanes=scope_lanes,
+        absolute_downbeats=(
+            features.downbeat_times_s.tolist() if features is not None else []
+        ),
+    )
 
     slots: list[StorySlot] = []
     for index in range(len(boundaries) - 1):
@@ -115,7 +141,24 @@ def plan_storyboard(
                 out_end_s=round(end - window_start, 6),
                 target_duration_s=round(slot_duration, 6),
                 transition_in="xfade" if index > 0 else "cut",
+                rationale=slot_rationales[index] if index < len(slot_rationales) else None,
             )
+        )
+
+    retention_score: RetentionPlanScore | None = None
+    if features is not None:
+        interrupts = place_interrupts(
+            scope_lanes,
+            features.downbeat_times_s.tolist(),
+            window_start_s=window_start,
+            window_end_s=window_end,
+        )
+        retention_score = score_plan(
+            scope_lanes,
+            features.downbeat_times_s.tolist(),
+            interrupts,
+            window_start_s=window_start,
+            window_end_s=window_end,
         )
 
     return Storyboard(
@@ -125,10 +168,47 @@ def plan_storyboard(
         total_duration_s=round(duration, 6),
         loop_to_hook=True,
         slots=slots,
+        retention_score=retention_score,
     )
 
 
 _HOOK_MIN_PART_S = 0.25
+
+
+def _slot_rationales(
+    boundaries: list[float],
+    window_start: float,
+    *,
+    scope_lanes: dict[str, np.ndarray] | None,
+    absolute_downbeats: list[float],
+) -> list[str | None]:
+    rationales: list[str | None] = []
+    peaks = find_energy_peaks(
+        scope_lanes,
+        absolute_downbeats,
+        window_start_s=window_start,
+        window_end_s=boundaries[-1] if boundaries else window_start,
+    )
+    peak_times = {round(peak.time_s, 3) for peak in peaks}
+    for index in range(len(boundaries) - 1):
+        start = boundaries[index]
+        rel_start = start - window_start
+        if index == 0:
+            rationales.append(
+                f"Hook slot — aim FX by {EARLY_HOOK_FX_BY_S:.0f}s"
+                if rel_start <= HOOK_WINDOW_S
+                else "Hook slot"
+            )
+            continue
+        near_peak = any(abs(start - pt) <= 0.2 for pt in peak_times)
+        gap = start - boundaries[index - 1]
+        if near_peak and INTERRUPT_MIN_GAP_S <= gap <= INTERRUPT_MAX_GAP_S + 0.5:
+            rationales.append(f"Energy peak boundary @ {rel_start:.2f}s")
+        elif near_peak:
+            rationales.append(f"Snapped to energy peak @ {rel_start:.2f}s")
+        else:
+            rationales.append(f"Downbeat boundary @ {rel_start:.2f}s")
+    return rationales
 
 
 def _compute_boundaries(
@@ -136,13 +216,26 @@ def _compute_boundaries(
     window_end: float,
     downbeats: list[float],
     target_slot_count: int,
+    *,
+    scope_lanes: dict[str, np.ndarray] | None = None,
+    absolute_downbeats: list[float] | None = None,
 ) -> list[float]:
-    """Pick downbeat-aligned boundaries for ``target_slot_count`` slots in a window."""
+    """Pick downbeat-aligned boundaries near energy peaks for ``target_slot_count`` slots."""
     duration = max(window_end - window_start, _MIN_SLOT_S)
     if target_slot_count <= 0:
         return [window_start, window_end]
 
     slot_count = min(target_slot_count, max(1, int(duration / _MIN_SLOT_S)))
+    abs_downbeats = absolute_downbeats if absolute_downbeats is not None else [
+        window_start + t for t in downbeats
+    ]
+    energy_peaks = find_energy_peaks(
+        scope_lanes,
+        abs_downbeats,
+        window_start_s=window_start,
+        window_end_s=window_end,
+    )
+    peak_times = [peak.time_s for peak in energy_peaks]
 
     def _even_split(count: int) -> list[float]:
         step = duration / count
@@ -164,7 +257,12 @@ def _compute_boundaries(
         candidates = [t for t in local_downbeats if t > cursor + _MIN_SLOT_S - 1e-6]
         if not candidates:
             break
-        next_boundary = min(candidates, key=lambda t: abs(t - target))
+        peak_candidates = [
+            t for t in candidates
+            if any(abs(t - pt) <= 0.25 for pt in peak_times)
+        ]
+        pick_from = peak_candidates if peak_candidates else candidates
+        next_boundary = min(pick_from, key=lambda t: abs(t - target))
         if next_boundary >= window_end - _MIN_SLOT_S:
             break
         boundaries.append(next_boundary)
@@ -496,6 +594,7 @@ def apply_hook_inversion_layout(
     enabled: bool,
     payoff_duration_s: float,
     features: BeatSyncFeatures | None = None,
+    scope_lanes: dict | None = None,
     clip_media: dict[str, MediaInfo] | None = None,
 ) -> Storyboard:
     """Split the hook into start/end storyboard slots aligned to the music block."""

@@ -14,6 +14,7 @@ from viral_editor.audio.storyboard import (
 )
 from viral_editor.config import JobConfig, TeaserConfig
 from viral_editor.ingest.loader import probe_media
+from viral_editor.editing.retention_policy import select_payoff_downbeat_s
 from viral_editor.models import ClipInput, MediaInfo, SpatialCrop, Storyboard, StorySlot, write_artifact
 from viral_editor.video.clip_reel import normalize_crop_range
 
@@ -36,18 +37,22 @@ def refresh_hook_inversion_layout(
 ) -> Storyboard:
     """Split or merge hook slots to match retention FX settings."""
     features = None
+    scope_lanes = None
     if temp_dir is not None:
         try:
-            from viral_editor.api.music import load_beat_features
+            from viral_editor.api.music import load_beat_features, load_scope_lanes
 
             features = load_beat_features(temp_dir)
+            scope_lanes = load_scope_lanes(temp_dir)
         except FileNotFoundError:
             features = None
+            scope_lanes = None
     return apply_hook_inversion_layout(
         storyboard,
         enabled=config.teaser.enabled,
         payoff_duration_s=config.teaser.duration_s,
         features=features,
+        scope_lanes=scope_lanes,
         clip_media=clip_media_for_storyboard(config, storyboard),
     )
 
@@ -106,19 +111,34 @@ def teaser_settings_response(
     payoff_downbeats: list[float] = []
     if teaser.enabled:
         features: BeatSyncFeatures | None = None
+        scope_lanes = None
         if temp_dir is not None:
             try:
-                from viral_editor.api.music import load_beat_features
+                from viral_editor.api.music import load_beat_features, load_scope_lanes
 
                 features = load_beat_features(temp_dir)
+                scope_lanes = load_scope_lanes(temp_dir)
             except FileNotFoundError:
                 features = None
+                scope_lanes = None
+        hook_budget = hook_output_budget_s(storyboard)
         payoff_downbeats = hook_payoff_downbeats_s(
-            hook_output_budget_s(storyboard),
+            hook_budget,
             features,
             music_start_s=storyboard.music_start_s,
             music_end_s=storyboard.music_end_s,
         )
+        if features is not None and payoff_downbeats:
+            preferred = select_payoff_downbeat_s(
+                scope_lanes,
+                features.downbeat_times_s.tolist(),
+                window_start_s=storyboard.music_start_s,
+                window_end_s=storyboard.music_end_s,
+                hook_budget_s=hook_budget,
+            )
+            if preferred not in payoff_downbeats:
+                payoff_downbeats.append(preferred)
+            payoff_downbeats = sorted(set(round(t, 6) for t in payoff_downbeats))
     return {
         "enabled": teaser.enabled,
         "tail_fraction": teaser.tail_fraction,
@@ -161,10 +181,19 @@ def persist_storyboard_for_job(
         return None
 
     features = load_beat_features(temp_dir)
+    scope_lanes = None
+    try:
+        from viral_editor.api.music import load_scope_lanes
+
+        scope_lanes = load_scope_lanes(temp_dir)
+    except FileNotFoundError:
+        scope_lanes = None
+
     storyboard = plan_storyboard(
         block,
         features=features,
         transients=timeline.transients,
+        scope_lanes=scope_lanes,
     )
     storyboard = refresh_hook_inversion_layout(storyboard, config, temp_dir=temp_dir)
     persist_storyboard(temp_dir, storyboard)

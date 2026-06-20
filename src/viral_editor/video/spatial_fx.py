@@ -1,10 +1,14 @@
-"""Spatial FX planner — zoom punches and rotation shakes from transients."""
+"""Spatial FX planner — zoom punches and rotation shakes from retention policy."""
 
 from __future__ import annotations
 
 import random
 from collections import defaultdict
 
+import numpy as np
+
+from viral_editor.config import RetentionConfig
+from viral_editor.editing.retention_policy import place_interrupts
 from viral_editor.models import AudioTimeline, FxEvent, MediaInfo, Transient
 
 ZOOM_MIN = 1.05
@@ -34,6 +38,7 @@ def _decay_frames(amplitude: float) -> int:
 
 
 def _transient_events(transient: Transient) -> list[FxEvent]:
+    """Legacy fallback when scope lanes are unavailable."""
     timestamp_s = round(transient.timestamp_ms / 1000.0, 6)
     amp = transient.amplitude_normalized
     decay = _decay_frames(amp)
@@ -45,6 +50,7 @@ def _transient_events(transient: Transient) -> list[FxEvent]:
                 kind="zoom",
                 magnitude=round(_zoom_magnitude(amp), 4),
                 decay_frames=decay,
+                reason=f"Onset drop @ {timestamp_s:.2f}s",
             )
         ]
     if transient.type == "bass":
@@ -54,9 +60,26 @@ def _transient_events(transient: Transient) -> list[FxEvent]:
                 kind="rotate",
                 magnitude=round(_rotate_magnitude(amp), 4),
                 decay_frames=decay,
+                reason=f"Bass hit @ {timestamp_s:.2f}s",
             )
         ]
     return []
+
+
+def _interrupt_to_fx_event(interrupt) -> FxEvent:
+    if interrupt.kind == "zoom":
+        amp = (interrupt.magnitude - ZOOM_MIN) / max(ZOOM_MAX - ZOOM_MIN, 1e-9)
+        magnitude = round(_zoom_magnitude(amp), 4)
+    else:
+        amp = interrupt.magnitude / ROTATE_MAX_DEG
+        magnitude = round(_rotate_magnitude(amp), 4)
+    return FxEvent(
+        timestamp_s=interrupt.timestamp_s,
+        kind=interrupt.kind,
+        magnitude=magnitude,
+        decay_frames=_decay_frames(amp),
+        reason=interrupt.reason,
+    )
 
 
 def _merge_nearby(events: list[FxEvent], merge_window_s: float) -> list[FxEvent]:
@@ -109,18 +132,31 @@ def plan_spatial_fx(
     seed: int,
     max_events_per_second: float = DEFAULT_MAX_EVENTS_PER_SECOND,
     merge_window_s: float = DEFAULT_MERGE_WINDOW_S,
+    scope_lanes: dict[str, np.ndarray] | None = None,
+    downbeats: list[float] | np.ndarray | None = None,
+    window_start_s: float = 0.0,
+    window_end_s: float | None = None,
+    retention: RetentionConfig | None = None,
 ) -> list[FxEvent]:
-    """Map classified transients to zoom/rotate impulses on the output clock.
+    """Map retention-policy interrupts to zoom/rotate impulses on the output clock."""
+    del media, seed  # reserved for future fps snapping / rotate sign
+    end_s = window_end_s if window_end_s is not None else timeline.audio_duration_seconds
+    cfg = retention or RetentionConfig()
 
-    Transient timestamps are already on the music/output timeline (seconds from
-    the start of the selected music window). Music plays from ``t=0``, so FX at
-    ``timestamp_s`` align with the continuous audio track — including during the
-    prepended teaser window.
-    """
-    del media  # reserved for future fps snapping
-    events: list[FxEvent] = []
-    for transient in timeline.transients:
-        events.extend(_transient_events(transient))
+    if scope_lanes and downbeats is not None:
+        interrupts = place_interrupts(
+            scope_lanes,
+            downbeats,
+            window_start_s=window_start_s,
+            window_end_s=end_s,
+            min_gap_s=cfg.interrupt_min_gap_s,
+            max_gap_s=cfg.interrupt_max_gap_s,
+        )
+        events = [_interrupt_to_fx_event(item) for item in interrupts]
+    else:
+        events: list[FxEvent] = []
+        for transient in timeline.transients:
+            events.extend(_transient_events(transient))
 
     events = _merge_nearby(events, merge_window_s)
     events = _cap_events_per_second(events, max_events_per_second=max_events_per_second)

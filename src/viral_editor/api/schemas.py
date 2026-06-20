@@ -125,6 +125,23 @@ class StorySlotResponse(BaseModel):
     rotation_deg: int = 0
     fit_mode: Literal["contain", "cover"] = "contain"
     spatial_crop: SpatialCropInput | None = None
+    rationale: str | None = None
+
+
+class RetentionPlanScoreResponse(BaseModel):
+    overall: float = Field(ge=0, le=1)
+    hook_strength: float = Field(ge=0, le=1)
+    cadence_adherence: float = Field(ge=0, le=1)
+    beat_sync: float = Field(ge=0, le=1)
+    energy_coverage: float = Field(ge=0, le=1)
+
+
+class RetentionSettingsResponse(BaseModel):
+    interrupt_min_gap_s: float
+    interrupt_max_gap_s: float
+    hook_window_s: float
+    early_hook_fx_by_s: float
+    peak_snap_tolerance_s: float
 
 
 class TeaserSettingsResponse(BaseModel):
@@ -151,6 +168,8 @@ class StoryboardResponse(BaseModel):
     preview_ready: bool = False
     teaser: TeaserSettingsResponse
     spatial_fx: SpatialFxSettingsResponse
+    retention: RetentionSettingsResponse
+    retention_score: RetentionPlanScoreResponse | None = None
 
 
 class TeaserSettingsPatch(BaseModel):
@@ -166,9 +185,18 @@ class SpatialFxSettingsPatch(BaseModel):
     max_events_per_second: float | None = Field(default=None, gt=0, le=30)
 
 
+class RetentionSettingsPatch(BaseModel):
+    interrupt_min_gap_s: float | None = Field(default=None, gt=0, le=10)
+    interrupt_max_gap_s: float | None = Field(default=None, gt=0, le=15)
+    hook_window_s: float | None = Field(default=None, gt=0, le=10)
+    early_hook_fx_by_s: float | None = Field(default=None, gt=0, le=10)
+    peak_snap_tolerance_s: float | None = Field(default=None, gt=0, le=1)
+
+
 class EffectsPatchRequest(BaseModel):
     teaser: TeaserSettingsPatch | None = None
     spatial_fx: SpatialFxSettingsPatch | None = None
+    retention: RetentionSettingsPatch | None = None
 
 
 class StorySlotUpdate(BaseModel):

@@ -6,7 +6,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from viral_editor.audio.features import BeatSyncFeatures
+from viral_editor.editing.retention_policy import (
+    pacing_density_score,
+    retention_bonus_for_window,
+)
 from viral_editor.models import (
     AudioTimeline,
     MusicBlock,
@@ -199,6 +202,7 @@ def _enumerate_phrase_candidates(
     sections: list[MusicSection],
     *,
     target_duration_s: float,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> list[_Candidate]:
     """Return phrase-aligned loop windows within drift tolerance of ``target_duration_s``."""
     track_duration = timeline.audio_duration_seconds
@@ -241,6 +245,20 @@ def _enumerate_phrase_candidates(
                         retention += min(len(drops) / 3.0, 1.0) * 0.25
                     if any(abs(t.timestamp_ms / 1000.0 - start_s) <= 0.35 for t in drops):
                         retention += 0.15
+                    policy_bonus = retention_bonus_for_window(
+                        scope_lanes,
+                        features.downbeat_times_s.tolist(),
+                        window_start_s=start_s,
+                        window_end_s=end_s,
+                    )
+                    retention += policy_bonus * 0.2
+                    pacing = pacing_density_score(
+                        scope_lanes,
+                        window_start_s=start_s,
+                        window_end_s=end_s,
+                    )
+                    if 0.25 <= pacing <= 0.85:
+                        retention += 0.08
                     retention = min(1.0, retention)
                     label, reason = _classify_candidate(
                         start_s=start_s,
@@ -340,6 +358,7 @@ def suggest_music_blocks_advanced(
     target_duration_s: float = 30.0,
     max_blocks: int = 5,
     selected_block_id: str | None = None,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> MusicBlockPlan:
     """Suggest blocks using downbeats, phrase lengths, sections, and beat-sync loop quality."""
     track_duration = timeline.audio_duration_seconds
@@ -366,6 +385,7 @@ def suggest_music_blocks_advanced(
         features,
         sections,
         target_duration_s=target_duration_s,
+        scope_lanes=scope_lanes,
     )
 
     if not candidates:

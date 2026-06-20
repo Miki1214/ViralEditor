@@ -101,16 +101,19 @@ interface RetentionFxPanelProps {
 }
 
 function countFxCandidates(
-  transients: WaveformPayload["transients"],
+  waveform: WaveformPayload | null,
   musicStartS: number,
   musicEndS: number,
   spatialFx: SpatialFxSettings,
 ): { zoom: number; rotate: number } {
-  const markers = planSpatialFxMarkers(transients, {
+  if (!waveform) return { zoom: 0, rotate: 0 };
+  const markers = planSpatialFxMarkers(waveform.transients, {
     musicStartS,
     musicEndS,
     maxEventsPerSecond: spatialFx.max_events_per_second,
     enabled: spatialFx.enabled,
+    lanes: waveform.lanes,
+    downbeats: waveform.downbeats,
   });
   return countSpatialFxMarkers(markers);
 }
@@ -228,14 +231,12 @@ export function RetentionFxPanel({
 
   const fxCounts = useMemo(
     () =>
-      waveform
-        ? countFxCandidates(
-            waveform.transients,
-            storyboard.music_start_s,
-            storyboard.music_end_s,
-            spatialFx,
-          )
-        : { zoom: 0, rotate: 0 },
+      countFxCandidates(
+        waveform,
+        storyboard.music_start_s,
+        storyboard.music_end_s,
+        spatialFx,
+      ),
     [
       waveform,
       storyboard.music_start_s,
@@ -244,6 +245,8 @@ export function RetentionFxPanel({
       spatialFx.max_events_per_second,
     ],
   );
+
+  const retentionScore = storyboard.retention_score;
 
   const teaserPreviewLabel = teaser.enabled
     ? `${payoffS.toFixed(1)}s start · ${buildupS.toFixed(1)}s end · ${teaser.mask === "vignette" ? "vignette" : "dir blur"}`
@@ -257,9 +260,17 @@ export function RetentionFxPanel({
             Retention FX
           </h3>
           <p className="mt-1 max-w-prose text-xs text-monitor-muted">
-            Split the hook into start (payoff) and end (build-up) storyboard slots. The filmstrip
-            and block scrubber follow the same order as the composite preview.
+            Split the hook into start (payoff) and end (build-up) storyboard slots. Spatial FX
+            land on RMS peaks and downbeats — not loudness valleys.
           </p>
+          {retentionScore && (
+            <p className="mt-2 font-mono text-[10px] text-scope-trace">
+              Viral readiness {Math.round(retentionScore.overall * 100)}% · hook{" "}
+              {Math.round(retentionScore.hook_strength * 100)}% · cadence{" "}
+              {Math.round(retentionScore.cadence_adherence * 100)}% · beat sync{" "}
+              {Math.round(retentionScore.beat_sync * 100)}%
+            </p>
+          )}
         </div>
         <p className="font-mono text-[10px] text-scope-trace">{teaserPreviewLabel}</p>
       </div>
@@ -348,7 +359,7 @@ export function RetentionFxPanel({
             checked={spatialFx.enabled}
             disabled={saving}
             label="Spatial FX"
-            hint="Zoom punches on drops, rotation shakes on bass hits."
+            hint="Zoom on RMS peaks / downbeats; rotate on low-band flux hits."
             onChange={(enabled) => void onPatch({ spatial_fx: { enabled } })}
           />
           <label className="block">

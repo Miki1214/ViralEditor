@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from viral_editor.api.music import load_audio_timeline
+from viral_editor.api.music import load_audio_timeline, load_beat_features, load_scope_lanes
 from viral_editor.config import JobConfig
 from viral_editor.models import AudioTimeline, ClipInput, FxEvent, MediaInfo, Storyboard, TeaserSpec, Transient
 from viral_editor.video.spatial_fx import plan_spatial_fx
@@ -99,16 +99,28 @@ def spatial_fx_for_preview(
         music_start_s=music_start_s,
         music_end_s=music_end_s,
     )
+    features = load_beat_features(temp_dir)
+    scope_lanes = load_scope_lanes(temp_dir)
+    downbeats = (
+        features.downbeat_times_s.tolist()
+        if features is not None
+        else []
+    )
     return plan_spatial_fx(
         windowed,
         media,
         seed=config.seed,
         max_events_per_second=config.spatial_fx.max_events_per_second,
+        scope_lanes=scope_lanes,
+        downbeats=downbeats,
+        window_start_s=music_start_s,
+        window_end_s=music_end_s,
+        retention=config.retention,
     )
 
 
 def apply_effects_patch(config: JobConfig, payload) -> JobConfig:
-    """Merge partial teaser / spatial FX settings from an API patch."""
+    """Merge partial teaser / spatial FX / retention settings from an API patch."""
     updates: dict[str, object] = {}
     if payload.teaser is not None:
         teaser_patch = payload.teaser.model_dump(exclude_unset=True)
@@ -118,6 +130,10 @@ def apply_effects_patch(config: JobConfig, payload) -> JobConfig:
         fx_patch = payload.spatial_fx.model_dump(exclude_unset=True)
         if fx_patch:
             updates["spatial_fx"] = config.spatial_fx.model_copy(update=fx_patch)
+    if getattr(payload, "retention", None) is not None:
+        retention_patch = payload.retention.model_dump(exclude_unset=True)
+        if retention_patch:
+            updates["retention"] = config.retention.model_copy(update=retention_patch)
     if not updates:
         return config
     return config.model_copy(update=updates)

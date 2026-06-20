@@ -83,9 +83,13 @@ export function StoryboardScopeCanvas({
         musicEndS: storyboard.music_end_s,
         maxEventsPerSecond: fxSettings.max_events_per_second,
         enabled: fxSettings.enabled,
+        lanes: waveform.lanes,
+        downbeats: waveform.downbeats,
       }),
     [
       waveform.transients,
+      waveform.lanes,
+      waveform.downbeats,
       storyboard.music_start_s,
       storyboard.music_end_s,
       fxSettings.enabled,

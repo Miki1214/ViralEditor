@@ -174,6 +174,7 @@ def run_pipeline(
             sections,
             target_duration_s=loaded.music.target_duration_s,
             selected_block_id=loaded.music.selected_block_id,
+            scope_lanes=analysis.scope_lanes,
         )
 
         if loaded.music.start_s is not None and loaded.music.end_s is not None:
@@ -372,6 +373,15 @@ def run_pipeline(
             ingest.video,
             seed=loaded.seed,
             max_events_per_second=loaded.spatial_fx.max_events_per_second,
+            scope_lanes=analysis.scope_lanes,
+            downbeats=(
+                ramp_features.downbeat_times_s.tolist()
+                if ramp_features is not None
+                else []
+            ),
+            window_start_s=loaded.music.start_s or 0.0,
+            window_end_s=loaded.music.end_s or output_duration_s,
+            retention=loaded.retention,
         ) if loaded.spatial_fx.enabled else []
         fx_path = write_artifact_list(fx_events, "fx_events", work_temp)
         artifacts.append(fx_path.name)

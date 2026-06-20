@@ -26,8 +26,23 @@ SCOPE_LANE_LABELS = {
     "band_low": "Low",
     "band_mid": "Mid",
     "band_high": "High",
+    "build": "Build",
+    "drop_salience": "Drop salience",
+    "flux_low": "Low flux",
+    "flux_high": "High flux",
+    "pacing_density": "Pacing",
 }
-SCOPE_LANE_ORDER = ("rms", "band_low", "band_mid", "band_high")
+SCOPE_LANE_ORDER = (
+    "rms",
+    "band_low",
+    "band_mid",
+    "band_high",
+    "build",
+    "drop_salience",
+    "flux_low",
+    "flux_high",
+    "pacing_density",
+)
 
 
 def downsample_envelope(

@@ -39,7 +39,11 @@ def test_waveform_payload_includes_beats_lanes_and_chroma() -> None:
 
     assert payload.beats
     assert payload.downbeats
-    assert len(payload.lanes) == 4
+    assert len(payload.lanes) == 9
+    lane_ids = {lane.id for lane in payload.lanes}
+    assert "build" in lane_ids
+    assert "drop_salience" in lane_ids
+    assert "pacing_density" in lane_ids
     assert payload.chroma is not None
     assert len(payload.chroma.pitch_classes) == 12
     assert payload.chroma.tonic is not None

@@ -179,6 +179,23 @@ export interface StorySlot {
   rotation_deg: number;
   fit_mode: SlotFitMode;
   spatial_crop: SpatialCrop | null;
+  rationale?: string | null;
+}
+
+export interface RetentionPlanScore {
+  overall: number;
+  hook_strength: number;
+  cadence_adherence: number;
+  beat_sync: number;
+  energy_coverage: number;
+}
+
+export interface RetentionSettings {
+  interrupt_min_gap_s: number;
+  interrupt_max_gap_s: number;
+  hook_window_s: number;
+  early_hook_fx_by_s: number;
+  peak_snap_tolerance_s: number;
 }
 
 export interface StoryboardPayload {
@@ -190,6 +207,8 @@ export interface StoryboardPayload {
   preview_ready: boolean;
   teaser: TeaserSettings;
   spatial_fx: SpatialFxSettings;
+  retention: RetentionSettings;
+  retention_score?: RetentionPlanScore | null;
   slots: StorySlot[];
 }
 

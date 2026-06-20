@@ -89,6 +89,7 @@ def suggest_blocks_from_artifacts(
             sections,
             target_duration_s=target_duration_s,
             selected_block_id=selected_block_id,
+            scope_lanes=load_scope_lanes(temp_dir),
         )
 
     return suggest_music_blocks(
@@ -97,6 +98,7 @@ def suggest_blocks_from_artifacts(
         chroma=load_chroma(temp_dir),
         target_duration_s=target_duration_s,
         selected_block_id=selected_block_id,
+        scope_lanes=load_scope_lanes(temp_dir),
     )
 
 

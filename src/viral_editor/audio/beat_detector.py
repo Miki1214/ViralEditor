@@ -10,6 +10,7 @@ import numpy as np
 
 from viral_editor.audio.beat_tracker import infer_beats
 from viral_editor.audio.features import BeatSyncFeatures, compute_beat_sync_features, save_features
+from viral_editor.editing.retention_policy import classify_accents
 from viral_editor.models import AudioTimeline, DomainModel, Transient, TransientType
 from viral_editor.utils.logging import get_logger
 
@@ -48,7 +49,44 @@ class AudioAnalysisResult:
 
 
 _MID_BAND_MAX_HZ = 2000
-_SCOPE_LANE_KEYS = ("rms", "band_low", "band_mid", "band_high")
+_SCOPE_LANE_KEYS = (
+    "rms",
+    "band_low",
+    "band_mid",
+    "band_high",
+    "build",
+    "drop_salience",
+    "flux_low",
+    "flux_high",
+    "pacing_density",
+)
+_LEGACY_SCOPE_LANE_KEYS = ("rms", "band_low", "band_mid", "band_high")
+
+
+def _compute_pacing_density(
+    onsets_s: np.ndarray,
+    n_frames: int,
+    *,
+    hop_length: int,
+    sr: int,
+    window_s: float = 2.0,
+) -> np.ndarray:
+    """Onsets per second over a sliding window — governs interrupt cadence."""
+    if n_frames <= 0:
+        return np.zeros(0, dtype=np.float32)
+    pacing = np.zeros(n_frames, dtype=np.float32)
+    if onsets_s.size == 0:
+        return pacing
+    half_window = window_s / 2.0
+    for frame in range(n_frames):
+        time_s = frame * hop_length / sr
+        count = sum(
+            1
+            for onset in onsets_s
+            if abs(float(onset) - time_s) <= half_window
+        )
+        pacing[frame] = count / max(window_s, 1e-6)
+    return pacing
 
 
 def _compute_scope_lanes(
@@ -59,6 +97,7 @@ def _compute_scope_lanes(
     hop_length: int,
     sr: int,
     bass_band_hz: int,
+    onsets_s: np.ndarray | None = None,
 ) -> dict[str, np.ndarray]:
     """Per-frame envelopes aligned with the onset strength envelope."""
     n_frames = stft_mag.shape[1]
@@ -72,11 +111,44 @@ def _compute_scope_lanes(
 
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
     target_len = min(n_frames, rms.size, band_low.size)
+    rms = rms[:target_len].astype(np.float32)
+    band_low = band_low[:target_len].astype(np.float32)
+    band_mid = band_mid[:target_len].astype(np.float32)
+    band_high = band_high[:target_len].astype(np.float32)
+
+    rms_peak = float(rms.max()) if rms.size else 1.0
+    if rms_peak <= 1e-9:
+        rms_peak = 1.0
+    rms_norm = rms / rms_peak
+    build = np.maximum(0.0, np.diff(rms_norm, prepend=rms_norm[0])).astype(np.float32)
+    drop_salience = (build * rms_norm).astype(np.float32)
+
+    flux_low = np.maximum(0.0, np.diff(band_low, prepend=band_low[0])).astype(np.float32)
+    flux_high = np.maximum(0.0, np.diff(band_high, prepend=band_high[0])).astype(np.float32)
+    flux_low_peak = float(flux_low.max()) if flux_low.size else 1.0
+    flux_high_peak = float(flux_high.max()) if flux_high.size else 1.0
+    if flux_low_peak > 1e-9:
+        flux_low = (flux_low / flux_low_peak).astype(np.float32)
+    if flux_high_peak > 1e-9:
+        flux_high = (flux_high / flux_high_peak).astype(np.float32)
+
+    pacing = _compute_pacing_density(
+        onsets_s if onsets_s is not None else np.asarray([], dtype=float),
+        target_len,
+        hop_length=hop_length,
+        sr=sr,
+    )
+
     return {
-        "rms": rms[:target_len].astype(np.float32),
-        "band_low": band_low[:target_len].astype(np.float32),
-        "band_mid": band_mid[:target_len].astype(np.float32),
-        "band_high": band_high[:target_len].astype(np.float32),
+        "rms": rms,
+        "band_low": band_low,
+        "band_mid": band_mid,
+        "band_high": band_high,
+        "build": build,
+        "drop_salience": drop_salience,
+        "flux_low": flux_low,
+        "flux_high": flux_high,
+        "pacing_density": pacing,
     }
 
 
@@ -344,15 +416,36 @@ def analyze_audio_with_envelope(
         hop_length=cfg.hop_length,
         sr=sr,
         bass_band_hz=cfg.bass_band_hz,
+        onsets_s=onsets_s,
     )
 
-    transients = _classify_transients(
+    downbeats = beat_features.downbeat_times_s.tolist()
+    transients = classify_accents(
         onsets_s,
         amplitudes_norm,
-        stft_mag,
-        freqs,
-        config=cfg,
+        scope_lanes,
+        downbeats,
+        hop_length=cfg.hop_length,
+        sr=sr,
+        window_start_s=0.0,
+        window_end_s=duration_s,
     )
+    if sum(1 for item in transients if item.type == "drop") == 0:
+        transients = _classify_transients(
+            onsets_s,
+            amplitudes_norm,
+            stft_mag,
+            freqs,
+            config=cfg,
+        )
+    elif not transients:
+        transients = _classify_transients(
+            onsets_s,
+            amplitudes_norm,
+            stft_mag,
+            freqs,
+            config=cfg,
+        )
 
     timeline = AudioTimeline(
         global_bpm=round(global_bpm, 2),
@@ -408,4 +501,8 @@ def load_scope_lanes(path: Path) -> dict[str, np.ndarray] | None:
     if not path.is_file():
         return None
     data = np.load(path)
-    return {key: data[key] for key in data.files if key in _SCOPE_LANE_KEYS}
+    keys = set(data.files)
+    selected = keys & set(_SCOPE_LANE_KEYS)
+    if not selected:
+        selected = keys & set(_LEGACY_SCOPE_LANE_KEYS)
+    return {key: data[key] for key in sorted(selected)}

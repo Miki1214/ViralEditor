@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from viral_editor.editing.retention_policy import retention_bonus_for_window
 from viral_editor.models import AudioTimeline, MusicBlock, MusicBlockPlan, Transient
 
 DEFAULT_HOP_LENGTH = 512
@@ -627,6 +628,18 @@ def _mean_envelope(
     return float(segment.mean() / peak)
 
 
+def _synthetic_downbeats(start_s: float, end_s: float, *, bpm: float) -> list[float]:
+    bar_period = (60.0 / bpm) * BEATS_PER_BAR
+    if bar_period <= 1e-9:
+        return []
+    times: list[float] = []
+    cursor = start_s
+    while cursor < end_s - 1e-6:
+        times.append(cursor)
+        cursor += bar_period
+    return times
+
+
 def _score_window(
     start_s: float,
     end_s: float,
@@ -637,6 +650,7 @@ def _score_window(
     chroma: np.ndarray | None,
     hop_length: int,
     sr: int,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> _Candidate:
     window_transients = _transients_in_window(timeline.transients, start_s, end_s)
     drops = [t for t in window_transients if t.type == "drop"]
@@ -657,6 +671,18 @@ def _score_window(
     energy_score = energy * 0.4
 
     score = min(1.0, energy_score + drop_density + drop_bonus)
+    if scope_lanes:
+        downbeats = _synthetic_downbeats(start_s, end_s, bpm=timeline.global_bpm)
+        score = min(
+            1.0,
+            score + retention_bonus_for_window(
+                scope_lanes,
+                downbeats,
+                window_start_s=start_s,
+                window_end_s=end_s,
+            )
+            * 0.15,
+        )
 
     label, reason = _classify_window(
         start_s=start_s,
@@ -754,6 +780,7 @@ def suggest_music_blocks(
     hop_length: int = DEFAULT_HOP_LENGTH,
     sr: int = DEFAULT_SR,
     selected_block_id: str | None = None,
+    scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> MusicBlockPlan:
     """Rank sliding windows for a target short duration."""
     track_duration = timeline.audio_duration_seconds
@@ -795,6 +822,7 @@ def suggest_music_blocks(
                     chroma=chroma,
                     hop_length=hop_length,
                     sr=sr,
+                    scope_lanes=scope_lanes,
                 )
             )
         start += step_s
@@ -829,6 +857,7 @@ def suggest_music_blocks(
                 chroma=chroma,
                 hop_length=hop_length,
                 sr=sr,
+                scope_lanes=scope_lanes,
             )
         )
 
