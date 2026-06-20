@@ -346,6 +346,47 @@ def test_place_translations_skips_hook_pan_when_disabled() -> None:
     assert not any("Hook pan" in event.reason for event in events)
 
 
+def test_place_translations_adds_slot_entry_pan() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.05, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+
+    events = place_translations(
+        scope,
+        [],
+        window_start_s=0.0,
+        window_end_s=min(8.0, duration_s),
+        beats=[4.0, 6.0],
+        pan_beat_mode="beats",
+        pan_energy_floor=0.9,
+        pan_hook_enabled=False,
+        slot_boundary_times_abs=[2.0],
+    )
+    assert any("Slot entry pan" in event.reason for event in events)
+    assert any(abs(event.timestamp_s - 2.0) < 0.01 for event in events)
+
+
+def test_place_translations_adds_tail_pans() -> None:
+    hop, sr = 512, 22050
+    rms = np.full(500, 0.05, dtype=np.float32)
+    scope = {"rms": rms, "band_low": rms}
+    duration_s = rms.size * hop / sr
+
+    events = place_translations(
+        scope,
+        [],
+        window_start_s=0.0,
+        window_end_s=min(8.0, duration_s),
+        beats=[6.5, 7.5],
+        pan_beat_mode="beats",
+        pan_energy_floor=0.9,
+        pan_hook_enabled=False,
+    )
+    assert any("Tail pan" in event.reason for event in events)
+    assert any(event.timestamp_s >= 6.0 - 1e-6 for event in events)
+
+
 def test_place_interrupts_includes_translate_when_enabled() -> None:
     hop, sr = 512, 22050
     rms = np.full(500, 0.8, dtype=np.float32)

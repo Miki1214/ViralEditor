@@ -80,6 +80,36 @@ def hook_teaser_for_storyboard(
     return spec, hook_slot.assigned_clip_id
 
 
+def assigned_slot_boundary_times_abs(
+    storyboard: Storyboard,
+    *,
+    music_start_s: float,
+    window_end_s: float,
+) -> list[float]:
+    """Absolute audio times where assigned slots begin or end."""
+    boundaries: list[float] = []
+    for slot in storyboard.slots:
+        if not slot.assigned_clip_id:
+            continue
+        for edge_s in (slot.out_start_s, slot.out_end_s):
+            if edge_s <= 1e-6:
+                continue
+            abs_t = music_start_s + edge_s
+            if music_start_s - 1e-6 <= abs_t <= window_end_s + 1e-6:
+                boundaries.append(abs_t)
+    return sorted(set(boundaries))
+
+
+def effective_window_end_s(
+    music_start_s: float,
+    music_end_s: float,
+    total_duration_s: float | None,
+) -> float:
+    if total_duration_s is None:
+        return music_end_s
+    return max(music_end_s, music_start_s + total_duration_s)
+
+
 def spatial_fx_for_preview(
     config: JobConfig,
     temp_dir: Path,
@@ -87,6 +117,7 @@ def spatial_fx_for_preview(
     music_start_s: float,
     music_end_s: float,
     media: MediaInfo,
+    storyboard: Storyboard | None = None,
 ) -> list[FxEvent]:
     if not config.spatial_fx.enabled:
         return []
@@ -111,6 +142,28 @@ def spatial_fx_for_preview(
         if features is not None
         else None
     )
+    slot_boundaries = (
+        assigned_slot_boundary_times_abs(
+            storyboard,
+            music_start_s=music_start_s,
+            window_end_s=effective_window_end_s(
+                music_start_s,
+                music_end_s,
+                storyboard.total_duration_s,
+            ),
+        )
+        if storyboard is not None
+        else []
+    )
+    window_end_s = (
+        effective_window_end_s(
+            music_start_s,
+            music_end_s,
+            storyboard.total_duration_s,
+        )
+        if storyboard is not None
+        else music_end_s
+    )
     return plan_spatial_fx(
         windowed,
         media,
@@ -120,9 +173,10 @@ def spatial_fx_for_preview(
         downbeats=downbeats,
         beats=beats,
         window_start_s=music_start_s,
-        window_end_s=music_end_s,
+        window_end_s=window_end_s,
         retention=config.retention,
         spatial_fx=config.spatial_fx,
+        slot_boundary_times_abs=slot_boundaries,
     )
 
 

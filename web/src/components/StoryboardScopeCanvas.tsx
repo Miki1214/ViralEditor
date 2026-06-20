@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { SpatialFxSettings, StoryboardPayload, WaveformPayload } from "../types";
 import { subscribePlayhead } from "../utils/playheadBus";
-import { planSpatialFxMarkers } from "../utils/spatialFxMarkers";
+import { planSpatialFxMarkers, assignedSlotBoundaryTimesAbs, blockWindowEndS } from "../utils/spatialFxMarkers";
 import { slotColorForIndex } from "../utils/slotColors";
 import { ScopeMarkerStrip } from "./scope/ScopeMarkerStrip";
 import { SectionRibbon } from "./scope/SectionRibbon";
@@ -27,9 +27,6 @@ interface StoryboardScopeCanvasProps {
   onSelectSlot?: (slotId: string) => void;
 }
 
-const ZOOM = "#F4C430";
-const ROTATE = "#38BDF8";
-const TRANSLATE = "#A78BFA";
 const WAVEFORM_HEIGHT = 72;
 const PAD_X = SCOPE_PAD_X;
 const PAD_Y = 8;
@@ -72,16 +69,28 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
     [waveform.downbeats, scopeWindow],
   );
 
+  const slotBoundaryTimesAbs = useMemo(
+    () =>
+      assignedSlotBoundaryTimesAbs(
+        orderedSlots,
+        blockStartS,
+        blockWindowEndS(blockStartS, blockEndS, blockDurationS),
+      ),
+    [orderedSlots, blockStartS, blockEndS, blockDurationS],
+  );
+
   const fxMarkers = useMemo(
     () =>
       planSpatialFxMarkers(waveform.transients, {
         musicStartS: storyboard.music_start_s,
         musicEndS: storyboard.music_end_s,
+        totalDurationS: blockDurationS,
         maxEventsPerSecond: fxSettings.max_events_per_second,
         enabled: fxSettings.enabled,
         lanes: waveform.lanes,
         downbeats: waveform.downbeats,
         beats: waveform.beats,
+        slotBoundaryTimesAbs,
         pan: {
           translateEnabled: fxSettings.translate_enabled ?? true,
           panBeatMode: fxSettings.pan_beat_mode ?? "auto",
@@ -98,6 +107,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
       waveform.beats,
       storyboard.music_start_s,
       storyboard.music_end_s,
+      slotBoundaryTimesAbs,
       fxSettings.enabled,
       fxSettings.max_events_per_second,
       fxSettings.translate_enabled,
@@ -327,58 +337,8 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
           height={SCOPE_MARKER_STRIP_HEIGHT}
           downbeats={localDownbeats}
           accents={[]}
+          fxMarkers={fxSettings.enabled ? fxMarkers : []}
         />
-
-        {fxMarkers.map((marker, index) => {
-          if (blockDurationS <= 0) return null;
-          const x = PAD_X + (marker.timeS / blockDurationS) * innerW;
-          const baselineY = markerStripTop + SCOPE_MARKER_STRIP_HEIGHT - 3;
-          const tickHeight = SCOPE_MARKER_STRIP_HEIGHT - 6;
-          if (marker.kind === "zoom") {
-            return (
-              <g key={`fx-zoom-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
-                <line
-                  x1={x}
-                  x2={x}
-                  y1={baselineY - tickHeight}
-                  y2={baselineY}
-                  stroke={ZOOM}
-                  strokeWidth={2}
-                  opacity={0.95}
-                />
-              </g>
-            );
-          }
-          if (marker.kind === "rotate") {
-            return (
-              <g key={`fx-rotate-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
-                <line
-                  x1={x}
-                  x2={x}
-                  y1={baselineY - Math.round(tickHeight * 0.65)}
-                  y2={baselineY}
-                  stroke={ROTATE}
-                  strokeWidth={1.75}
-                  opacity={0.9}
-                />
-              </g>
-            );
-          }
-          const panOffset = marker.direction === -1 ? -3 : 3;
-          return (
-            <g key={`fx-pan-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
-              <line
-                x1={x}
-                x2={x + panOffset}
-                y1={baselineY - Math.round(tickHeight * 0.5)}
-                y2={baselineY}
-                stroke={TRANSLATE}
-                strokeWidth={1.75}
-                opacity={0.9}
-              />
-            </g>
-          );
-        })}
 
         {orderedSlots.slice(0, -1).map((slot) => {
           const x = PAD_X + (slot.out_end_s / blockDurationS) * innerW;

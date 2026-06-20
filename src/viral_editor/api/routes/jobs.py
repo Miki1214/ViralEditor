@@ -1217,6 +1217,7 @@ def get_composite_preview(
             music_start_s=storyboard.music_start_s,
             music_end_s=storyboard.music_end_s,
             media=primary_media,
+            storyboard=storyboard,
         )
         if primary_media is not None
         else []

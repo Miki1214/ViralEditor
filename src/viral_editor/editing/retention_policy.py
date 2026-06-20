@@ -25,6 +25,7 @@ PAN_BEAT_MIN_GAP_S = 0.25
 PAN_DOWNBEAT_MIN_GAP_S = 0.5
 PAN_MAGNITUDE_MIN = 0.35
 PAN_MAGNITUDE_MAX = 1.0
+TAIL_PAN_LOOKBACK_S = 2.0
 PanBeatMode = Literal["auto", "beats", "downbeats"]
 DEFAULT_HOP_LENGTH = 512
 DEFAULT_SR = 22050
@@ -536,6 +537,110 @@ def _ensure_hook_pan(
     return merged
 
 
+def _ensure_slot_boundary_pans(
+    selected: list[PlannedInterrupt],
+    *,
+    scope_lanes: dict[str, np.ndarray] | None,
+    slot_boundary_times_abs: list[float],
+    window_start_s: float,
+    window_end_s: float,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> list[PlannedInterrupt]:
+    """Ensure pans at assigned slot entry points (e.g. hook_end start)."""
+    if not slot_boundary_times_abs:
+        return selected
+
+    merged = list(selected)
+    direction = 1
+    if merged and merged[-1].direction != 0:
+        direction = -merged[-1].direction
+
+    for abs_t in sorted(slot_boundary_times_abs):
+        rel_ts = _relative_interrupt_time(
+            abs_t,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+        )
+        if rel_ts is None or rel_ts <= 1e-6:
+            continue
+        if any(abs(event.timestamp_s - rel_ts) < PAN_BEAT_MIN_GAP_S - 0.01 for event in merged):
+            continue
+
+        amp = _lane_amplitude_at(scope_lanes, abs_t, hop_length=hop_length, sr=sr)
+        hook_amp = max(amp, 0.35)
+        magnitude = round(
+            PAN_MAGNITUDE_MIN + hook_amp * (PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN),
+            4,
+        )
+        merged.append(
+            PlannedInterrupt(
+                timestamp_s=rel_ts,
+                kind="translate",
+                magnitude=magnitude,
+                direction=direction,
+                reason=f"Slot entry pan @ {abs_t:.2f}s",
+            )
+        )
+        direction *= -1
+
+    return sorted(merged, key=lambda event: event.timestamp_s)
+
+
+def _ensure_tail_beat_pans(
+    selected: list[PlannedInterrupt],
+    *,
+    scope_lanes: dict[str, np.ndarray] | None,
+    beat_times: list[float],
+    downbeat_times: list[float],
+    window_start_s: float,
+    window_end_s: float,
+    hop_length: int = DEFAULT_HOP_LENGTH,
+    sr: int = DEFAULT_SR,
+) -> list[PlannedInterrupt]:
+    """Fill uncovered beat positions in the final seconds of the block."""
+    duration = max(window_end_s - window_start_s, 0.0)
+    if duration <= 0:
+        return selected
+
+    merged = list(selected)
+    direction = 1
+    if merged and merged[-1].direction != 0:
+        direction = -merged[-1].direction
+
+    tail_start = max(0.0, duration - TAIL_PAN_LOOKBACK_S)
+    candidates = beat_times or downbeat_times
+    for abs_t in sorted(candidates):
+        rel_ts = _relative_interrupt_time(
+            abs_t,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+        )
+        if rel_ts is None or rel_ts + 1e-6 < tail_start:
+            continue
+        if any(abs(event.timestamp_s - rel_ts) < PAN_BEAT_MIN_GAP_S - 0.01 for event in merged):
+            continue
+
+        amp = _lane_amplitude_at(scope_lanes, abs_t, hop_length=hop_length, sr=sr)
+        hook_amp = max(amp, 0.35)
+        magnitude = round(
+            PAN_MAGNITUDE_MIN + hook_amp * (PAN_MAGNITUDE_MAX - PAN_MAGNITUDE_MIN),
+            4,
+        )
+        merged.append(
+            PlannedInterrupt(
+                timestamp_s=rel_ts,
+                kind="translate",
+                magnitude=magnitude,
+                direction=direction,
+                reason=f"Tail pan @ {abs_t:.2f}s",
+            )
+        )
+        direction *= -1
+
+    return sorted(merged, key=lambda event: event.timestamp_s)
+
+
 def place_translations(
     scope_lanes: dict[str, np.ndarray] | None,
     downbeats: list[float] | np.ndarray,
@@ -550,6 +655,7 @@ def place_translations(
     pan_energy_floor: float = 0.2,
     pan_hook_enabled: bool = True,
     pan_hook_by_s: float = 1.0,
+    slot_boundary_times_abs: list[float] | None = None,
 ) -> list[PlannedInterrupt]:
     """Beat-synced horizontal pan impulses with energy gating and hook boost."""
     duration = max(window_end_s - window_start_s, 0.0)
@@ -559,12 +665,12 @@ def place_translations(
     downbeat_times = sorted(
         float(t)
         for t in np.asarray(downbeats).tolist()
-        if window_start_s - 1e-6 <= float(t) < window_end_s - 1e-6
+        if window_start_s - 1e-6 <= float(t) <= window_end_s + 1e-6
     )
     beat_times = sorted(
         float(t)
         for t in np.asarray(beats).tolist()
-        if window_start_s - 1e-6 <= float(t) < window_end_s - 1e-6
+        if window_start_s - 1e-6 <= float(t) <= window_end_s + 1e-6
     ) if beats is not None else []
 
     if pan_beat_mode == "downbeats":
@@ -637,15 +743,32 @@ def place_translations(
         direction *= -1
         last_rel = rel_ts
 
-    return _ensure_hook_pan(
-        selected,
+    return _ensure_tail_beat_pans(
+        _ensure_slot_boundary_pans(
+            _ensure_hook_pan(
+                selected,
+                scope_lanes=scope_lanes,
+                beat_times=beat_times,
+                downbeat_times=downbeat_times,
+                window_start_s=window_start_s,
+                window_end_s=window_end_s,
+                pan_hook_enabled=pan_hook_enabled,
+                pan_hook_by_s=pan_hook_by_s,
+                hop_length=hop_length,
+                sr=sr,
+            ),
+            scope_lanes=scope_lanes,
+            slot_boundary_times_abs=slot_boundary_times_abs or [],
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+            hop_length=hop_length,
+            sr=sr,
+        ),
         scope_lanes=scope_lanes,
         beat_times=beat_times,
         downbeat_times=downbeat_times,
         window_start_s=window_start_s,
         window_end_s=window_end_s,
-        pan_hook_enabled=pan_hook_enabled,
-        pan_hook_by_s=pan_hook_by_s,
         hop_length=hop_length,
         sr=sr,
     )
@@ -668,6 +791,7 @@ def place_interrupts(
     pan_energy_floor: float = 0.2,
     pan_hook_enabled: bool = True,
     pan_hook_by_s: float = 1.0,
+    slot_boundary_times_abs: list[float] | None = None,
 ) -> list[PlannedInterrupt]:
     """Place zoom/rotate interrupts on energy peaks with 3–5 s cadence and early hook."""
     duration = max(window_end_s - window_start_s, 0.0)
@@ -787,6 +911,7 @@ def place_interrupts(
                 pan_energy_floor=pan_energy_floor,
                 pan_hook_enabled=pan_hook_enabled,
                 pan_hook_by_s=pan_hook_by_s,
+                slot_boundary_times_abs=slot_boundary_times_abs,
             )
         )
 

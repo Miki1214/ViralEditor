@@ -105,6 +105,58 @@ describe("spatialFxMarkers translate", () => {
     expect(pans.some((marker) => marker.reason?.includes("Hook pan"))).toBe(false);
   });
 
+  it("adds slot entry pan at assigned hook_end boundary", () => {
+    const quietLanes: ScopeLaneSeries[] = [
+      lane("rms", Array.from({ length: 40 }, (_, index) => [index * 0.1, 0.05])),
+      lane("band_low", Array.from({ length: 40 }, (_, index) => [index * 0.1, 0.05])),
+      lane("surge", Array.from({ length: 40 }, (_, index) => [index * 0.1, 0.05])),
+    ];
+    const markers = planSpatialFxMarkers([] as Transient[], {
+      musicStartS: 0,
+      musicEndS: 8,
+      maxEventsPerSecond: 16,
+      enabled: true,
+      lanes: quietLanes,
+      downbeats: [2.0, 4.0, 6.0],
+      beats: [2.0, 4.0, 6.0],
+      slotBoundaryTimesAbs: [2.0],
+      pan: {
+        ...panDefaults,
+        panEnergyFloor: 0.9,
+        panHookEnabled: false,
+      },
+    });
+    const pans = markers.filter((marker) => marker.kind === "translate");
+    expect(pans.some((marker) => marker.reason?.includes("Slot entry pan"))).toBe(true);
+    expect(pans.some((marker) => Math.abs(marker.timeS - 2.0) < 0.01)).toBe(true);
+  });
+
+  it("adds tail pans for beats in the final seconds", () => {
+    const quietLanes: ScopeLaneSeries[] = [
+      lane("rms", Array.from({ length: 80 }, (_, index) => [index * 0.1, 0.05])),
+      lane("band_low", Array.from({ length: 80 }, (_, index) => [index * 0.1, 0.05])),
+      lane("surge", Array.from({ length: 80 }, (_, index) => [index * 0.1, 0.05])),
+    ];
+    const markers = planSpatialFxMarkers([] as Transient[], {
+      musicStartS: 0,
+      musicEndS: 7.5,
+      totalDurationS: 8,
+      maxEventsPerSecond: 16,
+      enabled: true,
+      lanes: quietLanes,
+      downbeats: [6.0, 7.0, 8.0],
+      beats: [6.5, 7.5, 8.0],
+      pan: {
+        ...panDefaults,
+        panEnergyFloor: 0.9,
+        panHookEnabled: false,
+      },
+    });
+    const pans = markers.filter((marker) => marker.kind === "translate");
+    expect(pans.some((marker) => marker.timeS >= 6.0 - 1e-6)).toBe(true);
+    expect(pans.some((marker) => marker.reason?.includes("Tail pan"))).toBe(true);
+  });
+
   it("counts translate markers separately from zoom and rotate", () => {
     const markers: FxMarker[] = [
       { timeS: 0.5, kind: "zoom", magnitude: 1.07 },

@@ -137,20 +137,23 @@ def _cap_events_per_second(
     if max_events_per_second <= 0 or not events:
         return events
 
-    per_bucket: dict[int, list[FxEvent]] = defaultdict(list)
-    for event in events:
-        bucket = int(event.timestamp_s)
-        per_bucket[bucket].append(event)
-
-    capped: list[FxEvent] = []
     limit = max(1, int(max_events_per_second))
-    for bucket in sorted(per_bucket):
-        bucket_events = sorted(
-            per_bucket[bucket],
-            key=lambda event: event.magnitude,
-            reverse=True,
-        )
-        capped.extend(bucket_events[:limit])
+    capped: list[FxEvent] = []
+    for kind in ("zoom", "rotate", "translate"):
+        kind_events = [event for event in events if event.kind == kind]
+        if not kind_events:
+            continue
+        per_bucket: dict[int, list[FxEvent]] = defaultdict(list)
+        for event in kind_events:
+            bucket = int(event.timestamp_s)
+            per_bucket[bucket].append(event)
+        for bucket in sorted(per_bucket):
+            bucket_events = sorted(
+                per_bucket[bucket],
+                key=lambda event: event.magnitude,
+                reverse=True,
+            )
+            capped.extend(bucket_events[:limit])
     return sorted(capped, key=lambda event: (event.timestamp_s, event.kind))
 
 
@@ -169,6 +172,7 @@ def plan_spatial_fx(
     retention: RetentionConfig | None = None,
     spatial_fx: SpatialFxConfig | None = None,
     translate_enabled: bool | None = None,
+    slot_boundary_times_abs: list[float] | None = None,
 ) -> list[FxEvent]:
     """Map retention-policy interrupts to zoom/rotate/pan impulses on the output clock."""
     del media, seed  # reserved for future fps snapping / rotate sign
@@ -192,6 +196,7 @@ def plan_spatial_fx(
             pan_energy_floor=fx_cfg.pan_energy_floor,
             pan_hook_enabled=fx_cfg.pan_hook_enabled,
             pan_hook_by_s=fx_cfg.pan_hook_by_s,
+            slot_boundary_times_abs=slot_boundary_times_abs,
         )
         events = [
             _interrupt_to_fx_event(item, pan_min_decay_s=fx_cfg.pan_min_decay_s)

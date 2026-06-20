@@ -5,7 +5,7 @@ import type {
   TeaserSettings,
   WaveformPayload,
 } from "../types";
-import { countSpatialFxMarkers, planSpatialFxMarkers } from "../utils/spatialFxMarkers";
+import { countSpatialFxMarkers, planSpatialFxMarkers, assignedSlotBoundaryTimesAbs, blockWindowEndS } from "../utils/spatialFxMarkers";
 
 const SLIDER_DEBOUNCE_MS = 400;
 
@@ -116,16 +116,23 @@ function countFxCandidates(
   musicStartS: number,
   musicEndS: number,
   spatialFx: SpatialFxSettings,
+  storyboard: StoryboardPayload,
 ): { zoom: number; rotate: number; translate: number } {
   if (!waveform) return { zoom: 0, rotate: 0, translate: 0 };
   const markers = planSpatialFxMarkers(waveform.transients, {
     musicStartS,
     musicEndS,
+    totalDurationS: storyboard.total_duration_s,
     maxEventsPerSecond: spatialFx.max_events_per_second,
     enabled: spatialFx.enabled,
     lanes: waveform.lanes,
     downbeats: waveform.downbeats,
     beats: waveform.beats,
+    slotBoundaryTimesAbs: assignedSlotBoundaryTimesAbs(
+      storyboard.slots,
+      musicStartS,
+      blockWindowEndS(musicStartS, musicEndS, storyboard.total_duration_s),
+    ),
     pan: panPlanFromSpatialFx(spatialFx),
   });
   return countSpatialFxMarkers(markers);
@@ -270,9 +277,11 @@ export function RetentionFxPanel({
         storyboard.music_start_s,
         storyboard.music_end_s,
         spatialFx,
+        storyboard,
       ),
     [
       waveform,
+      storyboard,
       storyboard.music_start_s,
       storyboard.music_end_s,
       spatialFx.enabled,

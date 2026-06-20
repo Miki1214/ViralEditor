@@ -31,6 +31,34 @@ const DEFAULT_PAN_SETTINGS: PanPlanSettings = {
 const SURGE_SCORE_THRESHOLD = 0.45;
 const SURGE_MAGNITUDE_BOOST = 0.12;
 const MERGE_WINDOW_S = 0.05;
+const TAIL_PAN_LOOKBACK_S = 2.0;
+
+export function blockDurationS(
+  musicStartS: number,
+  musicEndS: number,
+  totalDurationS: number,
+): number {
+  return Math.max(totalDurationS, musicEndS - musicStartS);
+}
+
+export function blockWindowEndS(
+  musicStartS: number,
+  musicEndS: number,
+  totalDurationS: number,
+): number {
+  return musicStartS + blockDurationS(musicStartS, musicEndS, totalDurationS);
+}
+
+function clampBlockTimeS(relTs: number, duration: number): number | null {
+  if (relTs < -1e-6 || relTs > duration + 1e-6) {
+    return null;
+  }
+  return Math.max(0, Math.min(duration, relTs));
+}
+
+function inBlockWindow(absT: number, musicStartS: number, windowEndS: number): boolean {
+  return absT >= musicStartS - 1e-6 && absT <= windowEndS + 1e-6;
+}
 const INTERRUPT_MIN_GAP_S = 3.0;
 const INTERRUPT_MAX_GAP_S = 5.0;
 const EARLY_HOOK_FX_BY_S = 2.0;
@@ -245,7 +273,7 @@ function ensureHookPan(
   beatTimes: number[],
   downbeatTimes: number[],
   musicStartS: number,
-  musicEndS: number,
+  duration: number,
   panHookEnabled: boolean,
   panHookByS: number,
 ): FxMarker[] {
@@ -256,15 +284,14 @@ function ensureHookPan(
     return selected;
   }
 
-  const duration = musicEndS - musicStartS;
   const hookDeadline = musicStartS + panHookByS;
   const hookCandidates = (beatTimes.length > 0 ? beatTimes : downbeatTimes).filter(
     (t) => t >= musicStartS - 1e-6 && t <= hookDeadline + 1e-6,
   );
   const hookAbs =
     hookCandidates[0] ?? musicStartS + Math.min(0.5, duration * 0.25);
-  const relTs = hookAbs - musicStartS;
-  if (relTs < -1e-6 || relTs > duration) {
+  const relTs = clampBlockTimeS(hookAbs - musicStartS, duration);
+  if (relTs == null) {
     return selected;
   }
 
@@ -282,23 +309,109 @@ function ensureHookPan(
   ].sort((a, b) => a.timeS - b.timeS);
 }
 
+function ensureSlotBoundaryPans(
+  selected: FxMarker[],
+  lanes: ScopeLaneSeries[] | undefined,
+  slotBoundaryTimesAbs: number[],
+  musicStartS: number,
+  duration: number,
+): FxMarker[] {
+  if (slotBoundaryTimesAbs.length === 0) {
+    return selected;
+  }
+
+  const merged = [...selected];
+  let direction = 1;
+  const last = merged[merged.length - 1];
+  if (last?.direction) {
+    direction = -last.direction;
+  }
+
+  for (const absT of [...slotBoundaryTimesAbs].sort((a, b) => a - b)) {
+    const relTs = clampBlockTimeS(absT - musicStartS, duration);
+    if (relTs == null || relTs <= 1e-6) {
+      continue;
+    }
+    if (merged.some((event) => Math.abs(event.timeS - relTs) < PAN_BEAT_MIN_GAP_S - 0.01)) {
+      continue;
+    }
+
+    const amp = laneAmplitudeAt(lanes, absT);
+    const hookAmp = Math.max(amp, 0.35);
+    merged.push({
+      timeS: relTs,
+      kind: "translate",
+      magnitude: Math.round(panMagnitude(hookAmp) * 10000) / 10000,
+      direction,
+      reason: `Slot entry pan @ ${absT.toFixed(2)}s`,
+    });
+    direction *= -1;
+  }
+
+  return merged.sort((a, b) => a.timeS - b.timeS);
+}
+
+function ensureTailBeatPans(
+  selected: FxMarker[],
+  lanes: ScopeLaneSeries[] | undefined,
+  beatTimesAbs: number[],
+  musicStartS: number,
+  duration: number,
+): FxMarker[] {
+  if (duration <= 0 || beatTimesAbs.length === 0) {
+    return selected;
+  }
+
+  const merged = [...selected];
+  let direction = 1;
+  const last = merged[merged.length - 1];
+  if (last?.direction) {
+    direction = -last.direction;
+  }
+
+  const tailStart = Math.max(0, duration - TAIL_PAN_LOOKBACK_S);
+  for (const absT of [...beatTimesAbs].sort((a, b) => a - b)) {
+    const relTs = clampBlockTimeS(absT - musicStartS, duration);
+    if (relTs == null || relTs < tailStart - 1e-6) {
+      continue;
+    }
+    if (merged.some((event) => Math.abs(event.timeS - relTs) < PAN_BEAT_MIN_GAP_S - 0.01)) {
+      continue;
+    }
+
+    const amp = laneAmplitudeAt(lanes, absT);
+    const hookAmp = Math.max(amp, 0.35);
+    merged.push({
+      timeS: relTs,
+      kind: "translate",
+      magnitude: Math.round(panMagnitude(hookAmp) * 10000) / 10000,
+      direction,
+      reason: `Tail pan @ ${absT.toFixed(2)}s`,
+    });
+    direction *= -1;
+  }
+
+  return merged.sort((a, b) => a.timeS - b.timeS);
+}
+
 function planTranslationMarkers(
   lanes: ScopeLaneSeries[] | undefined,
   downbeats: number[],
   beats: number[],
   musicStartS: number,
-  musicEndS: number,
+  windowEndS: number,
+  duration: number,
   pan: PanPlanSettings,
+  slotBoundaryTimesAbs: number[] = [],
 ): FxMarker[] {
   if (!pan.translateEnabled) {
     return [];
   }
 
-  const duration = musicEndS - musicStartS;
   if (duration <= 0) return [];
 
-  const downbeatTimes = downbeats.filter((t) => t >= musicStartS && t < musicEndS);
-  const beatTimes = beats.filter((t) => t >= musicStartS && t < musicEndS);
+  const downbeatTimes = downbeats.filter((t) => inBlockWindow(t, musicStartS, windowEndS));
+  const beatTimes = beats.filter((t) => inBlockWindow(t, musicStartS, windowEndS));
 
   let candidates: number[];
   if (pan.panBeatMode === "downbeats") {
@@ -312,7 +425,7 @@ function planTranslationMarkers(
   if (candidates.length === 0) {
     const step = Math.max(PAN_DOWNBEAT_MIN_GAP_S, duration / 8);
     candidates = [];
-    for (let t = musicStartS; t < musicEndS - 1e-6; t += step) {
+    for (let t = musicStartS; t < windowEndS - 1e-6; t += step) {
       candidates.push(t);
     }
   }
@@ -336,8 +449,8 @@ function planTranslationMarkers(
       continue;
     }
 
-    const relTs = absT - musicStartS;
-    if (relTs < -1e-6 || relTs > duration) continue;
+    const relTs = clampBlockTimeS(absT - musicStartS, duration);
+    if (relTs == null) continue;
 
     const minGap =
       tier === "dense" || pan.panBeatMode === "beats"
@@ -358,15 +471,27 @@ function planTranslationMarkers(
     lastRel = relTs;
   }
 
-  return ensureHookPan(
-    selected,
+  return ensureTailBeatPans(
+    ensureSlotBoundaryPans(
+      ensureHookPan(
+        selected,
+        lanes,
+        beatTimes,
+        downbeatTimes,
+        musicStartS,
+        duration,
+        pan.panHookEnabled,
+        pan.panHookByS,
+      ),
+      lanes,
+      slotBoundaryTimesAbs,
+      musicStartS,
+      duration,
+    ),
     lanes,
-    beatTimes,
-    downbeatTimes,
+    beatTimes.length > 0 ? beatTimes : downbeatTimes,
     musicStartS,
-    musicEndS,
-    pan.panHookEnabled,
-    pan.panHookByS,
+    duration,
   );
 }
 
@@ -375,12 +500,13 @@ function planPolicyMarkers(
   downbeats: number[],
   beats: number[],
   musicStartS: number,
-  musicEndS: number,
+  windowEndS: number,
+  duration: number,
   pan: PanPlanSettings = DEFAULT_PAN_SETTINGS,
+  slotBoundaryTimesAbs: number[] = [],
 ): FxMarker[] {
-  const duration = musicEndS - musicStartS;
-  const absDownbeats = downbeats.filter((t) => t >= musicStartS && t < musicEndS);
-  const zoomCandidates = energyPeaks(lanes, absDownbeats, musicStartS, musicEndS).map((peak) => ({
+  const absDownbeats = downbeats.filter((t) => inBlockWindow(t, musicStartS, windowEndS));
+  const zoomCandidates = energyPeaks(lanes, absDownbeats, musicStartS, windowEndS).map((peak) => ({
     timeS: peak.timeS,
     kind: "zoom" as const,
     magnitude: Math.round(zoomMagnitude(peak.magnitude) * 10000) / 10000,
@@ -389,7 +515,7 @@ function planPolicyMarkers(
         ? `Energy surge @ ${(musicStartS + peak.timeS).toFixed(2)}s${peak.onDownbeat ? " on downbeat" : ""}`
         : `RMS peak @ ${(musicStartS + peak.timeS).toFixed(2)}s${peak.onDownbeat ? " on downbeat" : ""}`,
   }));
-  const rotateCandidates = fluxPeaks(lanes, "low", musicStartS, musicEndS)
+  const rotateCandidates = fluxPeaks(lanes, "low", musicStartS, windowEndS)
     .filter((peak) => !zoomCandidates.some((zoom) => Math.abs(zoom.timeS - peak.timeS) <= 0.12))
     .map((peak) => ({
       timeS: peak.timeS,
@@ -429,8 +555,10 @@ function planPolicyMarkers(
       downbeats,
       beats,
       musicStartS,
-      musicEndS,
+      windowEndS,
+      duration,
       pan,
+      slotBoundaryTimesAbs,
     ),
   );
 
@@ -496,22 +624,53 @@ function mergeNearby(events: FxMarker[]): FxMarker[] {
 function capEventsPerSecond(events: FxMarker[], maxEventsPerSecond: number): FxMarker[] {
   if (maxEventsPerSecond <= 0 || events.length === 0) return events;
 
-  const perBucket = new Map<number, FxMarker[]>();
-  for (const event of events) {
-    const bucket = Math.floor(event.timeS);
-    const bucketEvents = perBucket.get(bucket) ?? [];
-    bucketEvents.push(event);
-    perBucket.set(bucket, bucketEvents);
+  const limit = Math.max(1, Math.floor(maxEventsPerSecond));
+  const kinds: FxMarkerKind[] = ["zoom", "rotate", "translate"];
+  const capped: FxMarker[] = [];
+
+  for (const kind of kinds) {
+    const kindEvents = events.filter((event) => event.kind === kind);
+    if (kindEvents.length === 0) continue;
+
+    const perBucket = new Map<number, FxMarker[]>();
+    for (const event of kindEvents) {
+      const bucket = Math.floor(event.timeS);
+      const bucketEvents = perBucket.get(bucket) ?? [];
+      bucketEvents.push(event);
+      perBucket.set(bucket, bucketEvents);
+    }
+
+    for (const bucket of [...perBucket.keys()].sort((a, b) => a - b)) {
+      const bucketEvents = perBucket.get(bucket) ?? [];
+      bucketEvents.sort((a, b) => b.magnitude - a.magnitude);
+      capped.push(...bucketEvents.slice(0, limit));
+    }
   }
 
-  const limit = Math.max(1, Math.floor(maxEventsPerSecond));
-  const capped: FxMarker[] = [];
-  for (const bucket of [...perBucket.keys()].sort((a, b) => a - b)) {
-    const bucketEvents = perBucket.get(bucket) ?? [];
-    bucketEvents.sort((a, b) => b.magnitude - a.magnitude);
-    capped.push(...bucketEvents.slice(0, limit));
-  }
   return capped.sort((a, b) => a.timeS - b.timeS || a.kind.localeCompare(b.kind));
+}
+
+export function assignedSlotBoundaryTimesAbs(
+  slots: Array<{
+    out_start_s: number;
+    out_end_s: number;
+    assigned_clip_id: string | null;
+  }>,
+  musicStartS: number,
+  windowEndS: number,
+): number[] {
+  const boundaries: number[] = [];
+  for (const slot of slots) {
+    if (!slot.assigned_clip_id) continue;
+    for (const edgeS of [slot.out_start_s, slot.out_end_s]) {
+      if (edgeS <= 1e-6) continue;
+      const absT = musicStartS + edgeS;
+      if (inBlockWindow(absT, musicStartS, windowEndS)) {
+        boundaries.push(absT);
+      }
+    }
+  }
+  return [...new Set(boundaries)].sort((a, b) => a - b);
 }
 
 export function planSpatialFxMarkers(
@@ -519,17 +678,28 @@ export function planSpatialFxMarkers(
   options: {
     musicStartS: number;
     musicEndS: number;
+    totalDurationS?: number;
     maxEventsPerSecond: number;
     enabled: boolean;
     lanes?: ScopeLaneSeries[];
     downbeats?: number[];
     beats?: number[];
     pan?: Partial<PanPlanSettings>;
+    slotBoundaryTimesAbs?: number[];
   },
 ): FxMarker[] {
   if (!options.enabled) return [];
 
   const pan: PanPlanSettings = { ...DEFAULT_PAN_SETTINGS, ...options.pan };
+  const duration = blockDurationS(
+    options.musicStartS,
+    options.musicEndS,
+    options.totalDurationS ?? options.musicEndS - options.musicStartS,
+  );
+  const windowEndS = options.musicStartS + duration;
+  const slotBoundaryTimesAbs =
+    options.slotBoundaryTimesAbs ??
+    [];
 
   let events: FxMarker[] = [];
   if (options.lanes && options.lanes.length > 0 && options.downbeats) {
@@ -538,19 +708,23 @@ export function planSpatialFxMarkers(
       options.downbeats,
       options.beats ?? [],
       options.musicStartS,
-      options.musicEndS,
+      windowEndS,
+      duration,
       pan,
+      slotBoundaryTimesAbs,
     );
   } else {
     for (const transient of transients) {
       const absoluteS = transient.timestamp_ms / 1000;
-      if (absoluteS < options.musicStartS || absoluteS >= options.musicEndS) {
+      if (!inBlockWindow(absoluteS, options.musicStartS, windowEndS)) {
         continue;
       }
       for (const event of transientEvents(transient)) {
+        const relTs = clampBlockTimeS(absoluteS - options.musicStartS, duration);
+        if (relTs == null) continue;
         events.push({
           ...event,
-          timeS: absoluteS - options.musicStartS,
+          timeS: relTs,
         });
       }
     }

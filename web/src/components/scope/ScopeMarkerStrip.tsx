@@ -1,7 +1,12 @@
 import { useMemo } from "react";
 import type { Transient } from "../../types";
+import type { FxMarker } from "../../utils/spatialFxMarkers";
 import { BASS, DROP, LABEL_COLOR, MARKER_STRIP_BG, TICK_COLOR } from "./scopeTheme";
 import { decimateTimesBySpacing, timeToX, type ScopeWindow } from "./scopeWindow";
+
+const ZOOM = "#F4C430";
+const ROTATE = "#38BDF8";
+const TRANSLATE = "#A78BFA";
 
 interface ScopeMarkerStripProps {
   window: ScopeWindow;
@@ -10,6 +15,7 @@ interface ScopeMarkerStripProps {
   height: number;
   downbeats: number[];
   accents: Transient[];
+  fxMarkers?: FxMarker[];
 }
 
 const MIN_DOWNBEAT_SPACING_PX = 14;
@@ -22,6 +28,7 @@ export function ScopeMarkerStrip({
   height,
   downbeats,
   accents,
+  fxMarkers = [],
 }: ScopeMarkerStripProps) {
   const durationS = window.endS - window.startS;
   const padX = 4;
@@ -103,6 +110,51 @@ export function ScopeMarkerStrip({
             stroke={isDrop ? DROP : BASS}
             strokeWidth={isDrop ? 2.5 : 1.75}
             strokeLinecap="round"
+          />
+        );
+      })}
+
+      {fxMarkers.map((marker, index) => {
+        const x = timeToX(marker.timeS, durationS, padX, innerW);
+        if (marker.kind === "zoom") {
+          return (
+            <line
+              key={`fx-zoom-${index}-${marker.timeS}`}
+              x1={x}
+              x2={x}
+              y1={baselineY - dropHeight}
+              y2={baselineY}
+              stroke={ZOOM}
+              strokeWidth={2}
+              opacity={0.95}
+            />
+          );
+        }
+        if (marker.kind === "rotate") {
+          return (
+            <line
+              key={`fx-rotate-${index}-${marker.timeS}`}
+              x1={x}
+              x2={x}
+              y1={baselineY - bassHeight}
+              y2={baselineY}
+              stroke={ROTATE}
+              strokeWidth={1.75}
+              opacity={0.9}
+            />
+          );
+        }
+        const panOffset = marker.direction === -1 ? -4 : 4;
+        return (
+          <line
+            key={`fx-pan-${index}-${marker.timeS}`}
+            x1={x}
+            x2={x + panOffset}
+            y1={baselineY - downbeatHeight}
+            y2={baselineY}
+            stroke={TRANSLATE}
+            strokeWidth={2}
+            opacity={0.95}
           />
         );
       })}
