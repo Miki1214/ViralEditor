@@ -158,6 +158,28 @@ class SpatialFxSettingsResponse(BaseModel):
     max_events_per_second: float
 
 
+class StoryboardSegmentDebugRow(BaseModel):
+    id: str
+    role: SlotRole
+    target_duration_s: float
+    src_start_s: float
+    src_end_s: float
+    src_span_s: float
+    speed_factor: float
+    unified_label_speed: float | None = None
+
+
+class StoryboardSegmentsSummary(BaseModel):
+    unified_crop: list[float] | None = None
+    hook_budget_s: float
+    hook_speed_s: float | None = None
+
+
+class StoryboardSegmentsDebugResponse(BaseModel):
+    slots: list[StoryboardSegmentDebugRow]
+    summary: StoryboardSegmentsSummary
+
+
 class StoryboardResponse(BaseModel):
     music_block_id: str | None = None
     music_start_s: float

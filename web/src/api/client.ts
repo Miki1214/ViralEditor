@@ -8,6 +8,7 @@ import type {
   SlotTransition,
   StageInfo,
   StoryboardPayload,
+  StoryboardSegmentsDebugPayload,
   TeaserSettings,
   WaveformPayload,
 } from "../types";
@@ -145,6 +146,14 @@ export function outputUrl(jobId: string): string {
 
 export async function fetchStoryboard(jobId: string): Promise<StoryboardPayload> {
   const res = await fetch(`/api/jobs/${jobId}/storyboard`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function fetchStoryboardSegments(
+  jobId: string,
+): Promise<StoryboardSegmentsDebugPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/storyboard/segments`);
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

@@ -38,6 +38,7 @@ from viral_editor.api.storyboard import (
     clear_slot_clip,
     clip_media_for_storyboard,
     hook_clip_id_for_slot,
+    hook_family_assigned_clip_id,
     load_storyboard,
     persist_storyboard,
     refresh_hook_inversion_layout,
@@ -48,6 +49,7 @@ from viral_editor.api.storyboard import (
     teaser_settings_response,
     update_slot_crop,
     update_slot_transform,
+    storyboard_segments_debug_payload,
 )
 from viral_editor.api.schemas import (
     ClipReelResponse,
@@ -68,6 +70,9 @@ from viral_editor.api.schemas import (
     StageInfo,
     StoryboardPatchRequest,
     StoryboardResponse,
+    StoryboardSegmentsDebugResponse,
+    StoryboardSegmentsSummary,
+    StoryboardSegmentDebugRow,
     StorySlotResponse,
     TeaserSettingsResponse,
 )
@@ -648,12 +653,21 @@ def get_speed_ramp_preview(
     return FileResponse(preview_path, media_type="video/mp4", filename=preview_path.name)
 
 
+def _safe_unlink(path: Path) -> bool:
+    """Delete a file if possible. Returns False when the file is locked (common on Windows)."""
+    try:
+        path.unlink(missing_ok=True)
+        return not path.is_file()
+    except PermissionError:
+        return False
+
+
 def _invalidate_composite_previews(temp_dir: Path) -> None:
     preview_dir = temp_dir / "previews"
     if not preview_dir.is_dir():
         return
     for path in preview_dir.glob("composite_*.mp4"):
-        path.unlink(missing_ok=True)
+        _safe_unlink(path)
 
 
 def _spatial_crop_response(crop) -> SpatialCropInput | None:
@@ -732,6 +746,24 @@ def _storyboard_response(
     )
 
 
+@router.get("/{job_id}/storyboard/segments", response_model=StoryboardSegmentsDebugResponse)
+def get_storyboard_segments(job_id: str, request: Request) -> StoryboardSegmentsDebugResponse:
+    """Return per-slot source spans and speed factors for crop/composite debugging."""
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    clip_media = clip_media_for_storyboard(job.config, storyboard)
+    payload = storyboard_segments_debug_payload(storyboard, clip_media)
+    return StoryboardSegmentsDebugResponse(
+        slots=[StoryboardSegmentDebugRow.model_validate(row) for row in payload["slots"]],
+        summary=StoryboardSegmentsSummary.model_validate(payload["summary"]),
+    )
+
+
 @router.get("/{job_id}/storyboard", response_model=StoryboardResponse)
 def get_storyboard(job_id: str, request: Request) -> StoryboardResponse:
     store = _store(request)
@@ -746,7 +778,7 @@ def get_storyboard(job_id: str, request: Request) -> StoryboardResponse:
         raise HTTPException(status_code=404, detail="Storyboard not ready — select a music block")
     synced = sync_storyboard_hook_layout(storyboard, job.config, temp_dir=temp_dir)
     config = job.config
-    if synced is not storyboard:
+    if synced.model_dump() != storyboard.model_dump():
         persist_storyboard(temp_dir, synced)
         storyboard = synced
         config = sync_teaser_duration_from_layout(config, storyboard)
@@ -785,6 +817,7 @@ def patch_effects(
         storyboard,
         updated_config,
         temp_dir=temp_dir,
+        reshape_crops=payload.teaser is not None,
     )
     updated_config = sync_teaser_duration_from_layout(updated_config, updated_storyboard)
     updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)
@@ -920,6 +953,7 @@ async def assign_slot_video(
         updated_storyboard,
         job.config,
         temp_dir=temp_dir,
+        reshape_crops=True,
     )
     updated_config = sync_teaser_duration_from_layout(job.config, updated_storyboard)
 
@@ -972,11 +1006,12 @@ def patch_slot_crop(
     slot = next((item for item in storyboard.slots if item.id == slot_id), None)
     if slot is None:
         raise HTTPException(status_code=404, detail="Slot not found")
-    if slot.assigned_clip_id is None:
+    clip_id = hook_family_assigned_clip_id(storyboard, slot)
+    if clip_id is None:
         raise HTTPException(status_code=400, detail="Slot has no assigned clip")
 
     clip_media = clip_media_for_storyboard(job.config, storyboard)
-    media = clip_media.get(slot.assigned_clip_id)
+    media = clip_media.get(clip_id)
     if media is None:
         raise HTTPException(status_code=404, detail="Assigned clip media not found")
 
@@ -987,6 +1022,9 @@ def patch_slot_crop(
             crop_start_s=payload.crop_start_s,
             crop_end_s=payload.crop_end_s,
             media=media,
+            payoff_duration_s=(
+                job.config.teaser.duration_s if job.config.teaser.enabled else None
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1129,7 +1167,6 @@ def get_composite_preview(
     storyboard = load_storyboard(temp_dir)
     if storyboard is None:
         raise HTTPException(status_code=404, detail="Storyboard not found")
-    storyboard = sync_storyboard_hook_layout(storyboard, job.config, temp_dir=temp_dir)
     if not storyboard_filled_enough(storyboard):
         raise HTTPException(status_code=400, detail="Assign a clip to the hook slot first")
 
@@ -1185,8 +1222,9 @@ def get_composite_preview(
     digest = hashlib.sha256(json.dumps(cache_payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
     preview_path = temp_dir / "previews" / f"composite_{digest}.mp4"
     if force and preview_path.is_file():
-        preview_path.unlink(missing_ok=True)
-    if not preview_path.is_file():
+        if not _safe_unlink(preview_path) and preview_path.is_file():
+            preview_path = temp_dir / "previews" / f"composite_{digest}_{uuid.uuid4().hex[:8]}.mp4"
+    if not preview_path.is_file() or force:
         preview_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             render_composite(

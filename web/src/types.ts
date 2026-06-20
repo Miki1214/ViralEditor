@@ -212,6 +212,26 @@ export interface StoryboardPayload {
   slots: StorySlot[];
 }
 
+export interface StoryboardSegmentDebugRow {
+  id: string;
+  role: SlotRole;
+  target_duration_s: number;
+  src_start_s: number;
+  src_end_s: number;
+  src_span_s: number;
+  speed_factor: number;
+  unified_label_speed: number | null;
+}
+
+export interface StoryboardSegmentsDebugPayload {
+  slots: StoryboardSegmentDebugRow[];
+  summary: {
+    unified_crop: [number, number] | null;
+    hook_budget_s: number;
+    hook_speed_s: number | null;
+  };
+}
+
 export type TeaserMask = "vignette" | "dir_blur";
 
 export interface TeaserSettings {

@@ -71,7 +71,7 @@ def test_teaser_uses_hook_clip_payoff_duration_slice() -> None:
         hook_clip=hook,
         hook_media=hook_media,
     )
-    assert spec.src_start_s == pytest.approx(1.5)
+    assert spec.src_start_s == pytest.approx(2.5)
     assert spec.src_end_s == pytest.approx(4.0)
     assert spec.source_id == "hook"
     assert spec.source_path == hook.path
@@ -83,6 +83,18 @@ def test_split_hook_crop_by_duration_head_and_tail() -> None:
     head, tail = split_hook_crop_by_duration(1.0, 4.0, 1.0)
     assert tail == pytest.approx((3.0, 4.0))
     assert head == pytest.approx((1.0, 3.0))
+
+
+def test_split_hook_crop_by_output_ratio_equal_speed() -> None:
+    from viral_editor.video.teaser import split_hook_crop_by_output_ratio
+
+    head, tail = split_hook_crop_by_output_ratio(0.0, 10.0, 2.0, 2.0)
+    assert head == pytest.approx((0.0, 5.0))
+    assert tail == pytest.approx((5.0, 10.0))
+    build_speed = (head[1] - head[0]) / 2.0
+    payoff_speed = (tail[1] - tail[0]) / 2.0
+    assert build_speed == pytest.approx(payoff_speed)
+    assert build_speed == pytest.approx(2.5)
 
 
 def test_body_output_duration_after_teaser() -> None:

@@ -26,7 +26,7 @@ from viral_editor.models import (
     StorySlot,
     Transient,
 )
-from viral_editor.video.teaser import split_hook_crop_by_duration
+from viral_editor.video.teaser import split_hook_crop_by_output_ratio
 
 _MIN_SLOT_S = 1.5
 _DEFAULT_XFADE_S = 0.25
@@ -569,23 +569,34 @@ def _hook_source_range_for_split(
 ) -> tuple[float, float]:
     """Contiguous hook source span for 1:1 payoff/build crop windows."""
     clip_id = _hook_assigned_clip_id(hook, hook_start, hook_end)
-    if clip_id and clip_media and clip_id in clip_media:
-        media = clip_media[clip_id]
-        span = min(media.duration_s, hook_budget)
-        return 0.0, round(max(span, _HOOK_MIN_PART_S * 2), 6)
 
     if hook is not None:
         crop_start = hook.crop_start_s if hook.crop_start_s is not None else 0.0
-        crop_end = hook.crop_end_s if hook.crop_end_s is not None else crop_start + hook_budget
+        crop_end = (
+            hook.crop_end_s
+            if hook.crop_end_s is not None
+            else crop_start + hook_budget
+        )
     else:
         crop_start, crop_end = _full_hook_crop(hook_start, hook_end)
+        if crop_end <= crop_start + 1e-6 and clip_id and clip_media and clip_id in clip_media:
+            media = clip_media[clip_id]
+            crop_start = 0.0
+            crop_end = round(media.duration_s, 6)
+
+    if clip_id and clip_media and clip_id in clip_media:
+        media = clip_media[clip_id]
+        crop_start = max(0.0, min(crop_start, media.duration_s))
+        crop_end = max(crop_start + 1e-6, min(crop_end, media.duration_s))
 
     crop_span = max(crop_end - crop_start, 0.0)
     if crop_span <= 1e-6:
+        if clip_id and clip_media and clip_id in clip_media:
+            media = clip_media[clip_id]
+            return 0.0, round(media.duration_s, 6)
         return 0.0, round(hook_budget, 6)
 
-    effective = min(hook_budget, crop_span)
-    return round(crop_start, 6), round(crop_start + effective, 6)
+    return round(crop_start, 6), round(crop_end, 6)
 
 
 def apply_hook_inversion_layout(
@@ -596,8 +607,10 @@ def apply_hook_inversion_layout(
     features: BeatSyncFeatures | None = None,
     scope_lanes: dict | None = None,
     clip_media: dict[str, MediaInfo] | None = None,
+    reshape_crops: bool = True,
 ) -> Storyboard:
     """Split the hook into start/end storyboard slots aligned to the music block."""
+    del scope_lanes
     slots = sorted(storyboard.slots, key=lambda slot: slot.order)
     hook = next((slot for slot in slots if slot.role == "hook"), None)
     hook_start = next((slot for slot in slots if slot.role == "hook_start"), None)
@@ -647,6 +660,52 @@ def apply_hook_inversion_layout(
     if hook is None and hook_start is None:
         return storyboard
 
+    if (
+        hook is None
+        and hook_start is not None
+        and hook_end is not None
+        and not reshape_crops
+    ):
+        hook_budget = hook_start.target_duration_s + hook_end.target_duration_s
+        payoff_d = min(
+            max(payoff_duration_s, _HOOK_MIN_PART_S),
+            hook_budget - _HOOK_MIN_PART_S,
+        )
+        payoff_d = snap_hook_payoff_s(
+            payoff_d,
+            hook_budget,
+            features,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+        build_d = hook_budget - payoff_d
+        start_slot = hook_start.model_copy(
+            update={
+                "target_duration_s": round(payoff_d, 6),
+                "order": 0,
+            }
+        )
+        end_slot = hook_end.model_copy(
+            update={
+                "target_duration_s": round(build_d, 6),
+                "order": len(middle) + 1,
+                "transition_in": middle[-1].transition_in if middle else hook_end.transition_in,
+            }
+        )
+        reordered = [start_slot]
+        for index, slot in enumerate(middle):
+            reordered.append(slot.model_copy(update={"order": index + 1}))
+        reordered.append(end_slot)
+        relaid = relayout_beat_aligned_timeline(
+            reordered,
+            total_duration_s=storyboard.total_duration_s,
+            features=features,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+        total = relaid[-1].out_end_s if relaid else storyboard.total_duration_s
+        return storyboard.model_copy(update={"slots": relaid, "total_duration_s": total})
+
     base = hook or hook_start or hook_end
     assert base is not None
     root_id = base.id.replace("_hook_start", "").replace("_hook_end", "")
@@ -664,21 +723,22 @@ def apply_hook_inversion_layout(
         hook_end=hook_end,
         clip_media=clip_media,
     )
-    effective_budget = max(crop_end - crop_start, 0.0)
 
     payoff_d = min(
         max(payoff_duration_s, _HOOK_MIN_PART_S),
-        effective_budget - _HOOK_MIN_PART_S,
+        hook_budget - _HOOK_MIN_PART_S,
     )
     payoff_d = snap_hook_payoff_s(
         payoff_d,
-        effective_budget,
+        hook_budget,
         features,
         music_start_s=storyboard.music_start_s,
         music_end_s=storyboard.music_end_s,
     )
-    build_d = effective_budget - payoff_d
-    head, tail = split_hook_crop_by_duration(crop_start, crop_end, payoff_d)
+    build_d = hook_budget - payoff_d
+    head, tail = split_hook_crop_by_output_ratio(
+        crop_start, crop_end, payoff_d, build_d
+    )
 
     start_slot = base.model_copy(
         update={

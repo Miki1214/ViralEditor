@@ -1,27 +1,38 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SlotFitMode, SlotTransition, SpatialCrop, SpatialFxSettings, StoryboardPayload, StorySlot, TeaserSettings, WaveformPayload } from "../types";
 import { slotColorForIndex } from "../utils/slotColors";
+import {
+  hookFamilyClipSlot,
+  hookSourceBudgetS,
+  isHookFamilyRole,
+  slotCropRange,
+} from "../utils/hookCrop";
+import { shouldCommitCrop } from "../utils/cropCommit";
 import { ClipCropTimeline } from "./ClipCropTimeline";
+import { HookSpeedDebugPanel } from "./HookSpeedDebugPanel";
 import { RetentionFxPanel } from "./RetentionFxPanel";
 import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer, type BlockPlayheadChangeHandler, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
 import { StoryboardScopeCanvas } from "./StoryboardScopeCanvas";
 import { MusicDetailRack } from "./scope/MusicDetailRack";
 
-function hookSourceBudgetS(storyboard: StoryboardPayload, slot: StorySlot): number {
-  if (slot.role === "hook") {
-    return slot.target_duration_s;
+function slotClipLabel(storyboard: StoryboardPayload, slot: StorySlot): string {
+  if (slot.clip_filename) {
+    return slot.clip_filename;
   }
-  if (slot.role === "hook_start" || slot.role === "hook_end") {
-    const hookStart = storyboard.slots.find((entry) => entry.role === "hook_start");
-    const hookEnd = storyboard.slots.find((entry) => entry.role === "hook_end");
-    return (hookStart?.target_duration_s ?? 0) + (hookEnd?.target_duration_s ?? 0);
+  if (slot.assigned_clip_id) {
+    return "assigned";
   }
-  return slot.target_duration_s;
-}
-
-function isHookFamilyRole(role: StorySlot["role"]): boolean {
-  return role === "hook" || role === "hook_start" || role === "hook_end";
+  if (isHookFamilyRole(slot.role)) {
+    const sibling = hookFamilyClipSlot(storyboard, slot);
+    if (sibling.clip_filename) {
+      return sibling.clip_filename;
+    }
+    if (sibling.assigned_clip_id) {
+      return "assigned";
+    }
+  }
+  return "empty";
 }
 
 interface StoryboardPanelProps {
@@ -169,6 +180,7 @@ export function StoryboardPanel({
   const [cropEndS, setCropEndS] = useState(0);
   const [draftTransforms, setDraftTransforms] = useState<Record<string, SlotTransformDraft>>({});
   const [spatialCropOpen, setSpatialCropOpen] = useState(false);
+  const cropDraggingRef = useRef(false);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const assignTargetRef = useRef<StorySlot | null>(null);
@@ -177,42 +189,51 @@ export function StoryboardPanel({
     setSpatialCropOpen(false);
   }, [active?.id]);
 
+  const activeClipSlot = active ? hookFamilyClipSlot(storyboard, active) : null;
+  const serverHookCropKey = active
+    ? (() => {
+        const crop = slotCropRange(storyboard, active);
+        return `${crop.startS.toFixed(4)}:${crop.endS.toFixed(4)}`;
+      })()
+    : "";
+
   useEffect(() => {
-    if (!active?.assigned_clip_id || !active.clip_source_url) {
+    if (cropDraggingRef.current) return;
+    if (!activeClipSlot?.assigned_clip_id || !activeClipSlot.clip_source_url) {
       setPreviewUrl(null);
       setDurationS(null);
       return;
     }
 
     let cancelled = false;
-    setPreviewUrl(active.clip_source_url);
-    setCropStartS(active.crop_start_s ?? 0);
-    setCropEndS(active.crop_end_s ?? active.target_duration_s);
+    setPreviewUrl(activeClipSlot.clip_source_url);
 
-    void probeVideoDuration(active.clip_source_url).then((duration) => {
-      if (!cancelled && duration != null) {
-        setDurationS(duration);
-      }
+    void probeVideoDuration(activeClipSlot.clip_source_url).then((duration) => {
+      if (cancelled || duration == null) return;
+      setDurationS(duration);
+      if (cropDraggingRef.current) return;
+      const crop = active ? slotCropRange(storyboard, active) : { startS: 0, endS: 0 };
+      setCropStartS(Math.max(0, Math.min(crop.startS, duration)));
+      setCropEndS(Math.max(crop.startS + 0.25, Math.min(crop.endS, duration)));
     });
 
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active?.id, activeClipSlot?.clip_source_url, serverHookCropKey]);
 
   const assignFileToSlot = useCallback(
     async (file: File, slot: StorySlot) => {
       if (saving) return;
       assignTargetRef.current = slot;
       const objectUrl = URL.createObjectURL(file);
-      const sourceBudget = isHookFamilyRole(slot.role)
-        ? hookSourceBudgetS(storyboard, slot)
-        : slot.target_duration_s;
-      let endS = sourceBudget;
+      let endS = slot.target_duration_s;
       try {
         const duration = await probeVideoDuration(objectUrl);
         if (duration != null) {
-          endS = Math.min(duration, sourceBudget);
+          endS = isHookFamilyRole(slot.role)
+            ? duration
+            : Math.min(duration, slot.target_duration_s);
         }
       } finally {
         URL.revokeObjectURL(objectUrl);
@@ -260,11 +281,15 @@ export function StoryboardPanel({
   );
 
   const commitCrop = async (startS: number, endS: number) => {
-    if (!active?.assigned_clip_id) return;
-    const unchanged =
-      active.crop_start_s === startS && active.crop_end_s === endS;
-    if (unchanged) return;
-    await onUpdateSlotCrop(active.id, startS, endS);
+    if (!active) return;
+    const clipSlot = hookFamilyClipSlot(storyboard, active);
+    if (!clipSlot.assigned_clip_id) return;
+    if (!shouldCommitCrop(storyboard, active, startS, endS, saving)) return;
+    try {
+      await onUpdateSlotCrop(active.id, startS, endS);
+    } catch (err) {
+      console.error("[StoryboardPanel] crop commit failed", err);
+    }
   };
 
   const toggleTransition = async (slot: StorySlot) => {
@@ -324,6 +349,9 @@ export function StoryboardPanel({
 
   const activeTransform = active ? slotTransform(active) : null;
   const canClearClip = Boolean(active?.assigned_clip_id);
+  const debugEnabled =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debug") === "1";
 
   return (
     <div className="panel space-y-4 p-5">
@@ -341,6 +369,18 @@ export function StoryboardPanel({
           <dd className="text-scope-trace">{storyboard.total_duration_s.toFixed(1)}s</dd>
         </dl>
       </div>
+
+      {debugEnabled && (
+        <HookSpeedDebugPanel
+          jobId={jobId}
+          storyboard={storyboard}
+          pendingCropKey={
+            active
+              ? `${active.id}:${cropStartS.toFixed(4)}:${cropEndS.toFixed(4)}`
+              : ""
+          }
+        />
+      )}
 
       {waveform && (
         <div className="space-y-2">
@@ -425,7 +465,7 @@ export function StoryboardPanel({
                   className="mt-1 truncate font-mono text-[10px]"
                   style={{ color: color.stroke }}
                 >
-                  {slot.clip_filename ?? (slot.assigned_clip_id ? "assigned" : "empty")}
+                  {slotClipLabel(storyboard, slot)}
                 </p>
               </button>
             </div>
@@ -512,7 +552,7 @@ export function StoryboardPanel({
             )}
           </div>
 
-          {!active.assigned_clip_id && (
+          {!activeClipSlot?.assigned_clip_id && (
             <label
               htmlFor={inputId}
               className="flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border px-4 py-4 text-center hover:border-scope-dim"
@@ -534,8 +574,15 @@ export function StoryboardPanel({
                 durationS={durationS}
                 cropStartS={cropStartS}
                 cropEndS={cropEndS}
-                targetDurationS={active.target_duration_s}
+                targetDurationS={
+                  isHookFamilyRole(active.role)
+                    ? hookSourceBudgetS(storyboard, active)
+                    : active.target_duration_s
+                }
                 slotRole={active.role}
+                onDragActiveChange={(dragging) => {
+                  cropDraggingRef.current = dragging;
+                }}
                 onCropChange={(startS, endS) => {
                   setCropStartS(startS);
                   setCropEndS(endS);
@@ -556,12 +603,12 @@ export function StoryboardPanel({
         onPatch={onPatchEffects}
       />
 
-      {active?.assigned_clip_id && active.clip_source_url && (
+      {activeClipSlot?.assigned_clip_id && activeClipSlot.clip_source_url && (
         <SpatialCropModal
-          key={active.id}
-          slotId={active.id}
+          key={active?.id}
+          slotId={active?.id ?? ""}
           open={spatialCropOpen}
-          videoUrl={active.clip_source_url}
+          videoUrl={activeClipSlot.clip_source_url}
           rotationDeg={activeTransform?.rotation_deg ?? 0}
           initialCrop={activeTransform?.spatial_crop ?? null}
           onClose={() => setSpatialCropOpen(false)}

@@ -17,6 +17,7 @@ from viral_editor.ingest.loader import probe_media
 from viral_editor.editing.retention_policy import select_payoff_downbeat_s
 from viral_editor.models import ClipInput, MediaInfo, SpatialCrop, Storyboard, StorySlot, write_artifact
 from viral_editor.video.clip_reel import normalize_crop_range
+from viral_editor.video.teaser import split_hook_crop_by_output_ratio
 
 
 def load_storyboard(temp_dir: Path) -> Storyboard | None:
@@ -34,6 +35,8 @@ def refresh_hook_inversion_layout(
     storyboard: Storyboard,
     config: JobConfig,
     temp_dir: Path | None = None,
+    *,
+    reshape_crops: bool = False,
 ) -> Storyboard:
     """Split or merge hook slots to match retention FX settings."""
     features = None
@@ -54,6 +57,7 @@ def refresh_hook_inversion_layout(
         features=features,
         scope_lanes=scope_lanes,
         clip_media=clip_media_for_storyboard(config, storyboard),
+        reshape_crops=reshape_crops,
     )
 
 
@@ -86,7 +90,12 @@ def sync_storyboard_hook_layout(
     """Reconcile hook inversion layout and downbeat alignment with current settings."""
     split = any(slot.role in ("hook_start", "hook_end") for slot in storyboard.slots)
     if config.teaser.enabled or split:
-        return refresh_hook_inversion_layout(storyboard, config, temp_dir=temp_dir)
+        return refresh_hook_inversion_layout(
+            storyboard,
+            config,
+            temp_dir=temp_dir,
+            reshape_crops=False,
+        )
     return storyboard
 
 
@@ -152,6 +161,89 @@ def _is_hook_family_role(role: str) -> bool:
     return role in ("hook", "hook_start", "hook_end")
 
 
+def hook_unified_crop_range(storyboard: Storyboard) -> tuple[float, float] | None:
+    """Return the contiguous source crop spanning hook / hook_start + hook_end."""
+    hook = next((slot for slot in storyboard.slots if slot.role == "hook"), None)
+    hook_start = next((slot for slot in storyboard.slots if slot.role == "hook_start"), None)
+    hook_end = next((slot for slot in storyboard.slots if slot.role == "hook_end"), None)
+    if hook is not None:
+        if hook.crop_start_s is None or hook.crop_end_s is None:
+            return None
+        return hook.crop_start_s, hook.crop_end_s
+    if hook_start is None or hook_end is None:
+        return None
+    starts = [
+        slot.crop_start_s
+        for slot in (hook_start, hook_end)
+        if slot.crop_start_s is not None
+    ]
+    ends = [
+        slot.crop_end_s
+        for slot in (hook_start, hook_end)
+        if slot.crop_end_s is not None
+    ]
+    if not starts or not ends:
+        return None
+    return min(starts), max(ends)
+
+
+def _resplit_hook_family_crops(
+    storyboard: Storyboard,
+    *,
+    crop_start_s: float,
+    crop_end_s: float,
+    payoff_duration_s: float,
+) -> Storyboard:
+    """Apply a unified hook source window and re-split payoff/build slot crops."""
+    hook_start = next((slot for slot in storyboard.slots if slot.role == "hook_start"), None)
+    hook_end = next((slot for slot in storyboard.slots if slot.role == "hook_end"), None)
+    if hook_start is None or hook_end is None:
+        return storyboard
+
+    payoff_out = payoff_duration_s if payoff_duration_s is not None else hook_start.target_duration_s
+    build_out = hook_end.target_duration_s
+    head, tail = split_hook_crop_by_output_ratio(
+        crop_start_s,
+        crop_end_s,
+        payoff_out,
+        build_out,
+    )
+    slots: list[StorySlot] = []
+    for slot in storyboard.slots:
+        if slot.role == "hook_start":
+            slots.append(
+                slot.model_copy(
+                    update={
+                        "crop_start_s": round(tail[0], 6),
+                        "crop_end_s": round(tail[1], 6),
+                    }
+                )
+            )
+        elif slot.role == "hook_end":
+            slots.append(
+                slot.model_copy(
+                    update={
+                        "crop_start_s": round(head[0], 6),
+                        "crop_end_s": round(head[1], 6),
+                    }
+                )
+            )
+        else:
+            slots.append(slot)
+    return storyboard.model_copy(update={"slots": slots})
+
+
+def hook_family_assigned_clip_id(storyboard: Storyboard, slot: StorySlot) -> str | None:
+    if slot.assigned_clip_id:
+        return slot.assigned_clip_id
+    if not _is_hook_family_role(slot.role):
+        return None
+    for other in storyboard.slots:
+        if _is_hook_family_role(other.role) and other.assigned_clip_id:
+            return other.assigned_clip_id
+    return None
+
+
 def hook_clip_id_for_slot(slot_id: str, role: str) -> str:
     """Stable clip id shared by hook / hook_start / hook_end slots."""
     if _is_hook_family_role(role):
@@ -195,7 +287,12 @@ def persist_storyboard_for_job(
         transients=timeline.transients,
         scope_lanes=scope_lanes,
     )
-    storyboard = refresh_hook_inversion_layout(storyboard, config, temp_dir=temp_dir)
+    storyboard = refresh_hook_inversion_layout(
+        storyboard,
+        config,
+        temp_dir=temp_dir,
+        reshape_crops=True,
+    )
     persist_storyboard(temp_dir, storyboard)
     return storyboard
 
@@ -256,10 +353,8 @@ def assign_slot_clip(
         "spatial_crop": spatial_crop,
     }
     if _is_hook_family_role(target.role):
-        budget = hook_output_budget_s(storyboard)
-        full_end = min(media.duration_s, budget)
         assignment["crop_start_s"] = 0.0
-        assignment["crop_end_s"] = full_end
+        assignment["crop_end_s"] = round(media.duration_s, 6)
     slots = []
     for slot in storyboard.slots:
         if slot.id == slot_id or (
@@ -268,7 +363,18 @@ def assign_slot_clip(
             slots.append(slot.model_copy(update=assignment))
         else:
             slots.append(slot)
-    return storyboard.model_copy(update={"slots": slots})
+    updated = storyboard.model_copy(update={"slots": slots})
+    if _is_hook_family_role(target.role):
+        hook_start = next((slot for slot in updated.slots if slot.role == "hook_start"), None)
+        hook_end = next((slot for slot in updated.slots if slot.role == "hook_end"), None)
+        if hook_start is not None and hook_end is not None:
+            return _resplit_hook_family_crops(
+                updated,
+                crop_start_s=0.0,
+                crop_end_s=round(media.duration_s, 6),
+                payoff_duration_s=hook_start.target_duration_s,
+            )
+    return updated
 
 
 def update_slot_crop(
@@ -278,7 +384,9 @@ def update_slot_crop(
     crop_start_s: float,
     crop_end_s: float,
     media: MediaInfo,
+    payoff_duration_s: float | None = None,
 ) -> Storyboard:
+    target = next(slot for slot in storyboard.slots if slot.id == slot_id)
     clip = ClipInput(
         id=f"{slot_id}_clip",
         path=media.path,
@@ -287,13 +395,30 @@ def update_slot_crop(
         crop_end_s=crop_end_s,
     )
     norm_start, norm_end = normalize_crop_range(clip, media)
+    hook_start = next((slot for slot in storyboard.slots if slot.role == "hook_start"), None)
+    hook_end = next((slot for slot in storyboard.slots if slot.role == "hook_end"), None)
+
+    if (
+        _is_hook_family_role(target.role)
+        and hook_start is not None
+        and hook_end is not None
+    ):
+        payoff_d = payoff_duration_s if payoff_duration_s is not None else hook_start.target_duration_s
+        return _resplit_hook_family_crops(
+            storyboard,
+            crop_start_s=norm_start,
+            crop_end_s=norm_end,
+            payoff_duration_s=payoff_d,
+        )
+
+    if target.assigned_clip_id is None:
+        raise ValueError(f"Slot {slot_id!r} has no assigned clip")
+
     slots = []
     for slot in storyboard.slots:
         if slot.id != slot_id:
             slots.append(slot)
             continue
-        if slot.assigned_clip_id is None:
-            raise ValueError(f"Slot {slot_id!r} has no assigned clip")
         slots.append(
             slot.model_copy(
                 update={
@@ -410,22 +535,79 @@ def clip_media_for_storyboard(
     return media
 
 
+def storyboard_segments_debug_payload(
+    storyboard: Storyboard,
+    clip_media: dict[str, MediaInfo],
+) -> dict[str, object]:
+    """Build per-slot segment debug rows for UI / API inspection."""
+    from viral_editor.audio.storyboard import storyboard_to_segments
+
+    segments, roles, slot_ids = storyboard_to_segments(storyboard, clip_media)
+    unified = hook_unified_crop_range(storyboard)
+    hook_budget = hook_output_budget_s(storyboard)
+    unified_label_speed: float | None = None
+    if unified is not None and hook_budget > 1e-9:
+        u0, u1 = unified
+        unified_label_speed = round((u1 - u0) / hook_budget, 6)
+
+    slots_by_id = {slot.id: slot for slot in storyboard.slots}
+    rows: list[dict[str, object]] = []
+    for slot_id, segment, role in zip(slot_ids, segments, roles):
+        slot = slots_by_id[slot_id]
+        src_span = round(segment.src_end_s - segment.src_start_s, 6)
+        if _is_hook_family_role(role):
+            label_speed = unified_label_speed
+        else:
+            label_speed = (
+                round(src_span / slot.target_duration_s, 6)
+                if slot.target_duration_s > 1e-9
+                else None
+            )
+        rows.append(
+            {
+                "id": slot_id,
+                "role": role,
+                "target_duration_s": round(slot.target_duration_s, 6),
+                "src_start_s": round(segment.src_start_s, 6),
+                "src_end_s": round(segment.src_end_s, 6),
+                "src_span_s": src_span,
+                "speed_factor": round(segment.speed_factor, 6),
+                "unified_label_speed": label_speed,
+            }
+        )
+
+    summary: dict[str, object] = {
+        "unified_crop": [round(unified[0], 6), round(unified[1], 6)] if unified else None,
+        "hook_budget_s": round(hook_budget, 6),
+        "hook_speed_s": unified_label_speed,
+    }
+    return {"slots": rows, "summary": summary}
+
+
 def sync_config_clips_from_storyboard(
     config: JobConfig,
     storyboard: Storyboard,
 ) -> JobConfig:
     """Ensure config.clips contains every assigned clip id."""
     existing = {clip.id: clip for clip in config.clips}
+    unified_hook_crop = hook_unified_crop_range(storyboard)
     for slot in storyboard.slots:
         if slot.assigned_clip_id is None:
             continue
         clip = existing.get(slot.assigned_clip_id)
         if clip is None:
             continue
+        crop_start_s = slot.crop_start_s
+        crop_end_s = slot.crop_end_s
+        if (
+            unified_hook_crop is not None
+            and _is_hook_family_role(slot.role)
+        ):
+            crop_start_s, crop_end_s = unified_hook_crop
         existing[slot.assigned_clip_id] = clip.model_copy(
             update={
-                "crop_start_s": slot.crop_start_s,
-                "crop_end_s": slot.crop_end_s,
+                "crop_start_s": crop_start_s,
+                "crop_end_s": crop_end_s,
                 "rotation_deg": slot.rotation_deg,
                 "fit_mode": slot.fit_mode,
                 "spatial_crop": slot.spatial_crop,

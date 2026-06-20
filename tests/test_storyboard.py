@@ -308,15 +308,17 @@ def test_apply_hook_inversion_layout_splits_hook_slots() -> None:
     )
     assert hook_start.target_duration_s in positions
     assert hook_end.target_duration_s == pytest.approx(hook_budget - hook_start.target_duration_s)
-    assert hook_start.crop_end_s - hook_start.crop_start_s == pytest.approx(
-        hook_start.target_duration_s,
-        abs=0.01,
+    total_source = hook_end.crop_end_s - hook_end.crop_start_s + (
+        hook_start.crop_end_s - hook_start.crop_start_s
     )
-    assert hook_end.crop_end_s - hook_end.crop_start_s == pytest.approx(
-        hook_end.target_duration_s,
-        abs=0.01,
+    assert total_source == pytest.approx(3.0, abs=0.01)
+    payoff_src = hook_start.crop_end_s - hook_start.crop_start_s
+    build_src = hook_end.crop_end_s - hook_end.crop_start_s
+    assert payoff_src == pytest.approx(build_src, rel=0.05)
+    assert payoff_src / hook_start.target_duration_s == pytest.approx(
+        build_src / hook_end.target_duration_s,
+        rel=0.02,
     )
-    assert hook_end.crop_end_s == pytest.approx(hook_start.crop_start_s)
 
 
 def test_hook_split_uses_full_clip_span_when_assigned() -> None:
@@ -345,17 +347,12 @@ def test_hook_split_uses_full_clip_span_when_assigned() -> None:
     )
     hook_start = next(slot for slot in split.slots if slot.role == "hook_start")
     hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
-    hook_budget = hook_start.target_duration_s + hook_end.target_duration_s
-    assert hook_end.crop_end_s - hook_end.crop_start_s == pytest.approx(
-        hook_end.target_duration_s,
-        abs=0.01,
-    )
-    assert hook_start.crop_end_s - hook_start.crop_start_s == pytest.approx(
-        hook_start.target_duration_s,
-        abs=0.01,
-    )
     assert hook_end.crop_end_s == pytest.approx(hook_start.crop_start_s)
-    assert hook_start.crop_end_s == pytest.approx(min(7.0, hook_budget))
+    total_source = (hook_end.crop_end_s - hook_end.crop_start_s) + (
+        hook_start.crop_end_s - hook_start.crop_start_s
+    )
+    assert total_source == pytest.approx(1.7, abs=0.01)
+    assert hook_start.crop_end_s == pytest.approx(1.7)
 
 
 def test_hook_inversion_realigns_slot_boundaries_to_downbeats() -> None:
@@ -497,7 +494,201 @@ def test_storyboard_to_segments_scales_speed_to_target() -> None:
     assert len(segments) == 1
     assert slot_ids == [hook.id]
     assert segments[0].speed_factor == pytest.approx(1.5)
-    assert segments[0].out_end_s - segments[0].out_start_s == pytest.approx(target)
+
+
+def test_apply_hook_inversion_preserves_crops_without_reshape() -> None:
+    from viral_editor.models import Storyboard, StorySlot
+
+    hook_start = StorySlot(
+        id="slot_0_hook_start",
+        order=0,
+        label="Hook · start",
+        role="hook_start",
+        out_start_s=0.0,
+        out_end_s=2.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=18.0,
+        crop_end_s=20.0,
+    )
+    hook_end = StorySlot(
+        id="slot_0_hook_end",
+        order=1,
+        label="Hook · end",
+        role="hook_end",
+        out_start_s=2.0,
+        out_end_s=4.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=0.0,
+        crop_end_s=18.0,
+    )
+    storyboard = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=16.0,
+        total_duration_s=16.0,
+        slots=[hook_start, hook_end],
+    )
+    resynced = apply_hook_inversion_layout(
+        storyboard,
+        enabled=True,
+        payoff_duration_s=2.0,
+        reshape_crops=False,
+    )
+    start = next(slot for slot in resynced.slots if slot.role == "hook_start")
+    end = next(slot for slot in resynced.slots if slot.role == "hook_end")
+    assert start.crop_start_s == pytest.approx(18.0)
+    assert start.crop_end_s == pytest.approx(20.0)
+    assert end.crop_start_s == pytest.approx(0.0)
+    assert end.crop_end_s == pytest.approx(18.0)
+
+
+def test_hook_source_range_respects_user_crop() -> None:
+    from viral_editor.audio.storyboard import _hook_source_range_for_split
+    from viral_editor.models import StorySlot
+
+    hook_start = StorySlot(
+        id="slot_0_hook_start",
+        order=0,
+        label="Hook · start",
+        role="hook_start",
+        out_start_s=0.0,
+        out_end_s=2.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=8.0,
+        crop_end_s=10.0,
+    )
+    hook_end = StorySlot(
+        id="slot_0_hook_end",
+        order=2,
+        label="Hook · end",
+        role="hook_end",
+        out_start_s=12.0,
+        out_end_s=14.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=5.0,
+        crop_end_s=8.0,
+    )
+    media = {
+        "slot_0_clip": MediaInfo(
+            path=Path("clip.mp4"),
+            duration_s=30.0,
+            has_video=True,
+        )
+    }
+    start, end = _hook_source_range_for_split(
+        hook_budget=4.0,
+        hook=None,
+        hook_start=hook_start,
+        hook_end=hook_end,
+        clip_media=media,
+    )
+    assert start == pytest.approx(5.0)
+    assert end == pytest.approx(10.0)
+
+
+def test_hook_split_applies_timestretch_to_build_slot() -> None:
+    from viral_editor.models import Storyboard, StorySlot
+
+    hook_start = StorySlot(
+        id="slot_0_hook_start",
+        order=0,
+        label="Hook · start",
+        role="hook_start",
+        out_start_s=0.0,
+        out_end_s=2.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=5.0,
+        crop_end_s=10.0,
+    )
+    hook_end = StorySlot(
+        id="slot_0_hook_end",
+        order=1,
+        label="Hook · end",
+        role="hook_end",
+        out_start_s=2.0,
+        out_end_s=4.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=0.0,
+        crop_end_s=5.0,
+    )
+    storyboard = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=16.0,
+        total_duration_s=16.0,
+        slots=[hook_start, hook_end],
+    )
+    media = {
+        "slot_0_clip": MediaInfo(
+            path=Path("clip.mp4"),
+            duration_s=20.0,
+            has_video=True,
+        )
+    }
+    segments, roles, _ = storyboard_to_segments(storyboard, media)
+    build_index = roles.index("hook_end")
+    start_index = roles.index("hook_start")
+    assert segments[build_index].speed_factor == pytest.approx(2.5)
+    assert segments[start_index].speed_factor == pytest.approx(2.5)
+
+
+def test_update_slot_crop_resplits_hook_family() -> None:
+    from viral_editor.api.storyboard import update_slot_crop
+    from viral_editor.models import Storyboard, StorySlot
+
+    hook_start = StorySlot(
+        id="slot_0_hook_start",
+        order=0,
+        label="Hook · start",
+        role="hook_start",
+        out_start_s=0.0,
+        out_end_s=2.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=0.0,
+        crop_end_s=2.0,
+    )
+    hook_end = StorySlot(
+        id="slot_0_hook_end",
+        order=2,
+        label="Hook · end",
+        role="hook_end",
+        out_start_s=12.0,
+        out_end_s=14.0,
+        target_duration_s=2.0,
+        assigned_clip_id="slot_0_clip",
+        crop_start_s=2.0,
+        crop_end_s=4.0,
+    )
+    storyboard = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=16.0,
+        total_duration_s=16.0,
+        slots=[hook_start, hook_end],
+    )
+    media = MediaInfo(path=Path("clip.mp4"), duration_s=20.0, has_video=True)
+    updated = update_slot_crop(
+        storyboard,
+        "slot_0_hook_start",
+        crop_start_s=4.0,
+        crop_end_s=10.0,
+        media=media,
+        payoff_duration_s=2.0,
+    )
+    start = next(slot for slot in updated.slots if slot.role == "hook_start")
+    end = next(slot for slot in updated.slots if slot.role == "hook_end")
+    assert start.crop_end_s - start.crop_start_s == pytest.approx(3.0)
+    assert end.crop_end_s - end.crop_start_s == pytest.approx(3.0)
+    assert end.crop_end_s == pytest.approx(start.crop_start_s)
+    assert start.crop_start_s == pytest.approx(7.0)
+    assert end.crop_start_s == pytest.approx(4.0)
 
 
 def test_storyboard_filled_enough_requires_hook_clip() -> None:

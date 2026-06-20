@@ -58,7 +58,7 @@ def split_hook_crop_by_duration(
     min_head_s: float = 0.25,
     min_tail_s: float = 0.25,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Split hook crop for inversion at 1:1 — tail plays payoff, head plays build-up."""
+    """Legacy source-tail split — prefer ``split_hook_crop_by_output_ratio``."""
     duration = max(crop_end - crop_start, 0.0)
     if duration <= 1e-9:
         empty = (crop_start, crop_start)
@@ -73,20 +73,51 @@ def split_hook_crop_by_duration(
     return head, tail
 
 
+def split_hook_crop_by_output_ratio(
+    crop_start: float,
+    crop_end: float,
+    payoff_output_s: float,
+    build_output_s: float,
+    *,
+    min_head_s: float = 0.25,
+    min_tail_s: float = 0.25,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Split hook source crop so build + payoff share timestretch (S / total output)."""
+    duration = max(crop_end - crop_start, 0.0)
+    if duration <= 1e-9:
+        empty = (crop_start, crop_start)
+        return empty, empty
+
+    total_out = max(payoff_output_s + build_output_s, 1e-9)
+    build_src = duration * (build_output_s / total_out)
+    build_src = max(min_head_s, min(build_src, duration - min_tail_s))
+    split = crop_start + build_src
+    head = (crop_start, split)
+    tail = (split, crop_end)
+    return head, tail
+
+
 def build_teaser_spec(
     media: MediaInfo,
     config: TeaserConfig,
     *,
     hook_clip: ClipInput | None = None,
     hook_media: MediaInfo | None = None,
+    hook_build_output_s: float | None = None,
 ) -> TeaserSpec:
     """Build a spec for the prepended tail-inversion teaser clip."""
     if hook_clip is not None and hook_media is not None:
         crop_start, crop_end = _hook_crop_range(hook_clip, hook_media)
-        _, (tail_start, tail_end) = split_hook_crop_by_duration(
+        build_out = (
+            hook_build_output_s
+            if hook_build_output_s is not None
+            else config.duration_s
+        )
+        _, (tail_start, tail_end) = split_hook_crop_by_output_ratio(
             crop_start,
             crop_end,
             config.duration_s,
+            build_out,
         )
         if tail_end <= tail_start + 1e-9:
             raise ValueError(

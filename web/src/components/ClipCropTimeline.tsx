@@ -10,6 +10,7 @@ interface ClipCropTimelineProps {
   slotRole?: SlotRole;
   onCropChange: (startS: number, endS: number) => void;
   onCropCommit?: (startS: number, endS: number) => void;
+  onDragActiveChange?: (dragging: boolean) => void;
 }
 
 type DragMode = "start" | "end" | "range" | null;
@@ -22,6 +23,7 @@ export function ClipCropTimeline({
   slotRole = "clip",
   onCropChange,
   onCropCommit,
+  onDragActiveChange,
 }: ClipCropTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const panAnchorRef = useRef<{ anchorTime: number; startS: number; endS: number } | null>(
@@ -69,6 +71,10 @@ export function ClipCropTimeline({
   );
 
   useEffect(() => {
+    onDragActiveChange?.(dragging != null);
+  }, [dragging, onDragActiveChange]);
+
+  useEffect(() => {
     if (!dragging) return;
 
     const onMove = (event: PointerEvent) => {
@@ -111,8 +117,10 @@ export function ClipCropTimeline({
     cropStartS,
   ]);
 
-  const startPct = durationS > 0 ? (cropStartS / durationS) * 100 : 0;
-  const endPct = durationS > 0 ? (cropEndS / durationS) * 100 : 100;
+  const startPct =
+    durationS > 0 ? Math.max(0, Math.min(100, (cropStartS / durationS) * 100)) : 0;
+  const endPct =
+    durationS > 0 ? Math.max(startPct, Math.min(100, (cropEndS / durationS) * 100)) : 100;
 
   return (
     <div className="space-y-2">
