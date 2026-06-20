@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import librosa
 import numpy as np
@@ -70,6 +73,27 @@ def estimate_key(chroma: np.ndarray) -> str:
     return best_key
 
 
+def _default_feature_workers() -> int:
+    return min(4, os.cpu_count() or 4)
+
+
+def _parallel_map(
+    tasks: dict[str, Callable[[], np.ndarray]],
+    *,
+    max_workers: int,
+) -> dict[str, np.ndarray]:
+    if max_workers <= 1 or len(tasks) <= 1:
+        return {name: fn() for name, fn in tasks.items()}
+
+    results: dict[str, np.ndarray] = {}
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(tasks))) as pool:
+        futures = {pool.submit(fn): name for name, fn in tasks.items()}
+        for future in futures:
+            name = futures[future]
+            results[name] = future.result()
+    return results
+
+
 def compute_beat_sync_features(
     y: np.ndarray,
     sr: int,
@@ -77,14 +101,35 @@ def compute_beat_sync_features(
     *,
     hop_length: int = 512,
     n_fft: int = 2048,
+    stft_power: np.ndarray | None = None,
+    max_workers: int | None = None,
 ) -> BeatSyncFeatures:
     """Aggregate frame features to beat-synchronous matrices."""
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length)
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, hop_length=hop_length, n_mfcc=13)
-    rms = librosa.feature.rms(y=y, hop_length=hop_length)
-    contrast = librosa.feature.spectral_contrast(y=y, sr=sr, hop_length=hop_length, n_fft=n_fft)
-    tonnetz = librosa.feature.tonnetz(y=librosa.effects.harmonic(y), sr=sr)
+    if stft_power is None:
+        stft_power = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length)) ** 2
 
+    workers = max(1, max_workers if max_workers is not None else _default_feature_workers())
+
+    feature_tasks: dict[str, Callable[[], np.ndarray]] = {
+        "chroma": lambda: librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length),
+        "mfcc": lambda: librosa.feature.mfcc(
+            S=stft_power,
+            sr=sr,
+            hop_length=hop_length,
+            n_mfcc=13,
+        ),
+        "rms": lambda: librosa.feature.rms(S=stft_power),
+        "contrast": lambda: librosa.feature.spectral_contrast(
+            S=stft_power,
+            sr=sr,
+            hop_length=hop_length,
+            n_fft=n_fft,
+        ),
+    }
+    raw = _parallel_map(feature_tasks, max_workers=workers)
+    tonnetz = librosa.feature.tonnetz(chroma=raw["chroma"])
+
+    chroma = raw["chroma"]
     beat_frames = librosa.time_to_frames(beat_track.beat_times_s, sr=sr, hop_length=hop_length)
     beat_frames = np.clip(beat_frames, 0, chroma.shape[1] - 1)
     n_beats = int(beat_track.beat_times_s.size)
@@ -113,9 +158,9 @@ def compute_beat_sync_features(
         beat_times_s=beat_track.beat_times_s.astype(float),
         downbeat_times_s=beat_track.downbeat_times_s.astype(float),
         chroma_sync=sync(chroma),
-        mfcc_sync=sync(mfcc),
-        rms_sync=sync(rms),
-        contrast_sync=sync(contrast),
+        mfcc_sync=sync(raw["mfcc"]),
+        rms_sync=sync(raw["rms"]),
+        contrast_sync=sync(raw["contrast"]),
         tonnetz_sync=sync(tonnetz),
     )
 

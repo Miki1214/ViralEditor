@@ -36,6 +36,7 @@ class AudioDspConfig(DomainModel):
     tempo_min_bpm: float = 60.0
     tempo_max_bpm: float = 180.0
     duration_tolerance_s: float = 0.5
+    feature_workers: int | None = None
 
 
 @dataclass(frozen=True)
@@ -389,8 +390,17 @@ def analyze_audio_with_envelope(
         logger.info("Beat engine BPM %.1f (tempo estimate %.1f)", global_bpm, raw_bpm)
 
     progress("Beat-synced RMS, MFCC, and tonal features")
+    stft_mag = np.abs(
+        librosa.stft(y, n_fft=cfg.n_fft, hop_length=cfg.hop_length)
+    )
     beat_features = compute_beat_sync_features(
-        y, sr, beat_track, hop_length=cfg.hop_length, n_fft=cfg.n_fft
+        y,
+        sr,
+        beat_track,
+        hop_length=cfg.hop_length,
+        n_fft=cfg.n_fft,
+        stft_power=stft_mag**2,
+        max_workers=cfg.feature_workers,
     )
 
     progress("Onset peak detection")
@@ -421,9 +431,6 @@ def analyze_audio_with_envelope(
         max_amp = 1.0
     amplitudes_norm = raw_amplitudes / max_amp
 
-    stft_mag = np.abs(
-        librosa.stft(y, n_fft=cfg.n_fft, hop_length=cfg.hop_length)
-    )
     freqs = librosa.fft_frequencies(sr=sr, n_fft=cfg.n_fft)
 
     progress("Scope lanes — loudness, bands, build, drop salience, flux, pacing")
