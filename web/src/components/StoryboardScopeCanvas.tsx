@@ -15,9 +15,45 @@ interface StoryboardScopeCanvasProps {
 const TRACE = "#3DDC84";
 const ZOOM = "#F4C430";
 const ROTATE = "#38BDF8";
-const HEIGHT = 72;
+const TICK_COLOR = "rgba(139,146,152,0.35)";
+const LABEL_COLOR = "#8B9298";
+const WAVEFORM_HEIGHT = 72;
+const RULER_HEIGHT = 22;
+const TOTAL_HEIGHT = WAVEFORM_HEIGHT + RULER_HEIGHT;
 const PAD_X = 4;
 const PAD_Y = 8;
+const TICK_INTERVALS_S = [1, 2, 5, 10, 15, 30, 60, 120, 300];
+
+function formatScopeTime(seconds: number): string {
+  const total = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
+}
+
+function timeTickInterval(durationS: number, innerW: number): number {
+  if (durationS <= 0 || innerW <= 0) return 10;
+  const targetSpacingPx = 96;
+  const roughInterval = (durationS / innerW) * targetSpacingPx;
+  for (const interval of TICK_INTERVALS_S) {
+    if (interval >= roughInterval) return interval;
+  }
+  return TICK_INTERVALS_S[TICK_INTERVALS_S.length - 1];
+}
+
+function buildTimeTicks(durationS: number, innerW: number): number[] {
+  if (durationS <= 0) return [0];
+  const interval = timeTickInterval(durationS, innerW);
+  const ticks: number[] = [];
+  for (let timeS = 0; timeS <= durationS + 0.001; timeS += interval) {
+    ticks.push(Math.min(timeS, durationS));
+  }
+  const last = ticks[ticks.length - 1];
+  if (last == null || Math.abs(last - durationS) > 0.5) {
+    ticks.push(durationS);
+  }
+  return ticks;
+}
 
 function blockPoints(
   points: WaveformPayload["points"],
@@ -69,7 +105,12 @@ export function StoryboardScopeCanvas({
 
   const viewWidth = 640;
   const innerW = viewWidth - PAD_X * 2;
-  const innerH = HEIGHT - PAD_Y * 2;
+  const innerH = WAVEFORM_HEIGHT - PAD_Y * 2;
+
+  const timeTicks = useMemo(
+    () => buildTimeTicks(blockDurationS, innerW),
+    [blockDurationS, innerW],
+  );
 
   const waveformPath = useMemo(() => {
     if (points.length === 0 || blockDurationS <= 0) return "";
@@ -118,9 +159,9 @@ export function StoryboardScopeCanvas({
         </div>
       )}
       <svg
-        viewBox={`0 0 ${viewWidth} ${HEIGHT}`}
+        viewBox={`0 0 ${viewWidth} ${TOTAL_HEIGHT}`}
         width="100%"
-        height={HEIGHT}
+        height={TOTAL_HEIGHT}
         className="block rounded border border-monitor-border bg-[#141618] cursor-pointer"
         role="img"
         aria-label="Storyboard music block waveform"
@@ -131,6 +172,21 @@ export function StoryboardScopeCanvas({
           if (slotId) onSelectSlot(slotId);
         }}
       >
+        <rect
+          x={0}
+          y={WAVEFORM_HEIGHT}
+          width={viewWidth}
+          height={RULER_HEIGHT}
+          fill="#101214"
+        />
+        <line
+          x1={PAD_X}
+          x2={viewWidth - PAD_X}
+          y1={WAVEFORM_HEIGHT}
+          y2={WAVEFORM_HEIGHT}
+          stroke={TICK_COLOR}
+          strokeWidth={1}
+        />
         {orderedSlots.map((slot, index) => {
           const selected = slot.id === selectedSlotId;
           const color = slotColorForIndex(index);
@@ -274,8 +330,8 @@ export function StoryboardScopeCanvas({
                 key={`downbeat-${timeS}`}
                 x1={x}
                 x2={x}
-                y1={HEIGHT - PAD_Y - 6}
-                y2={HEIGHT - PAD_Y}
+                y1={WAVEFORM_HEIGHT - PAD_Y - 6}
+                y2={WAVEFORM_HEIGHT - PAD_Y}
                 stroke="rgba(139,146,152,0.45)"
                 strokeWidth={1.5}
                 style={{ pointerEvents: "none" }}
@@ -311,6 +367,33 @@ export function StoryboardScopeCanvas({
             style={{ pointerEvents: "none" }}
           />
         )}
+
+        {timeTicks.map((timeS) => {
+          const x = PAD_X + (timeS / blockDurationS) * innerW;
+          const anchor = timeS <= 0 ? "start" : timeS >= blockDurationS - 0.5 ? "end" : "middle";
+          return (
+            <g key={`tick-${timeS}`} style={{ pointerEvents: "none" }}>
+              <line
+                x1={x}
+                x2={x}
+                y1={WAVEFORM_HEIGHT - 4}
+                y2={WAVEFORM_HEIGHT + 5}
+                stroke={TICK_COLOR}
+                strokeWidth={1}
+              />
+              <text
+                x={x}
+                y={TOTAL_HEIGHT - 5}
+                fill={LABEL_COLOR}
+                fontSize={10}
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                textAnchor={anchor}
+              >
+                {formatScopeTime(timeS)}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );

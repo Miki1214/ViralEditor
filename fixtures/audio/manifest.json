@@ -1,0 +1,352 @@
+{
+  "schema": "viral-editor/audio-fixture/1",
+  "notes": "expected_transients are ground-truth targets for manual or automated checks. type=onset means any transient type at that time. verified_transients are produced by the current analyze_audio classifier when this manifest was generated. Re-run: python scripts/generate_audio_fixtures.py",
+  "samples": [
+    {
+      "file": "validation_clicks.wav",
+      "description": "Metronome-like clicks every 0.5s \u2014 onset timing reference",
+      "duration_s": 5.0,
+      "sample_rate": 22050,
+      "expected_transients": [
+        {
+          "time_s": 0.5,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 1.0,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 1.5,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 2.0,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 2.5,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 3.0,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 3.5,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 4.0,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        },
+        {
+          "time_s": 4.5,
+          "type": "onset",
+          "tolerance_ms": 80,
+          "note": "Any classified type \u2014 verifies onset timing"
+        }
+      ],
+      "verified_transients": [
+        {
+          "timestamp_ms": 488,
+          "time_s": 0.488,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 998,
+          "time_s": 0.998,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1486,
+          "time_s": 1.486,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1997,
+          "time_s": 1.997,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2485,
+          "time_s": 2.485,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2995,
+          "time_s": 2.995,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 3483,
+          "time_s": 3.483,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 3994,
+          "time_s": 3.994,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 4481,
+          "time_s": 4.481,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        }
+      ]
+    },
+    {
+      "file": "validation_drop.wav",
+      "description": "Quiet ticks plus one loud hit at 2.5s \u2014 drop / zoom reference",
+      "duration_s": 4.0,
+      "sample_rate": 22050,
+      "expected_transients": [
+        {
+          "time_s": 2.5,
+          "type": "drop",
+          "tolerance_ms": 120,
+          "note": "Loudest hit"
+        },
+        {
+          "time_s": 0.5,
+          "type": "onset",
+          "tolerance_ms": 100
+        },
+        {
+          "time_s": 1.0,
+          "type": "onset",
+          "tolerance_ms": 100
+        },
+        {
+          "time_s": 1.5,
+          "type": "onset",
+          "tolerance_ms": 100
+        }
+      ],
+      "verified_transients": [
+        {
+          "timestamp_ms": 488,
+          "time_s": 0.488,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 998,
+          "time_s": 0.998,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1486,
+          "time_s": 1.486,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2485,
+          "time_s": 2.485,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        }
+      ]
+    },
+    {
+      "file": "validation_bass.wav",
+      "description": "Low-frequency thumps \u2014 bass / rotate reference",
+      "duration_s": 4.0,
+      "sample_rate": 22050,
+      "expected_transients": [
+        {
+          "time_s": 0.75,
+          "type": "bass",
+          "tolerance_ms": 150
+        },
+        {
+          "time_s": 1.75,
+          "type": "bass",
+          "tolerance_ms": 150
+        },
+        {
+          "time_s": 2.75,
+          "type": "bass",
+          "tolerance_ms": 150
+        }
+      ],
+      "verified_transients": [
+        {
+          "timestamp_ms": 255,
+          "time_s": 0.255,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 488,
+          "time_s": 0.488,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 743,
+          "time_s": 0.743,
+          "type": "bass",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 859,
+          "time_s": 0.859,
+          "type": "bass",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 998,
+          "time_s": 0.998,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1254,
+          "time_s": 1.254,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1486,
+          "time_s": 1.486,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1741,
+          "time_s": 1.741,
+          "type": "bass",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1858,
+          "time_s": 1.858,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 1997,
+          "time_s": 1.997,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2252,
+          "time_s": 2.252,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2485,
+          "time_s": 2.485,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2740,
+          "time_s": 2.74,
+          "type": "bass",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2856,
+          "time_s": 2.856,
+          "type": "bass",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2995,
+          "time_s": 2.995,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 3251,
+          "time_s": 3.251,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 3483,
+          "time_s": 3.483,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 3738,
+          "time_s": 3.738,
+          "type": "percussive",
+          "amplitude_normalized": 0.0
+        }
+      ]
+    },
+    {
+      "file": "validation_mixed.wav",
+      "description": "Combined bass thumps and one drop \u2014 Spatial FX reference",
+      "duration_s": 5.0,
+      "sample_rate": 22050,
+      "expected_transients": [
+        {
+          "time_s": 2.25,
+          "type": "bass",
+          "tolerance_ms": 150,
+          "spatial_fx": "rotate"
+        },
+        {
+          "time_s": 3.75,
+          "type": "drop",
+          "tolerance_ms": 120,
+          "spatial_fx": "zoom"
+        }
+      ],
+      "verified_transients": [
+        {
+          "timestamp_ms": 2229,
+          "time_s": 2.229,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 2368,
+          "time_s": 2.368,
+          "type": "bass",
+          "amplitude_normalized": 0.0
+        },
+        {
+          "timestamp_ms": 3738,
+          "time_s": 3.738,
+          "type": "drop",
+          "amplitude_normalized": 0.0
+        }
+      ]
+    }
+  ]
+}

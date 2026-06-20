@@ -73,12 +73,15 @@ def build_waveform_payload(
         sections = structure.sections if structure is not None else []
         loop_qualities = list_target_loop_qualities(timeline, features, sections)
         matchable_targets = [entry.target_duration_s for entry in loop_qualities]
-        max_loop_pct = max(entry.loop_quality_pct for entry in loop_qualities)
-        best_loop_targets = [
-            entry.target_duration_s
-            for entry in loop_qualities
-            if entry.loop_quality_pct == max_loop_pct
-        ]
+        if loop_qualities:
+            max_loop_pct = max(entry.loop_quality_pct for entry in loop_qualities)
+            best_loop_targets = [
+                entry.target_duration_s
+                for entry in loop_qualities
+                if entry.loop_quality_pct == max_loop_pct
+            ]
+        else:
+            best_loop_targets = []
     else:
         loop_qualities = []
         matchable_targets = [

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from viral_editor.audio.features import BeatFeaturesMeta, BeatSyncFeatures
 from viral_editor.audio.storyboard import (
+    _compute_boundaries,
+    _recommended_slot_count,
     apply_hook_inversion_layout,
     hook_payoff_downbeats_s,
     plan_storyboard,
@@ -16,6 +20,8 @@ from viral_editor.audio.storyboard import (
     storyboard_to_segments,
 )
 from viral_editor.models import MediaInfo, MusicBlock, Transient
+
+FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "audio"
 
 
 def _block(duration: float = 30.0) -> MusicBlock:
@@ -61,10 +67,160 @@ def test_plan_storyboard_creates_hook_and_slots() -> None:
     block = _block(24.0)
     features = _features([10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 34.0])
     storyboard = plan_storyboard(block, features=features, transients=[])
-    assert len(storyboard.slots) >= 3
+    assert len(storyboard.slots) >= 2
     assert storyboard.slots[0].role == "hook"
     assert storyboard.loop_to_hook is True
     assert storyboard.total_duration_s == pytest.approx(24.0)
+
+
+def _assert_slots_tile_timeline(slots, total_duration_s: float) -> None:
+    """Slots partition the block: no overlap, no zero width, full coverage."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    assert ordered, "expected at least one slot"
+    assert ordered[0].out_start_s == pytest.approx(0.0)
+    assert ordered[-1].out_end_s == pytest.approx(total_duration_s, abs=1e-3)
+    for slot in ordered:
+        span = slot.out_end_s - slot.out_start_s
+        assert span > 1e-6, f"{slot.role} has zero width"
+        assert slot.out_start_s >= -1e-3
+        assert slot.out_end_s <= total_duration_s + 1e-3
+    for left, right in zip(ordered, ordered[1:]):
+        assert left.out_end_s <= right.out_start_s + 1e-3, "slots overlap on timeline"
+        assert left.out_end_s == pytest.approx(right.out_start_s, abs=1e-3)
+
+
+def _short_block(duration_s: float = 5.5) -> MusicBlock:
+    return MusicBlock(
+        id="short",
+        start_s=0.0,
+        end_s=duration_s,
+        duration_s=duration_s,
+        score=0.9,
+        drop_count=1,
+        transient_count=4,
+        label="Full",
+        reason="test",
+        loop_quality=0.5,
+        phrase_bars=4,
+    )
+
+
+@pytest.mark.parametrize(
+    ("duration_s", "expected_slots"),
+    [
+        (4.0, 1),
+        (5.5, 1),
+        (6.0, 2),
+        (8.0, 2),
+        (12.0, 3),
+        (24.0, 6),
+    ],
+)
+def test_recommended_slot_count_scales_with_duration(
+    duration_s: float,
+    expected_slots: int,
+) -> None:
+    assert _recommended_slot_count(duration_s) == expected_slots
+
+
+def test_recommended_slot_count_respects_explicit_cap() -> None:
+    assert _recommended_slot_count(5.5, target_slot_count=3) == 3
+    assert _recommended_slot_count(4.0, target_slot_count=5) == 2
+
+
+def test_compute_boundaries_no_duplicate_endpoints() -> None:
+    """Regression: sparse downbeats used to pad with repeated window_end (e.g. [0, 2, 5.5, 5.5])."""
+    downbeats = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    bounds = _compute_boundaries(0.0, 5.5, downbeats, 3)
+    assert len(bounds) == 4
+    assert bounds[0] == pytest.approx(0.0)
+    assert bounds[-1] == pytest.approx(5.5)
+    assert len({round(value, 4) for value in bounds}) == len(bounds)
+    spans = [bounds[index + 1] - bounds[index] for index in range(len(bounds) - 1)]
+    assert all(span >= 1.5 - 1e-3 for span in spans)
+
+
+def test_short_track_uses_single_slot_without_overlap() -> None:
+    """Short fixtures (e.g. validation_drop.wav) should not force three overlapping clips."""
+    block = _short_block(5.5)
+    features = _features([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    transients = [
+        Transient(timestamp_ms=2485, amplitude_normalized=1.0, type="drop"),
+    ]
+    storyboard = plan_storyboard(block, features=features, transients=transients)
+    assert len(storyboard.slots) == 1
+    assert storyboard.slots[0].role == "hook"
+
+    relaid = relayout_beat_aligned_timeline(
+        storyboard.slots,
+        total_duration_s=storyboard.total_duration_s,
+        features=features,
+    )
+    _assert_slots_tile_timeline(relaid, storyboard.total_duration_s)
+
+
+def test_explicit_three_slots_on_short_block_stays_within_duration() -> None:
+    """Even when three slots are requested, relayout must not extend past the block."""
+    block = _short_block(5.5)
+    features = _features([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    storyboard = plan_storyboard(
+        block,
+        features=features,
+        transients=[],
+        target_slot_count=3,
+    )
+    assert len(storyboard.slots) == 3
+
+    relaid = relayout_beat_aligned_timeline(
+        storyboard.slots,
+        total_duration_s=storyboard.total_duration_s,
+        features=features,
+    )
+    _assert_slots_tile_timeline(relaid, storyboard.total_duration_s)
+
+
+def test_plan_and_relayout_never_overlap_for_varied_durations() -> None:
+    for duration_s in (4.0, 5.5, 8.0, 12.0, 17.74, 24.0):
+        block = _short_block(duration_s)
+        downbeat_step = max(1.0, duration_s / 8.0)
+        downbeats = [round(index * downbeat_step, 3) for index in range(int(duration_s / downbeat_step) + 1)]
+        features = _features(downbeats)
+        storyboard = plan_storyboard(block, features=features, transients=[])
+        relaid = relayout_beat_aligned_timeline(
+            storyboard.slots,
+            total_duration_s=storyboard.total_duration_s,
+            features=features,
+        )
+        _assert_slots_tile_timeline(relaid, storyboard.total_duration_s)
+
+
+def test_validation_drop_fixture_storyboard() -> None:
+    """End-to-end: validation_drop.wav should plan a single non-overlapping hook slot."""
+    from viral_editor.audio.beat_detector import AudioDspConfig, analyze_audio_with_envelope
+
+    path = FIXTURES_DIR / "validation_drop.wav"
+    assert path.is_file()
+
+    result = analyze_audio_with_envelope(
+        path,
+        config=AudioDspConfig(drop_percentile=0.85, min_drop_gap_ms=800),
+    )
+    duration = result.timeline.audio_duration_seconds
+    block = _short_block(duration)
+    storyboard = plan_storyboard(
+        block,
+        features=result.beat_features,
+        transients=result.timeline.transients,
+    )
+    assert len(storyboard.slots) == 1
+    assert storyboard.slots[0].role == "hook"
+
+    relaid = relayout_beat_aligned_timeline(
+        storyboard.slots,
+        total_duration_s=storyboard.total_duration_s,
+        features=result.beat_features,
+    )
+    _assert_slots_tile_timeline(relaid, storyboard.total_duration_s)
 
 
 def test_plan_storyboard_marks_max_drop_as_punch() -> None:

@@ -226,6 +226,36 @@ def test_tied_best_loop_targets_share_top_score(
     assert sorted(payload.best_loop_target_durations_s) == [15.0, 20.0, 25.0]
 
 
+def test_build_waveform_payload_empty_loop_qualities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Short tracks may have no phrase-aligned loops; waveform must still serialize."""
+    features = _synthetic_abab_features(n_beats=9, bpm=120.0)
+    timeline = _timeline(5.0, bpm=120.0)
+
+    def fake_enumerate(*_args, **_kwargs) -> list:
+        return []
+
+    monkeypatch.setattr(
+        "viral_editor.audio.loop_planner._enumerate_phrase_candidates",
+        fake_enumerate,
+    )
+    from viral_editor.audio.waveform import build_waveform_payload
+    import numpy as np
+    from viral_editor.models import MusicBlockPlan
+
+    payload = build_waveform_payload(
+        timeline,
+        np.linspace(0.1, 1.0, 50),
+        MusicBlockPlan(target_duration_s=5.0, track_duration_s=5.0, blocks=[]),
+        features=features,
+    )
+    assert payload.duration_s == 5.0
+    assert payload.target_loop_qualities == []
+    assert payload.best_loop_target_durations_s == []
+    assert payload.matchable_target_durations_s == []
+
+
 def test_list_matchable_target_durations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -19,6 +19,16 @@ from viral_editor.video.teaser import split_hook_crop_by_duration
 _MIN_SLOT_S = 1.5
 _DEFAULT_XFADE_S = 0.25
 _PUNCH_SPEED = 0.65
+_MAX_SLOT_COUNT = 8
+
+
+def _recommended_slot_count(duration: float, target_slot_count: int | None = None) -> int:
+    """Pick a slot count that fits the block without forcing extra clips on short tracks."""
+    max_fit = max(1, int(duration / _MIN_SLOT_S))
+    if target_slot_count is not None:
+        return max(1, min(target_slot_count, max_fit))
+    ideal = max(1, min(_MAX_SLOT_COUNT, int(round(duration / 4.0))))
+    return max(1, min(ideal, max_fit))
 
 
 def _downbeats_in_window(
@@ -73,7 +83,7 @@ def plan_storyboard(
     duration = max(window_end - window_start, _MIN_SLOT_S)
 
     downbeats = _downbeats_in_window(features, window_start, window_end)
-    slot_count = target_slot_count or max(3, min(8, int(round(duration / 4.0))))
+    slot_count = _recommended_slot_count(duration, target_slot_count)
     boundaries = _compute_boundaries(
         window_start,
         window_end,
@@ -132,21 +142,24 @@ def _compute_boundaries(
     if target_slot_count <= 0:
         return [window_start, window_end]
 
+    slot_count = min(target_slot_count, max(1, int(duration / _MIN_SLOT_S)))
+
+    def _even_split(count: int) -> list[float]:
+        step = duration / count
+        bounds = [round(window_start + step * index, 6) for index in range(count)]
+        bounds.append(round(window_end, 6))
+        return bounds
+
     local_downbeats = [
         t for t in downbeats if window_start - 1e-6 <= t < window_end - 1e-6
     ]
-    if len(local_downbeats) < 2:
-        step = duration / max(target_slot_count, 1)
-        boundaries = [window_start + step * index for index in range(target_slot_count)]
-        boundaries.append(window_end)
-        if boundaries[-1] < window_end - 1e-6:
-            boundaries[-1] = window_end
-        return boundaries
+    if len(local_downbeats) < 2 or slot_count == 1:
+        return _even_split(slot_count)
 
-    ideal = duration / target_slot_count
+    ideal = duration / slot_count
     boundaries = [window_start]
     cursor = window_start
-    while cursor < window_end - _MIN_SLOT_S - 1e-6 and len(boundaries) < target_slot_count:
+    while len(boundaries) < slot_count and cursor < window_end - _MIN_SLOT_S - 1e-6:
         target = cursor + ideal
         candidates = [t for t in local_downbeats if t > cursor + _MIN_SLOT_S - 1e-6]
         if not candidates:
@@ -156,11 +169,17 @@ def _compute_boundaries(
             break
         boundaries.append(next_boundary)
         cursor = next_boundary
-    if boundaries[-1] < window_end - 1e-6:
-        boundaries.append(window_end)
-    while len(boundaries) < target_slot_count + 1:
-        boundaries.append(window_end)
-    return boundaries[: target_slot_count + 1]
+    boundaries.append(round(window_end, 6))
+
+    actual_slots = len(boundaries) - 1
+    if actual_slots < slot_count:
+        return _even_split(slot_count)
+    if any(
+        boundaries[index + 1] - boundaries[index] < _MIN_SLOT_S - 1e-6
+        for index in range(slot_count)
+    ):
+        return _even_split(slot_count)
+    return boundaries[: slot_count + 1]
 
 
 def _relative_downbeats(
@@ -255,15 +274,11 @@ def _place_timeline_slot(
     end_s: float,
     target_duration_s: float | None = None,
 ) -> StorySlot:
-    """Place a slot on the output timeline without inflating hook part durations."""
+    """Place a slot on the output timeline without stretching past its boundary."""
     if target_duration_s is not None:
         duration = round(target_duration_s, 6)
-    elif slot.role in ("clip", "punch"):
-        duration = round(max(end_s - start_s, _MIN_SLOT_S), 6)
-        end_s = start_s + duration
     else:
-        duration = round(max(end_s - start_s, _min_slot_duration_s(slot.role)), 6)
-        end_s = start_s + duration
+        duration = round(max(end_s - start_s, 1e-6), 6)
     return slot.model_copy(
         update={
             "out_start_s": round(start_s, 6),
@@ -279,13 +294,12 @@ def _slot_from_boundary(
     start_s: float,
     end_s: float,
 ) -> StorySlot:
-    duration = max(end_s - start_s, _min_slot_duration_s(slot.role))
-    end_s = start_s + duration
+    duration = round(max(end_s - start_s, 1e-6), 6)
     return slot.model_copy(
         update={
             "out_start_s": round(start_s, 6),
             "out_end_s": round(end_s, 6),
-            "target_duration_s": round(duration, 6),
+            "target_duration_s": duration,
         }
     )
 

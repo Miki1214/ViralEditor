@@ -95,6 +95,10 @@ export default function App() {
   const seekPreviewRef = useRef<((videoTimeS: number) => void) | null>(null);
   const playPreviewRef = useRef<(() => void) | null>(null);
   const previewRestoreRef = useRef<PreviewTransportRestore | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
+  const eventsUnsubRef = useRef<(() => void) | null>(null);
+
+  activeJobIdRef.current = activeJobId;
 
   const capturePreviewTransport = useCallback(
     (overrides: Partial<PreviewTransportRestore> = {}) => {
@@ -190,6 +194,7 @@ export default function App() {
   const loadScope = (jobId: string) => {
     fetchWaveform(jobId)
       .then((payload) => {
+        if (activeJobIdRef.current !== jobId) return;
         setWaveform(payload);
         setSelectedBlockId(payload.selected_block_id);
         const selected = payload.blocks.find((block) => block.id === payload.selected_block_id);
@@ -202,10 +207,14 @@ export default function App() {
         window.setTimeout(() => {
           fetchWaveform(jobId)
             .then((payload) => {
+              if (activeJobIdRef.current !== jobId) return;
               setWaveform(payload);
               setSelectedBlockId(payload.selected_block_id);
             })
-            .catch(() => undefined);
+            .catch((err) => {
+              if (activeJobIdRef.current !== jobId) return;
+              setError(err instanceof Error ? err.message : "Could not load audio scope");
+            });
         }, 500);
       });
   };
@@ -213,11 +222,15 @@ export default function App() {
   const loadStoryboard = (jobId: string) => {
     fetchStoryboard(jobId)
       .then((payload) => {
+        if (activeJobIdRef.current !== jobId) return;
         setStoryboard(payload);
         setPreviewReady(payload.preview_ready);
         setSelectedSlotId((current) => current ?? payload.slots[0]?.id ?? null);
       })
-      .catch(() => setStoryboard(null));
+      .catch(() => {
+        if (activeJobIdRef.current !== jobId) return;
+        setStoryboard(null);
+      });
   };
 
   const handleAudioSelected = async (file: File) => {
@@ -229,6 +242,8 @@ export default function App() {
     setEvents([]);
     setPreviewReady(false);
     setPreviewVersion(0);
+    eventsUnsubRef.current?.();
+    eventsUnsubRef.current = null;
 
     try {
       const { id } = await createDraftJob({
@@ -246,7 +261,7 @@ export default function App() {
       setActiveJobId(id);
       setJobStatus("running");
 
-      subscribeJobEvents(
+      eventsUnsubRef.current = subscribeJobEvents(
         id,
         (event) => {
           setEvents((prev) => [...prev, event]);
@@ -593,6 +608,11 @@ export default function App() {
                   onSelectBlock={handleSelectBlock}
                   switchingTarget={regenerating}
                 />
+              ) : analyzing && activeJobId ? (
+                <section className="space-y-4 pt-4">
+                  <p className="text-xs uppercase tracking-widest text-scope-dim">Audio scope</p>
+                  <p className="text-sm text-scope-dim">Analyzing track…</p>
+                </section>
               ) : null
             }
           />
