@@ -90,7 +90,7 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available(), tor
 
 You should see a `+cu124` version and `True`. Demucs then auto-selects your NVIDIA GPU (`DEMUCS_DEVICE=auto`, the default). Progress will show `GPU · <your card name>`. Force CPU with `DEMUCS_DEVICE=cpu`.
 
-CPU tuning: default **8 parallel chunk jobs** (`DEMUCS_NUM_WORKERS`), `shifts=0`, `overlap=0.15`. Vocal stems cache per job as `temp/vocal_stem_demucs.npz`.
+CPU tuning: default **8 parallel chunk jobs** (`DEMUCS_NUM_WORKERS`), `shifts=0`, `overlap=0.15`. Vocal stems cache under `temp/vocal_stem_demucs.npz` per job and globally under `%TORCH_HOME%/vocal_stems/` (content hash — survives re-upload / new jobs). Set `VIRAL_VOCAL_STEM_CACHE` to override the global folder. On cache hit telemetry shows `Using cached Demucs vocal stem (skipped GPU inference)`.
 
 For neural beat tracking locally (optional extra):
 

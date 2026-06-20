@@ -163,7 +163,7 @@ def test_separate_vocal_stem_keeps_librosa_channel_first_layout(tmp_path: Path) 
             __import__("torch").zeros(4, 2, 8000),
         ]
 
-        separate_vocal_stem(audio_path)
+        separate_vocal_stem(audio_path, cache_enabled=False)
 
     assert captured["shape"] == (2, 8000)
 
@@ -259,7 +259,7 @@ def test_separate_vocal_stem_passes_parallel_workers(tmp_path: Path) -> None:
         mock_model.audio_channels = 2
         mock_apply.return_value = [torch.zeros(4, 2, 44100)]
 
-        separate_vocal_stem(audio_path, num_workers=4)
+        separate_vocal_stem(audio_path, num_workers=4, cache_enabled=False)
 
     assert mock_apply.call_args.kwargs["num_workers"] == 4
     assert mock_apply.call_args.kwargs["shifts"] == 0
@@ -298,6 +298,36 @@ def test_vocal_stem_cache_skips_demucs(tmp_path: Path) -> None:
     assert sr == 44100
     assert np.allclose(loaded, vocal)
     assert loaded_shares["vocals"] == pytest.approx(0.4)
+
+
+def test_global_vocal_stem_cache_survives_new_job_path(tmp_path: Path) -> None:
+    audio_path = tmp_path / "track.wav"
+    audio_path.write_bytes(b"same-audio-bytes")
+    vocal = np.linspace(0.0, 1.0, 2205, dtype=np.float32)
+    shares = {"drums": 0.2, "bass": 0.2, "other": 0.2, "vocals": 0.4}
+    global_dir = tmp_path / "global_cache"
+    job_a = tmp_path / "job_a" / "vocal_stem_demucs.npz"
+    job_b = tmp_path / "job_b" / "vocal_stem_demucs.npz"
+
+    from viral_editor.audio.vocal_separation import (
+        _save_vocal_stem_cache,
+        peek_vocal_stem_cache,
+        vocal_stem_cache_paths,
+    )
+
+    with patch("viral_editor.audio.vocal_separation._global_vocal_stem_cache_dir", return_value=global_dir):
+        global_path = vocal_stem_cache_paths(audio_path, job_a)[-1]
+        _save_vocal_stem_cache(global_path, audio_path, vocal, 44100, shares, shifts=0, overlap=0.15)
+        assert peek_vocal_stem_cache(audio_path, job_b, demucs_shifts=0, demucs_overlap=0.15)
+        paths = vocal_stem_cache_paths(audio_path, job_b)
+        assert any(path.parent == global_dir for path in paths)
+
+        with patch("viral_editor.audio.vocal_separation.apply_model") as mock_apply:
+            loaded, sr, _ = separate_vocal_stem(audio_path, cache_path=job_b)
+
+    mock_apply.assert_not_called()
+    assert sr == 44100
+    assert np.allclose(loaded, vocal)
 
 
 def test_vocal_lane_flat_for_instrumental_fixture(tmp_path: Path) -> None:

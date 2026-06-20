@@ -456,6 +456,7 @@ def analyze_audio_with_envelope(
     if cfg.vocal_separation_enabled:
         from viral_editor.audio.vocal_separation import (
             demucs_progress_label,
+            peek_vocal_stem_cache,
             resolve_demucs_device,
             resolve_demucs_workers,
         )
@@ -464,13 +465,21 @@ def analyze_audio_with_envelope(
         workers = resolve_demucs_workers(cfg.demucs_workers)
         cache_path = (
             cache_dir / "vocal_stem_demucs.npz"
-            if cache_dir is not None and cfg.vocal_stem_cache_enabled
+            if cache_dir is not None
             else None
         )
-        progress(
-            "Separating vocal stem (Demucs, "
-            f"{demucs_progress_label(device, num_workers=workers if device.type == 'cpu' else 0)})"
-        )
+        if cfg.vocal_stem_cache_enabled and peek_vocal_stem_cache(
+            resolved,
+            cache_path,
+            demucs_shifts=cfg.demucs_shifts,
+            demucs_overlap=cfg.demucs_overlap,
+        ):
+            progress("Using cached Demucs vocal stem (skipped GPU inference)")
+        else:
+            progress(
+                "Separating vocal stem (Demucs, "
+                f"{demucs_progress_label(device, num_workers=workers if device.type == 'cpu' else 0)})"
+            )
         vocal_lane = compute_vocal_activity(
             resolved,
             hop_length=cfg.hop_length,
@@ -484,7 +493,7 @@ def analyze_audio_with_envelope(
             demucs_overlap=cfg.demucs_overlap,
             demucs_device=cfg.demucs_device,
             cache_path=cache_path,
-            on_cache_hit=lambda: progress("Using cached Demucs vocal stem"),
+            cache_enabled=cfg.vocal_stem_cache_enabled,
         )
         scope_lanes["vocal"] = vocal_lane
         progress("Vocal activity lane ready")

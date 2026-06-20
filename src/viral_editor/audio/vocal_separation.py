@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 from collections.abc import Callable
 from functools import lru_cache
@@ -33,6 +34,7 @@ DEMUCS_NUM_WORKERS_ENV = "DEMUCS_NUM_WORKERS"
 DEMUCS_SHIFTS_ENV = "DEMUCS_SHIFTS"
 DEMUCS_OVERLAP_ENV = "DEMUCS_OVERLAP"
 DEMUCS_DEVICE_ENV = "DEMUCS_DEVICE"
+VIRAL_VOCAL_STEM_CACHE_ENV = "VIRAL_VOCAL_STEM_CACHE"
 # Cap parallel chunk jobs — extra workers raise CPU % but rarely cut wall time on CPU
 # (memory bandwidth bound). Override via env/config for experimentation.
 DEMUCS_MAX_DEFAULT_WORKERS = 8
@@ -245,6 +247,50 @@ def peak_normalize_lane(lane: np.ndarray) -> np.ndarray:
     return _normalize_activity(lane.astype(np.float32))
 
 
+def _global_vocal_stem_cache_dir() -> Path:
+    override = os.environ.get(VIRAL_VOCAL_STEM_CACHE_ENV)
+    if override:
+        return Path(override).expanduser()
+    return Path(DEMUCS_MODEL_CACHE) / "vocal_stems"
+
+
+def _audio_content_sha256(audio_path: Path) -> str:
+    digest = hashlib.sha256()
+    with audio_path.open("rb") as handle:
+        while chunk := handle.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def vocal_stem_cache_paths(audio_path: Path, job_cache_path: Path | None) -> list[Path]:
+    """Job-local cache plus a global content-hash cache (survives new jobs / re-upload)."""
+    paths: list[Path] = []
+    if job_cache_path is not None:
+        paths.append(job_cache_path)
+    content_hash = _audio_content_sha256(audio_path)
+    paths.append(_global_vocal_stem_cache_dir() / f"{content_hash}.npz")
+    return paths
+
+
+def peek_vocal_stem_cache(
+    audio_path: Path,
+    job_cache_path: Path | None,
+    *,
+    demucs_shifts: int | None = None,
+    demucs_overlap: float | None = None,
+) -> bool:
+    """Return True when a valid cached vocal stem exists for this audio file."""
+    resolved = audio_path.resolve()
+    if not resolved.is_file():
+        return False
+    shifts = resolve_demucs_shifts(demucs_shifts)
+    overlap = resolve_demucs_overlap(demucs_overlap)
+    for cache_path in vocal_stem_cache_paths(resolved, job_cache_path):
+        if _vocal_stem_cache_valid(cache_path, resolved, shifts=shifts, overlap=overlap):
+            return True
+    return False
+
+
 def _vocal_stem_cache_valid(
     cache_path: Path,
     audio_path: Path,
@@ -252,20 +298,24 @@ def _vocal_stem_cache_valid(
     shifts: int,
     overlap: float,
 ) -> bool:
+    if not cache_path.is_file():
+        return False
     try:
-        stat = audio_path.stat()
         with np.load(cache_path, allow_pickle=False) as data:
-            if int(data["mtime_ns"][0]) != stat.st_mtime_ns:
-                return False
-            if int(data["size"][0]) != stat.st_size:
-                return False
             if int(data["shifts"][0]) != shifts:
                 return False
             if not np.isclose(float(data["overlap"][0]), overlap, rtol=0.0, atol=1e-6):
                 return False
             if str(data["model"][0]) != DEMUCS_MODEL_NAME:
                 return False
-    except (FileNotFoundError, OSError, KeyError, ValueError, IndexError):
+            if "content_sha256" in data:
+                return str(data["content_sha256"][0]) == _audio_content_sha256(audio_path)
+            stat = audio_path.stat()
+            if int(data["mtime_ns"][0]) != stat.st_mtime_ns:
+                return False
+            if int(data["size"][0]) != stat.st_size:
+                return False
+    except (OSError, KeyError, ValueError, IndexError):
         return False
     return True
 
@@ -286,7 +336,7 @@ def _load_vocal_stem_cache(
             name: float(data[f"share_{name}"][0])
             for name in ("drums", "bass", "other", "vocals")
         }
-    logger.info("Loaded cached Demucs vocal stem from %s", cache_path.name)
+    logger.info("Loaded cached Demucs vocal stem from %s", cache_path)
     return vocals, sr, shares
 
 
@@ -301,11 +351,13 @@ def _save_vocal_stem_cache(
     overlap: float,
 ) -> None:
     stat = audio_path.stat()
+    content_sha256 = _audio_content_sha256(audio_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         cache_path,
         vocals=vocals.astype(np.float32),
         sr=np.array([sr], dtype=np.int32),
+        content_sha256=np.array([content_sha256]),
         mtime_ns=np.array([stat.st_mtime_ns], dtype=np.int64),
         size=np.array([stat.st_size], dtype=np.int64),
         shifts=np.array([shifts], dtype=np.int32),
@@ -327,6 +379,7 @@ def separate_vocal_stem(
     demucs_overlap: float | None = None,
     demucs_device: str | None = None,
     cache_path: Path | None = None,
+    cache_enabled: bool = True,
     on_cache_hit: Callable[[], None] | None = None,
 ) -> tuple[np.ndarray, int, dict[str, float]]:
     """Return mono vocal stem, model sample rate, and per-stem energy shares."""
@@ -336,9 +389,10 @@ def separate_vocal_stem(
 
     shifts = resolve_demucs_shifts(demucs_shifts)
     overlap = resolve_demucs_overlap(demucs_overlap)
-    if cache_path is not None:
+    cache_paths = vocal_stem_cache_paths(resolved, cache_path) if cache_enabled else []
+    for path in cache_paths:
         cached = _load_vocal_stem_cache(
-            cache_path,
+            path,
             resolved,
             shifts=shifts,
             overlap=overlap,
@@ -410,16 +464,17 @@ def separate_vocal_stem(
         shifts,
         overlap,
     )
-    if cache_path is not None:
-        _save_vocal_stem_cache(
-            cache_path,
-            resolved,
-            vocals,
-            effective_sr,
-            shares,
-            shifts=shifts,
-            overlap=overlap,
-        )
+    if cache_paths:
+        for path in cache_paths:
+            _save_vocal_stem_cache(
+                path,
+                resolved,
+                vocals,
+                effective_sr,
+                shares,
+                shifts=shifts,
+                overlap=overlap,
+            )
     return vocals, effective_sr, shares
 
 
@@ -437,6 +492,7 @@ def compute_vocal_activity(
     demucs_overlap: float | None = None,
     demucs_device: str | None = None,
     cache_path: Path | None = None,
+    cache_enabled: bool = True,
     on_cache_hit: Callable[[], None] | None = None,
 ) -> np.ndarray:
     """Mix-relative RMS envelope of the vocal stem, aligned to scope-lane frame count."""
@@ -448,6 +504,7 @@ def compute_vocal_activity(
         demucs_overlap=demucs_overlap,
         demucs_device=demucs_device,
         cache_path=cache_path,
+        cache_enabled=cache_enabled,
         on_cache_hit=on_cache_hit,
     )
     vocal_share = float(shares.get("vocals", 0.0))
