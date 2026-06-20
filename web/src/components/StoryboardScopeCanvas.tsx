@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import type { StoryboardPayload, WaveformPayload } from "../types";
+import type { SpatialFxSettings, StoryboardPayload, WaveformPayload } from "../types";
+import { planSpatialFxMarkers } from "../utils/spatialFxMarkers";
 import { slotColorForIndex } from "../utils/slotColors";
 
 interface StoryboardScopeCanvasProps {
@@ -7,10 +8,13 @@ interface StoryboardScopeCanvasProps {
   storyboard: StoryboardPayload;
   selectedSlotId: string | null;
   playheadS?: number;
+  spatialFx?: SpatialFxSettings;
   onSelectSlot?: (slotId: string) => void;
 }
 
 const TRACE = "#3DDC84";
+const ZOOM = "#F4C430";
+const ROTATE = "#38BDF8";
 const HEIGHT = 72;
 const PAD_X = 4;
 const PAD_Y = 8;
@@ -30,10 +34,12 @@ export function StoryboardScopeCanvas({
   storyboard,
   selectedSlotId,
   playheadS = 0,
+  spatialFx,
   onSelectSlot,
 }: StoryboardScopeCanvasProps) {
   const blockStartS = storyboard.music_start_s;
   const blockDurationS = storyboard.total_duration_s;
+  const fxSettings = spatialFx ?? storyboard.spatial_fx;
   const orderedSlots = useMemo(
     () => [...storyboard.slots].sort((a, b) => a.order - b.order),
     [storyboard.slots],
@@ -42,6 +48,23 @@ export function StoryboardScopeCanvas({
   const points = useMemo(
     () => blockPoints(waveform.points, blockStartS, storyboard.music_end_s),
     [waveform.points, blockStartS, storyboard.music_end_s],
+  );
+
+  const fxMarkers = useMemo(
+    () =>
+      planSpatialFxMarkers(waveform.transients, {
+        musicStartS: storyboard.music_start_s,
+        musicEndS: storyboard.music_end_s,
+        maxEventsPerSecond: fxSettings.max_events_per_second,
+        enabled: fxSettings.enabled,
+      }),
+    [
+      waveform.transients,
+      storyboard.music_start_s,
+      storyboard.music_end_s,
+      fxSettings.enabled,
+      fxSettings.max_events_per_second,
+    ],
   );
 
   const viewWidth = 640;
@@ -79,6 +102,21 @@ export function StoryboardScopeCanvas({
           {blockDurationS.toFixed(1)}s window
         </p>
       </div>
+      {fxSettings.enabled && fxMarkers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-monitor-muted">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-0.5 rounded-full bg-[#F4C430]" aria-hidden />
+            Zoom
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-1.5 w-1.5 rounded-full bg-[#38BDF8]"
+              aria-hidden
+            />
+            Rotate
+          </span>
+        </div>
+      )}
       <svg
         viewBox={`0 0 ${viewWidth} ${HEIGHT}`}
         width="100%"
@@ -183,6 +221,45 @@ export function StoryboardScopeCanvas({
                 </g>
               );
             })}
+
+        {fxMarkers.map((marker, index) => {
+          if (blockDurationS <= 0) return null;
+          const x = PAD_X + (marker.timeS / blockDurationS) * innerW;
+          if (marker.kind === "zoom") {
+            return (
+              <g key={`fx-zoom-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={PAD_Y}
+                  y2={PAD_Y + innerH * 0.55}
+                  stroke={ZOOM}
+                  strokeWidth={2}
+                  opacity={0.95}
+                />
+                <polygon
+                  points={`${x},${PAD_Y + 2} ${x - 3},${PAD_Y + 8} ${x + 3},${PAD_Y + 8}`}
+                  fill={ZOOM}
+                  opacity={0.95}
+                />
+              </g>
+            );
+          }
+          return (
+            <g key={`fx-rotate-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
+              <line
+                x1={x}
+                x2={x}
+                y1={PAD_Y + innerH * 0.45}
+                y2={PAD_Y + innerH}
+                stroke={ROTATE}
+                strokeWidth={1.5}
+                opacity={0.9}
+              />
+              <circle cx={x} cy={PAD_Y + innerH - 3} r={2.5} fill={ROTATE} opacity={0.95} />
+            </g>
+          );
+        })}
 
         {waveform.downbeats
           .filter(

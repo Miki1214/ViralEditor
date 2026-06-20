@@ -3,9 +3,9 @@ import type {
   SpatialFxSettings,
   StoryboardPayload,
   TeaserSettings,
-  Transient,
   WaveformPayload,
 } from "../types";
+import { countSpatialFxMarkers, planSpatialFxMarkers } from "../utils/spatialFxMarkers";
 
 const SLIDER_DEBOUNCE_MS = 400;
 
@@ -101,19 +101,18 @@ interface RetentionFxPanelProps {
 }
 
 function countFxCandidates(
-  transients: Transient[],
+  transients: WaveformPayload["transients"],
   musicStartS: number,
   musicEndS: number,
+  spatialFx: SpatialFxSettings,
 ): { zoom: number; rotate: number } {
-  let zoom = 0;
-  let rotate = 0;
-  for (const transient of transients) {
-    const t = transient.timestamp_ms / 1000;
-    if (t < musicStartS || t >= musicEndS) continue;
-    if (transient.type === "drop") zoom += 1;
-    if (transient.type === "bass") rotate += 1;
-  }
-  return { zoom, rotate };
+  const markers = planSpatialFxMarkers(transients, {
+    musicStartS,
+    musicEndS,
+    maxEventsPerSecond: spatialFx.max_events_per_second,
+    enabled: spatialFx.enabled,
+  });
+  return countSpatialFxMarkers(markers);
 }
 
 function hookBudgetS(storyboard: StoryboardPayload): number {
@@ -234,9 +233,16 @@ export function RetentionFxPanel({
             waveform.transients,
             storyboard.music_start_s,
             storyboard.music_end_s,
+            spatialFx,
           )
         : { zoom: 0, rotate: 0 },
-    [waveform, storyboard.music_start_s, storyboard.music_end_s],
+    [
+      waveform,
+      storyboard.music_start_s,
+      storyboard.music_end_s,
+      spatialFx.enabled,
+      spatialFx.max_events_per_second,
+    ],
   );
 
   const teaserPreviewLabel = teaser.enabled
