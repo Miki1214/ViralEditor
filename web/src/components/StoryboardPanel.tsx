@@ -9,7 +9,7 @@ import {
 } from "../utils/hookCrop";
 import { shouldCommitCrop } from "../utils/cropCommit";
 import { ClipCropTimeline } from "./ClipCropTimeline";
-import { HookSpeedDebugPanel } from "./HookSpeedDebugPanel";
+import { StoryboardSegmentsPanel } from "./StoryboardSegmentsPanel";
 import { RetentionFxPanel } from "./RetentionFxPanel";
 import { SpatialCropModal } from "./SpatialCropModal";
 import { StoryboardBlockPlayer, type BlockPlayheadChangeHandler, type StoryboardLoopMode } from "./StoryboardBlockPlayer";
@@ -349,9 +349,6 @@ export function StoryboardPanel({
 
   const activeTransform = active ? slotTransform(active) : null;
   const canClearClip = Boolean(active?.assigned_clip_id);
-  const debugEnabled =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("debug") === "1";
 
   return (
     <div className="panel space-y-4 p-5">
@@ -369,18 +366,6 @@ export function StoryboardPanel({
           <dd className="text-scope-trace">{storyboard.total_duration_s.toFixed(1)}s</dd>
         </dl>
       </div>
-
-      {debugEnabled && (
-        <HookSpeedDebugPanel
-          jobId={jobId}
-          storyboard={storyboard}
-          pendingCropKey={
-            active
-              ? `${active.id}:${cropStartS.toFixed(4)}:${cropEndS.toFixed(4)}`
-              : ""
-          }
-        />
-      )}
 
       {waveform && (
         <div className="space-y-2">
@@ -593,6 +578,13 @@ export function StoryboardPanel({
               />
             </div>
           )}
+
+          <StoryboardSegmentsPanel
+            jobId={jobId}
+            storyboard={storyboard}
+            selectedSlotId={active.id}
+            pendingCropKey={`${active.id}:${cropStartS.toFixed(4)}:${cropEndS.toFixed(4)}`}
+          />
         </div>
       )}
 
