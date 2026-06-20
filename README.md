@@ -79,6 +79,19 @@ Open http://127.0.0.1:8765. Bind-mounts:
 
 **Demucs vocal separation:** loop planning uses the `htdemucs` model (via `demucs` + `torch`, installed by default). Weights download on first analysis and cache under `TORCH_HOME` (default `~/.cache/torch`). Set `DEMUCS_MODEL_CACHE` to pin the cache directory (e.g. a Docker volume).
 
+**GPU (recommended for Demucs):** the default `pip install` pulls a **CPU-only** PyTorch wheel (`+cpu`). `pip install --upgrade … --index-url cu124` alone will **not** replace it — pip sees `torch 2.12.1` as already satisfied. Uninstall first, then install CUDA wheels:
+
+```powershell
+.venv\Scripts\Activate.ps1
+pip uninstall torch torchaudio -y
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+python -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no gpu')"
+```
+
+You should see a `+cu124` version and `True`. Demucs then auto-selects your NVIDIA GPU (`DEMUCS_DEVICE=auto`, the default). Progress will show `GPU · <your card name>`. Force CPU with `DEMUCS_DEVICE=cpu`.
+
+CPU tuning: default **8 parallel chunk jobs** (`DEMUCS_NUM_WORKERS`), `shifts=0`, `overlap=0.15`. Vocal stems cache per job as `temp/vocal_stem_demucs.npz`.
+
 For neural beat tracking locally (optional extra):
 
 ```powershell

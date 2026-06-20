@@ -7,10 +7,14 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+import torch
 
 from viral_editor.audio.vocal_separation import (
     VOCAL_STEM_SHARE_MIN,
     compute_vocal_activity,
+    demucs_device_label,
+    resolve_demucs_device,
+    resolve_demucs_workers,
     separate_vocal_stem,
 )
 
@@ -147,7 +151,7 @@ def test_separate_vocal_stem_keeps_librosa_channel_first_layout(tmp_path: Path) 
 
     with (
         patch("viral_editor.audio.vocal_separation.librosa.load", side_effect=_fake_load),
-        patch("viral_editor.audio.vocal_separation.get_model") as mock_get_model,
+        patch("viral_editor.audio.vocal_separation._load_demucs_model") as mock_get_model,
         patch("viral_editor.audio.vocal_separation.convert_audio", side_effect=_fake_convert),
         patch("viral_editor.audio.vocal_separation.apply_model") as mock_apply,
     ):
@@ -162,6 +166,138 @@ def test_separate_vocal_stem_keeps_librosa_channel_first_layout(tmp_path: Path) 
         separate_vocal_stem(audio_path)
 
     assert captured["shape"] == (2, 8000)
+
+
+def test_resolve_demucs_workers_defaults_to_physical_core_estimate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEMUCS_NUM_WORKERS", raising=False)
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation._physical_cpu_count",
+        lambda: 16,
+    )
+    monkeypatch.setattr("viral_editor.audio.vocal_separation._logical_cpu_count", lambda: 32)
+    assert resolve_demucs_workers(None) == 8
+    assert resolve_demucs_workers(3) == 3
+    assert resolve_demucs_workers(16) == 16
+
+
+def test_resolve_demucs_workers_estimates_physical_when_only_logical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEMUCS_NUM_WORKERS", raising=False)
+    monkeypatch.setattr("viral_editor.audio.vocal_separation._logical_cpu_count", lambda: 32)
+    assert resolve_demucs_workers(None) == 8
+
+
+def test_resolve_demucs_device_auto_uses_cuda_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEMUCS_DEVICE", raising=False)
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation.torch.cuda.is_available",
+        lambda: True,
+    )
+    device = resolve_demucs_device(None)
+    assert device.type == "cuda"
+    assert demucs_device_label(device).startswith("GPU")
+
+
+def test_resolve_demucs_device_cpu_only_build_warns_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DEMUCS_DEVICE", raising=False)
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation.torch.cuda.is_available",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation._torch_is_cpu_only_build",
+        lambda: True,
+    )
+    device = resolve_demucs_device("auto")
+    assert device.type == "cpu"
+
+
+def test_resolve_demucs_device_cuda_required_raises_without_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation.torch.cuda.is_available",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation._torch_is_cpu_only_build",
+        lambda: True,
+    )
+    with pytest.raises(RuntimeError, match="CPU-only build"):
+        resolve_demucs_device("cuda")
+
+
+def test_resolve_demucs_workers_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEMUCS_NUM_WORKERS", "6")
+    assert resolve_demucs_workers(None) == 6
+
+
+def test_separate_vocal_stem_passes_parallel_workers(tmp_path: Path) -> None:
+    audio_path = tmp_path / "track.wav"
+    audio_path.write_bytes(b"\x00")
+
+    with (
+        patch(
+            "viral_editor.audio.vocal_separation.librosa.load",
+            return_value=(np.zeros(44100, dtype=np.float32), 44100),
+        ),
+        patch("viral_editor.audio.vocal_separation._load_demucs_model") as mock_load,
+        patch("viral_editor.audio.vocal_separation.convert_audio", side_effect=lambda wav, *_: wav),
+        patch("viral_editor.audio.vocal_separation.apply_model") as mock_apply,
+        patch("viral_editor.audio.vocal_separation.torch.cuda.is_available", return_value=False),
+    ):
+        mock_model = mock_load.return_value
+        mock_model.sources = ["drums", "bass", "other", "vocals"]
+        mock_model.samplerate = 44100
+        mock_model.audio_channels = 2
+        mock_apply.return_value = [torch.zeros(4, 2, 44100)]
+
+        separate_vocal_stem(audio_path, num_workers=4)
+
+    assert mock_apply.call_args.kwargs["num_workers"] == 4
+    assert mock_apply.call_args.kwargs["shifts"] == 0
+    assert mock_apply.call_args.kwargs["overlap"] == pytest.approx(0.15)
+
+
+def test_vocal_stem_cache_skips_demucs(tmp_path: Path) -> None:
+    audio_path = tmp_path / "track.wav"
+    audio_path.write_bytes(b"fake-audio")
+    cache_path = tmp_path / "vocal_stem_demucs.npz"
+    vocal = np.linspace(0.0, 1.0, 4410, dtype=np.float32)
+    shares = {"drums": 0.2, "bass": 0.2, "other": 0.2, "vocals": 0.4}
+    from viral_editor.audio.vocal_separation import _save_vocal_stem_cache
+
+    _save_vocal_stem_cache(
+        cache_path,
+        audio_path,
+        vocal,
+        44100,
+        shares,
+        shifts=0,
+        overlap=0.15,
+    )
+
+    hits = {"count": 0}
+
+    with patch("viral_editor.audio.vocal_separation.apply_model") as mock_apply:
+        loaded, sr, loaded_shares = separate_vocal_stem(
+            audio_path,
+            cache_path=cache_path,
+            on_cache_hit=lambda: hits.__setitem__("count", hits["count"] + 1),
+        )
+
+    mock_apply.assert_not_called()
+    assert hits["count"] == 1
+    assert sr == 44100
+    assert np.allclose(loaded, vocal)
+    assert loaded_shares["vocals"] == pytest.approx(0.4)
 
 
 def test_vocal_lane_flat_for_instrumental_fixture(tmp_path: Path) -> None:

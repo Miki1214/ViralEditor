@@ -38,6 +38,11 @@ class AudioDspConfig(DomainModel):
     tempo_max_bpm: float = 180.0
     duration_tolerance_s: float = 0.5
     feature_workers: int | None = None
+    demucs_workers: int | None = None
+    demucs_shifts: int = 0
+    demucs_overlap: float = 0.15
+    demucs_device: str = "auto"
+    vocal_stem_cache_enabled: bool = True
     vocal_separation_enabled: bool = True
 
 
@@ -340,6 +345,7 @@ def analyze_audio_with_envelope(
     config: AudioDspConfig | None = None,
     expected_duration_s: float | None = None,
     on_progress: Callable[[str], None] | None = None,
+    cache_dir: Path | None = None,
 ) -> AudioAnalysisResult:
     """Analyze audio and return the timeline plus the onset strength envelope."""
     cfg = config or AudioDspConfig()
@@ -448,7 +454,23 @@ def analyze_audio_with_envelope(
     )
 
     if cfg.vocal_separation_enabled:
-        progress("Separating vocal stem (Demucs)")
+        from viral_editor.audio.vocal_separation import (
+            demucs_progress_label,
+            resolve_demucs_device,
+            resolve_demucs_workers,
+        )
+
+        device = resolve_demucs_device(cfg.demucs_device)
+        workers = resolve_demucs_workers(cfg.demucs_workers)
+        cache_path = (
+            cache_dir / "vocal_stem_demucs.npz"
+            if cache_dir is not None and cfg.vocal_stem_cache_enabled
+            else None
+        )
+        progress(
+            "Separating vocal stem (Demucs, "
+            f"{demucs_progress_label(device, num_workers=workers if device.type == 'cpu' else 0)})"
+        )
         vocal_lane = compute_vocal_activity(
             resolved,
             hop_length=cfg.hop_length,
@@ -457,6 +479,12 @@ def analyze_audio_with_envelope(
             target_samples=int(y.size),
             frame_length=cfg.n_fft,
             mix_rms=scope_lanes["rms"],
+            num_workers=cfg.demucs_workers,
+            demucs_shifts=cfg.demucs_shifts,
+            demucs_overlap=cfg.demucs_overlap,
+            demucs_device=cfg.demucs_device,
+            cache_path=cache_path,
+            on_cache_hit=lambda: progress("Using cached Demucs vocal stem"),
         )
         scope_lanes["vocal"] = vocal_lane
         progress("Vocal activity lane ready")

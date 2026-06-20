@@ -138,6 +138,7 @@ def run_pipeline(
             loaded.audio_path,
             expected_duration_s=ingest.audio.duration_s,
             on_progress=_audio_progress,
+            cache_dir=work_temp,
         )
         _emit(on_event, "audio", "info", message="Writing analysis artifacts")
         timeline_path = write_artifact(analysis.timeline, "audio_timeline", work_temp)

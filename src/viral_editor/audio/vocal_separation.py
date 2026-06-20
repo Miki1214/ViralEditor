@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 
 import librosa
@@ -25,10 +27,161 @@ DEMUCS_MODEL_CACHE = os.environ.get(
     os.environ.get("TORCH_HOME", os.path.expanduser("~/.cache/torch")),
 )
 
+# Parallel CPU chunk jobs for apply_model (Demucs ``-j`` / ``num_workers``).
+# Override with DEMUCS_NUM_WORKERS or AudioDspConfig.demucs_workers.
+DEMUCS_NUM_WORKERS_ENV = "DEMUCS_NUM_WORKERS"
+DEMUCS_SHIFTS_ENV = "DEMUCS_SHIFTS"
+DEMUCS_OVERLAP_ENV = "DEMUCS_OVERLAP"
+DEMUCS_DEVICE_ENV = "DEMUCS_DEVICE"
+# Cap parallel chunk jobs — extra workers raise CPU % but rarely cut wall time on CPU
+# (memory bandwidth bound). Override via env/config for experimentation.
+DEMUCS_MAX_DEFAULT_WORKERS = 8
+
+_CPU_ONLY_TORCH_WARNED = False
+
 # Minimum Demucs vocal-stem energy share to treat a track as having vocals.
 VOCAL_STEM_SHARE_MIN = 0.15
 # Mix-relative scaling: vocal RMS / (mix p90 * ratio) before optional polish.
 VOCAL_MIX_RATIO_REF = 0.55
+
+
+def _logical_cpu_count() -> int:
+    return os.cpu_count() or 4
+
+
+def _physical_cpu_count() -> int:
+    """Best-effort physical core count (SMT siblings excluded when OS exposes it)."""
+    fn = getattr(os, "process_cpu_count", None)
+    if fn is not None:
+        count = fn()
+        if count and count > 0:
+            return int(count)
+    logical = _logical_cpu_count()
+    # Laptops / small CPUs: treat logical count as physical.
+    if logical <= 8:
+        return logical
+    # Typical desktop SMT: logical ≈ 2× physical (e.g. 16P / 32T).
+    return max(logical // 2, 1)
+
+
+def _default_demucs_workers() -> int:
+    logical = _logical_cpu_count()
+    if logical <= 2:
+        return 1
+    physical = _physical_cpu_count()
+    return max(1, min(physical, logical, DEMUCS_MAX_DEFAULT_WORKERS))
+
+
+def resolve_demucs_shifts(requested: int | None = None) -> int:
+    if requested is not None:
+        return max(0, int(requested))
+    env = os.environ.get(DEMUCS_SHIFTS_ENV)
+    if env is not None and env.strip() != "":
+        return max(0, int(env))
+    return 0
+
+
+def resolve_demucs_overlap(requested: float | None = None) -> float:
+    if requested is not None:
+        return float(max(0.0, min(0.5, requested)))
+    env = os.environ.get(DEMUCS_OVERLAP_ENV)
+    if env is not None and env.strip() != "":
+        return float(max(0.0, min(0.5, float(env))))
+    return 0.15
+
+
+def resolve_demucs_workers(requested: int | None = None) -> int:
+    """Return Demucs ``num_workers`` for parallel segment inference on CPU."""
+    if requested is not None:
+        return max(0, int(requested))
+    env = os.environ.get(DEMUCS_NUM_WORKERS_ENV)
+    if env is not None and env.strip() != "":
+        return max(0, int(env))
+    return _default_demucs_workers()
+
+
+def _torch_is_cpu_only_build() -> bool:
+    return getattr(torch.version, "cuda", None) is None
+
+
+def _warn_cpu_only_torch_once() -> None:
+    global _CPU_ONLY_TORCH_WARNED
+    if _CPU_ONLY_TORCH_WARNED or not _torch_is_cpu_only_build():
+        return
+    _CPU_ONLY_TORCH_WARNED = True
+    logger.warning(
+        "PyTorch CPU-only build (%s) — Demucs runs on CPU. "
+        "For NVIDIA GPU: pip install --upgrade torch torchaudio "
+        "--index-url https://download.pytorch.org/whl/cu124",
+        torch.__version__,
+    )
+
+
+def resolve_demucs_device(requested: str | None = None) -> torch.device:
+    """Pick inference device: ``auto`` prefers CUDA, ``cuda`` requires GPU, ``cpu`` forces CPU."""
+    preference = (requested or os.environ.get(DEMUCS_DEVICE_ENV) or "auto").strip().lower()
+    if preference not in {"auto", "cuda", "cpu"}:
+        raise ValueError(f"Unsupported Demucs device preference: {preference!r}")
+
+    if preference == "cpu":
+        return torch.device("cpu")
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    if preference == "cuda":
+        if _torch_is_cpu_only_build():
+            raise RuntimeError(
+                "Demucs GPU requested but PyTorch is a CPU-only build "
+                f"({torch.__version__}). Reinstall with CUDA wheels, e.g. "
+                "pip install --upgrade torch torchaudio "
+                "--index-url https://download.pytorch.org/whl/cu124"
+            )
+        raise RuntimeError(
+            "Demucs GPU requested but torch.cuda.is_available() is False "
+            "(driver/CUDA runtime missing or no compatible GPU)."
+        )
+
+    _warn_cpu_only_torch_once()
+    return torch.device("cpu")
+
+
+def demucs_device_label(device: torch.device) -> str:
+    if device.type == "cuda":
+        try:
+            index = device.index if device.index is not None else torch.cuda.current_device()
+            name = torch.cuda.get_device_name(index)
+            return f"GPU · {name}"
+        except Exception:
+            return "GPU · CUDA"
+    return "CPU"
+
+
+def demucs_progress_label(device: torch.device, *, num_workers: int) -> str:
+    label = demucs_device_label(device)
+    if device.type == "cpu" and num_workers > 0:
+        chunk_word = "chunks" if num_workers != 1 else "chunk"
+        return f"{label} · {num_workers} parallel {chunk_word}"
+    return label
+
+
+def _configure_torch_threads_for_demucs(num_workers: int) -> None:
+    """Avoid oversubscribing CPU when Demucs runs multiple segment jobs."""
+    logical = _logical_cpu_count()
+    if num_workers > 0:
+        threads = max(1, logical // num_workers)
+        torch.set_num_threads(threads)
+    else:
+        torch.set_num_threads(logical)
+
+
+@lru_cache(maxsize=1)
+def _load_demucs_model(model_name: str = DEMUCS_MODEL_NAME):
+    if DEMUCS_MODEL_CACHE:
+        os.environ.setdefault("TORCH_HOME", DEMUCS_MODEL_CACHE)
+    model = get_model(model_name)
+    model.eval()
+    return model
 
 
 def _resample_signal(signal: np.ndarray, target_length: int) -> np.ndarray:
@@ -92,21 +245,110 @@ def peak_normalize_lane(lane: np.ndarray) -> np.ndarray:
     return _normalize_activity(lane.astype(np.float32))
 
 
+def _vocal_stem_cache_valid(
+    cache_path: Path,
+    audio_path: Path,
+    *,
+    shifts: int,
+    overlap: float,
+) -> bool:
+    try:
+        stat = audio_path.stat()
+        with np.load(cache_path, allow_pickle=False) as data:
+            if int(data["mtime_ns"][0]) != stat.st_mtime_ns:
+                return False
+            if int(data["size"][0]) != stat.st_size:
+                return False
+            if int(data["shifts"][0]) != shifts:
+                return False
+            if not np.isclose(float(data["overlap"][0]), overlap, rtol=0.0, atol=1e-6):
+                return False
+            if str(data["model"][0]) != DEMUCS_MODEL_NAME:
+                return False
+    except (FileNotFoundError, OSError, KeyError, ValueError, IndexError):
+        return False
+    return True
+
+
+def _load_vocal_stem_cache(
+    cache_path: Path,
+    audio_path: Path,
+    *,
+    shifts: int,
+    overlap: float,
+) -> tuple[np.ndarray, int, dict[str, float]] | None:
+    if not _vocal_stem_cache_valid(cache_path, audio_path, shifts=shifts, overlap=overlap):
+        return None
+    with np.load(cache_path, allow_pickle=False) as data:
+        vocals = data["vocals"].astype(np.float32)
+        sr = int(data["sr"][0])
+        shares = {
+            name: float(data[f"share_{name}"][0])
+            for name in ("drums", "bass", "other", "vocals")
+        }
+    logger.info("Loaded cached Demucs vocal stem from %s", cache_path.name)
+    return vocals, sr, shares
+
+
+def _save_vocal_stem_cache(
+    cache_path: Path,
+    audio_path: Path,
+    vocals: np.ndarray,
+    sr: int,
+    shares: dict[str, float],
+    *,
+    shifts: int,
+    overlap: float,
+) -> None:
+    stat = audio_path.stat()
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        cache_path,
+        vocals=vocals.astype(np.float32),
+        sr=np.array([sr], dtype=np.int32),
+        mtime_ns=np.array([stat.st_mtime_ns], dtype=np.int64),
+        size=np.array([stat.st_size], dtype=np.int64),
+        shifts=np.array([shifts], dtype=np.int32),
+        overlap=np.array([overlap], dtype=np.float32),
+        model=np.array([DEMUCS_MODEL_NAME]),
+        share_drums=np.array([shares.get("drums", 0.0)], dtype=np.float32),
+        share_bass=np.array([shares.get("bass", 0.0)], dtype=np.float32),
+        share_other=np.array([shares.get("other", 0.0)], dtype=np.float32),
+        share_vocals=np.array([shares.get("vocals", 0.0)], dtype=np.float32),
+    )
+
+
 def separate_vocal_stem(
     audio_path: Path,
     *,
     model_sr: int = 44100,
+    num_workers: int | None = None,
+    demucs_shifts: int | None = None,
+    demucs_overlap: float | None = None,
+    demucs_device: str | None = None,
+    cache_path: Path | None = None,
+    on_cache_hit: Callable[[], None] | None = None,
 ) -> tuple[np.ndarray, int, dict[str, float]]:
     """Return mono vocal stem, model sample rate, and per-stem energy shares."""
     resolved = audio_path.resolve()
     if not resolved.is_file():
         raise FileNotFoundError(f"Audio file not found: {resolved}")
 
-    if DEMUCS_MODEL_CACHE:
-        os.environ.setdefault("TORCH_HOME", DEMUCS_MODEL_CACHE)
+    shifts = resolve_demucs_shifts(demucs_shifts)
+    overlap = resolve_demucs_overlap(demucs_overlap)
+    if cache_path is not None:
+        cached = _load_vocal_stem_cache(
+            cache_path,
+            resolved,
+            shifts=shifts,
+            overlap=overlap,
+        )
+        if cached is not None:
+            if on_cache_hit is not None:
+                on_cache_hit()
+            return cached
 
-    model = get_model(DEMUCS_MODEL_NAME)
-    model.eval()
+    model = _load_demucs_model(DEMUCS_MODEL_NAME)
     vocal_index = list(model.sources).index("vocals")
 
     # librosa decodes MP3/WAV without torchcodec (torchaudio 2.9+ requires it for load()).
@@ -121,19 +363,26 @@ def separate_vocal_stem(
         wav = wav.repeat(2, 1)
 
     wav = convert_audio(wav, sr, model.samplerate, model.audio_channels)
-    device = torch.device("cpu")
+    device = resolve_demucs_device(demucs_device)
     wav = wav.to(device)
     ref = wav.mean(0)
     wav = (wav - ref.mean()) / (ref.std() + 1e-8)
 
-    with torch.no_grad():
+    workers = resolve_demucs_workers(num_workers)
+    if device.type == "cpu":
+        _configure_torch_threads_for_demucs(workers)
+    else:
+        workers = 0
+
+    with torch.inference_mode():
         sources = apply_model(
             model,
             wav[None],
             device=device,
             progress=False,
-            num_workers=0,
-            shifts=1,
+            num_workers=workers,
+            shifts=shifts,
+            overlap=overlap,
         )[0]
 
     energies: dict[str, float] = {}
@@ -150,13 +399,27 @@ def separate_vocal_stem(
         effective_sr = model_sr
 
     logger.info(
-        "Demucs vocal stem extracted — %.1fs @ %d Hz from %s (peak %.4f, share %.3f)",
+        "Demucs vocal stem extracted — %.1fs @ %d Hz from %s (peak %.4f, share %.3f, %s, workers=%d, shifts=%d, overlap=%.2f)",
         vocals.size / effective_sr,
         effective_sr,
         resolved.name,
         float(np.max(np.abs(vocals))) if vocals.size else 0.0,
         shares.get("vocals", 0.0),
+        demucs_device_label(device),
+        workers,
+        shifts,
+        overlap,
     )
+    if cache_path is not None:
+        _save_vocal_stem_cache(
+            cache_path,
+            resolved,
+            vocals,
+            effective_sr,
+            shares,
+            shifts=shifts,
+            overlap=overlap,
+        )
     return vocals, effective_sr, shares
 
 
@@ -169,9 +432,24 @@ def compute_vocal_activity(
     target_samples: int | None = None,
     frame_length: int | None = None,
     mix_rms: np.ndarray | None = None,
+    num_workers: int | None = None,
+    demucs_shifts: int | None = None,
+    demucs_overlap: float | None = None,
+    demucs_device: str | None = None,
+    cache_path: Path | None = None,
+    on_cache_hit: Callable[[], None] | None = None,
 ) -> np.ndarray:
     """Mix-relative RMS envelope of the vocal stem, aligned to scope-lane frame count."""
-    vocal, model_sr, shares = separate_vocal_stem(audio_path, model_sr=44100)
+    vocal, model_sr, shares = separate_vocal_stem(
+        audio_path,
+        model_sr=44100,
+        num_workers=num_workers,
+        demucs_shifts=demucs_shifts,
+        demucs_overlap=demucs_overlap,
+        demucs_device=demucs_device,
+        cache_path=cache_path,
+        on_cache_hit=on_cache_hit,
+    )
     vocal_share = float(shares.get("vocals", 0.0))
     if vocal_share < VOCAL_STEM_SHARE_MIN:
         logger.info(
