@@ -5,6 +5,7 @@ import type { MusicBlock, WaveformPayload } from "../types";
 import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
 import { ScopeCanvas, blockPixelRange, scopeWidth } from "./ScopeCanvas";
 import { MusicDetailRack } from "./scope/MusicDetailRack";
+import { ScopeLegend } from "./scope/ScopeLegend";
 
 interface AudioScopePanelProps {
   jobId: string;
@@ -326,17 +327,23 @@ export function AudioScopePanel({
           </p>
         )}
         <div ref={scopeScrollRef} className="space-y-2 overflow-x-auto pb-1">
-          <ScopeCanvas
-            durationS={waveform.duration_s}
-            points={waveform.points}
-            transients={waveform.transients}
-            sections={waveform.sections}
-            beats={waveform.beats ?? []}
-            downbeats={waveform.downbeats}
-            blocks={blocks}
-            selectedBlockId={selectedBlockId}
-            playingBlockId={playingBlockId}
-          />
+          <div
+            className="overflow-hidden rounded border border-monitor-border bg-[#141618]"
+            style={{ width: scopeWidth(waveform.duration_s) }}
+          >
+            <ScopeCanvas
+              durationS={waveform.duration_s}
+              points={waveform.points}
+              transients={waveform.transients}
+              sections={waveform.sections}
+              beats={waveform.beats ?? []}
+              downbeats={waveform.downbeats}
+              blocks={blocks}
+              selectedBlockId={selectedBlockId}
+              playingBlockId={playingBlockId}
+            />
+            <ScopeLegend embedded />
+          </div>
           <MusicDetailRack
             lanes={waveform.lanes ?? []}
             chroma={waveform.chroma ?? null}

@@ -8,7 +8,13 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from viral_editor.audio.vocal_separation import compute_vocal_activity, separate_vocal_stem
+from viral_editor.audio.vocal_separation import (
+    VOCAL_STEM_SHARE_MIN,
+    compute_vocal_activity,
+    separate_vocal_stem,
+)
+
+_VOCAL_SHARES = {"drums": 0.2, "bass": 0.2, "other": 0.2, "vocals": 0.4}
 
 
 def test_compute_vocal_activity_aligns_and_normalizes() -> None:
@@ -17,16 +23,18 @@ def test_compute_vocal_activity_aligns_and_normalizes() -> None:
     n_frames = 120
     vocal = np.zeros(sr * 2, dtype=np.float32)
     vocal[sr // 2 : sr] = 0.8
+    mix_rms = np.full(n_frames, 0.12, dtype=np.float32)
 
     with patch(
         "viral_editor.audio.vocal_separation.separate_vocal_stem",
-        return_value=(vocal, sr),
+        return_value=(vocal, sr, _VOCAL_SHARES),
     ):
         activity = compute_vocal_activity(
             Path("unused.wav"),
             hop_length=hop_length,
             sr=sr,
             n_frames=n_frames,
+            mix_rms=mix_rms,
         )
 
     assert activity.shape == (n_frames,)
@@ -36,6 +44,30 @@ def test_compute_vocal_activity_aligns_and_normalizes() -> None:
     assert float(activity[30:70].mean()) > float(activity[:10].mean())
 
 
+def test_compute_vocal_activity_flat_when_vocal_share_low() -> None:
+    sr = 22050
+    hop_length = 512
+    n_frames = 80
+    vocal = np.random.default_rng(0).normal(0, 0.4, sr).astype(np.float32)
+    low_share = {"drums": 0.4, "bass": 0.3, "other": 0.25, "vocals": 0.05}
+
+    with patch(
+        "viral_editor.audio.vocal_separation.separate_vocal_stem",
+        return_value=(vocal, sr, low_share),
+    ):
+        activity = compute_vocal_activity(
+            Path("unused.wav"),
+            hop_length=hop_length,
+            sr=sr,
+            n_frames=n_frames,
+            mix_rms=np.full(n_frames, 0.1, dtype=np.float32),
+        )
+
+    assert activity.shape == (n_frames,)
+    assert float(activity.max()) == 0.0
+    assert float(low_share["vocals"]) < VOCAL_STEM_SHARE_MIN
+
+
 def test_compute_vocal_activity_interpolates_to_n_frames() -> None:
     sr = 22050
     hop_length = 512
@@ -43,7 +75,7 @@ def test_compute_vocal_activity_interpolates_to_n_frames() -> None:
 
     with patch(
         "viral_editor.audio.vocal_separation.separate_vocal_stem",
-        return_value=(vocal, sr),
+        return_value=(vocal, sr, _VOCAL_SHARES),
     ):
         activity = compute_vocal_activity(
             Path("unused.wav"),
@@ -52,6 +84,7 @@ def test_compute_vocal_activity_interpolates_to_n_frames() -> None:
             n_frames=500,
             target_samples=sr * 3,
             frame_length=2048,
+            mix_rms=np.full(500, 0.08, dtype=np.float32),
         )
 
     assert activity.shape == (500,)
@@ -67,13 +100,14 @@ def test_compute_vocal_activity_resamples_model_sr() -> None:
 
     with patch(
         "viral_editor.audio.vocal_separation.separate_vocal_stem",
-        return_value=(vocal, model_sr),
+        return_value=(vocal, model_sr, _VOCAL_SHARES),
     ):
         activity = compute_vocal_activity(
             Path("unused.wav"),
             hop_length=hop_length,
             sr=analysis_sr,
             n_frames=n_frames,
+            mix_rms=np.full(n_frames, 0.1, dtype=np.float32),
         )
 
     assert activity.shape == (n_frames,)
@@ -90,10 +124,11 @@ def test_separate_vocal_stem_integration() -> None:
         pytest.skip("Set RUN_DEMUCS_INTEGRATION=1 to run Demucs integration test")
 
     fixture = Path(__file__).resolve().parents[1] / "fixtures" / "audio" / "validation_clicks.wav"
-    vocal, sr = separate_vocal_stem(fixture)
+    vocal, sr, shares = separate_vocal_stem(fixture)
     assert vocal.ndim == 1
     assert vocal.size > 0
     assert sr == 44100
+    assert "vocals" in shares
 
 
 def test_separate_vocal_stem_keeps_librosa_channel_first_layout(tmp_path: Path) -> None:
@@ -129,7 +164,7 @@ def test_separate_vocal_stem_keeps_librosa_channel_first_layout(tmp_path: Path) 
     assert captured["shape"] == (2, 8000)
 
 
-def test_vocal_lane_falls_back_to_mid_band_when_demucs_silent(tmp_path: Path) -> None:
+def test_vocal_lane_flat_for_instrumental_fixture(tmp_path: Path) -> None:
     from viral_editor.audio.beat_detector import analyze_audio_with_envelope
 
     sr = 22050
@@ -141,10 +176,13 @@ def test_vocal_lane_falls_back_to_mid_band_when_demucs_silent(tmp_path: Path) ->
 
     sf.write(wav, y, sr)
 
-    result = analyze_audio_with_envelope(wav)
+    low_share = {"drums": 0.5, "bass": 0.25, "other": 0.2, "vocals": 0.05}
+    with patch(
+        "viral_editor.audio.vocal_separation.separate_vocal_stem",
+        return_value=(np.zeros(int(sr * duration_s), dtype=np.float32), sr, low_share),
+    ):
+        result = analyze_audio_with_envelope(wav)
+
     vocal = result.scope_lanes.get("vocal")
-    mid = result.scope_lanes.get("band_mid")
     assert vocal is not None
-    assert mid is not None
-    assert float(vocal.max()) > 0.05
-    assert float(vocal.mean()) > 0.01
+    assert float(vocal.max()) == 0.0

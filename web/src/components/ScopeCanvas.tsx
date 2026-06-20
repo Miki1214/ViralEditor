@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { MusicBlock, MusicSection, Transient, WaveformPoint } from "../types";
-import { ScopeBeatGrid } from "./scope/ScopeBeatGrid";
+import { resamplePointsToPixelWidth } from "./scope/scopePoints";
+import { scopeWidth } from "./scope/scopeLayout";
+import { ScopeMarkerStrip } from "./scope/ScopeMarkerStrip";
 import { SectionRibbon } from "./scope/SectionRibbon";
 import {
   buildTimeTicks,
@@ -8,6 +10,7 @@ import {
   formatScopeTime,
   LABEL_COLOR,
   RULER_BG,
+  SCOPE_MARKER_STRIP_HEIGHT,
   SCOPE_PAD_X,
   SCOPE_RULER_HEIGHT,
   SCOPE_SECTION_RIBBON_HEIGHT,
@@ -29,39 +32,18 @@ interface ScopeCanvasProps {
   window?: ScopeWindow;
 }
 
-const BASS = "#38BDF8";
-const MUTED = "#8B9298";
-
 const WAVEFORM_HEIGHT = 140;
-const TOTAL_HEIGHT = SCOPE_SECTION_RIBBON_HEIGHT + WAVEFORM_HEIGHT + SCOPE_RULER_HEIGHT;
-const MIN_SCOPE_WIDTH = 960;
-const PIXELS_PER_SECOND = 8;
-const LONG_TRACK_S = 90;
-
-function transientColor(type: Transient["type"]): string {
-  if (type === "drop") return DROP;
-  if (type === "bass") return BASS;
-  return MUTED;
-}
-
-function scopeWidth(durationS: number): number {
-  if (durationS <= 0) return MIN_SCOPE_WIDTH;
-  return Math.max(MIN_SCOPE_WIDTH, Math.ceil(durationS * PIXELS_PER_SECOND));
-}
-
-function visibleTransients(transients: Transient[], durationS: number): Transient[] {
-  if (durationS <= LONG_TRACK_S || transients.length <= 150) {
-    return transients;
-  }
-  return transients.filter((transient) => transient.type !== "percussive");
-}
+const TOTAL_HEIGHT =
+  SCOPE_SECTION_RIBBON_HEIGHT +
+  WAVEFORM_HEIGHT +
+  SCOPE_RULER_HEIGHT +
+  SCOPE_MARKER_STRIP_HEIGHT;
 
 export function ScopeCanvas({
   durationS,
   points,
   transients,
   sections,
-  beats,
   downbeats,
   blocks,
   selectedBlockId,
@@ -76,6 +58,8 @@ export function ScopeCanvas({
   const waveformTop = SCOPE_SECTION_RIBBON_HEIGHT;
   const innerW = width - padX * 2;
   const innerH = WAVEFORM_HEIGHT - padY * 2;
+  const rulerTop = waveformTop + WAVEFORM_HEIGHT;
+  const markerStripTop = rulerTop + SCOPE_RULER_HEIGHT;
 
   const localPoints = useMemo(() => {
     if (!window || (window.startS === 0 && window.endS === durationS)) {
@@ -86,29 +70,33 @@ export function ScopeCanvas({
       .map((point) => ({ t: point.t - window.startS, v: point.v }));
   }, [points, window, durationS]);
 
-  const localBeats = useMemo(
-    () => cropTimesToWindow(beats, scopeWindow),
-    [beats, scopeWindow],
-  );
   const localDownbeats = useMemo(
     () => cropTimesToWindow(downbeats, scopeWindow),
     [downbeats, scopeWindow],
   );
 
+  const displayPoints = useMemo(
+    () => resamplePointsToPixelWidth(localPoints, innerW),
+    [localPoints, innerW],
+  );
+
   const path = useMemo(() => {
-    if (localPoints.length === 0 || windowDurationS <= 0) return "";
-    return localPoints
+    if (displayPoints.length === 0 || windowDurationS <= 0) return "";
+    return displayPoints
       .map((point, index) => {
         const x = padX + (point.t / windowDurationS) * innerW;
         const y = waveformTop + padY + innerH - point.v * innerH;
         return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
       })
       .join(" ");
-  }, [localPoints, windowDurationS, innerW, innerH, padX, padY, waveformTop]);
+  }, [displayPoints, windowDurationS, innerW, innerH, padX, padY, waveformTop]);
 
-  const markers = useMemo(
-    () => visibleTransients(transients, durationS),
-    [transients, durationS],
+  const accentCandidates = useMemo(
+    () =>
+      transients.filter(
+        (transient) => transient.type === "drop" || transient.type === "bass",
+      ),
+    [transients],
   );
 
   const timeTicks = useMemo(
@@ -123,27 +111,11 @@ export function ScopeCanvas({
       viewBox={`0 0 ${width} ${TOTAL_HEIGHT}`}
       width={width}
       height={TOTAL_HEIGHT}
-      className="block max-w-none rounded border border-monitor-border bg-[#141618]"
+      className="block max-w-none bg-[#141618]"
       role="img"
       aria-label="Audio scope waveform"
     >
       <SectionRibbon sections={sections} window={scopeWindow} viewWidth={width} y={0} />
-
-      <rect
-        x={0}
-        y={waveformTop + WAVEFORM_HEIGHT}
-        width={width}
-        height={SCOPE_RULER_HEIGHT}
-        fill={RULER_BG}
-      />
-      <line
-        x1={padX}
-        x2={width - padX}
-        y1={waveformTop + WAVEFORM_HEIGHT}
-        y2={waveformTop + WAVEFORM_HEIGHT}
-        stroke={TICK_COLOR}
-        strokeWidth={1}
-      />
 
       {blocks.map((block) => {
         if (block.end_s <= scopeWindow.startS || block.start_s >= scopeWindow.endS) return null;
@@ -167,15 +139,6 @@ export function ScopeCanvas({
         );
       })}
 
-      <ScopeBeatGrid
-        beats={localBeats}
-        downbeats={localDownbeats}
-        window={{ startS: 0, endS: windowDurationS }}
-        viewWidth={width}
-        topY={waveformTop + padY}
-        bottomY={waveformTop + WAVEFORM_HEIGHT - padY}
-      />
-
       {path && (
         <path
           d={path}
@@ -187,24 +150,15 @@ export function ScopeCanvas({
         />
       )}
 
-      {markers.map((transient) => {
-        const timeS = transient.timestamp_ms / 1000;
-        if (timeS < scopeWindow.startS - 0.001 || timeS > scopeWindow.endS + 0.001) return null;
-        const local = timeS - scopeWindow.startS;
-        const x = padX + (local / windowDurationS) * innerW;
-        return (
-          <line
-            key={`${transient.timestamp_ms}-${transient.type}`}
-            x1={x}
-            x2={x}
-            y1={waveformTop + padY}
-            y2={waveformTop + WAVEFORM_HEIGHT - padY}
-            stroke={transientColor(transient.type)}
-            strokeWidth={transient.type === "drop" ? 2.5 : 1}
-            opacity={transient.type === "percussive" ? 0.45 : 0.9}
-          />
-        );
-      })}
+      <rect x={0} y={rulerTop} width={width} height={SCOPE_RULER_HEIGHT} fill={RULER_BG} />
+      <line
+        x1={padX}
+        x2={width - padX}
+        y1={rulerTop}
+        y2={rulerTop}
+        stroke={TICK_COLOR}
+        strokeWidth={1}
+      />
 
       {timeTicks.map((timeS) => {
         const x = timeToX(timeS, windowDurationS, padX, innerW);
@@ -214,14 +168,14 @@ export function ScopeCanvas({
             <line
               x1={x}
               x2={x}
-              y1={waveformTop + WAVEFORM_HEIGHT - 4}
-              y2={waveformTop + WAVEFORM_HEIGHT + 5}
+              y1={rulerTop + 2}
+              y2={rulerTop + 8}
               stroke={TICK_COLOR}
               strokeWidth={1}
             />
             <text
               x={x}
-              y={TOTAL_HEIGHT - 5}
+              y={rulerTop + SCOPE_RULER_HEIGHT - 6}
               fill={LABEL_COLOR}
               fontSize={10}
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -232,6 +186,15 @@ export function ScopeCanvas({
           </g>
         );
       })}
+
+      <ScopeMarkerStrip
+        window={{ startS: 0, endS: windowDurationS }}
+        viewWidth={width}
+        y={markerStripTop}
+        height={SCOPE_MARKER_STRIP_HEIGHT}
+        downbeats={localDownbeats}
+        accents={accentCandidates}
+      />
     </svg>
   );
 }

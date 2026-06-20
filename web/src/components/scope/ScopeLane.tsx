@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { WaveformPoint } from "../../types";
+import { resamplePointsToPixelWidth } from "./scopePoints";
 import { LANE_COLORS, LABEL_COLOR, SCOPE_GUTTER_WIDTH, SCOPE_PAD_X } from "./scopeTheme";
 import { timeToX, type ScopeWindow } from "./scopeWindow";
 
@@ -33,24 +34,29 @@ export function ScopeLane({
   const innerH = height - padY * 2;
   const stroke = LANE_COLORS[laneId] ?? "#3DDC84";
 
+  const displayPoints = useMemo(
+    () => resamplePointsToPixelWidth(points, innerW),
+    [points, innerW],
+  );
+
   const path = useMemo(() => {
-    if (points.length === 0 || durationS <= 0) return "";
-    return points
+    if (displayPoints.length === 0 || durationS <= 0) return "";
+    return displayPoints
       .map((point, index) => {
         const x = timeToX(point.t, durationS, plotX, innerW);
         const laneY = y + padY + innerH - point.v * innerH;
         return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${laneY.toFixed(2)}`;
       })
       .join(" ");
-  }, [points, durationS, plotX, innerW, y, padY, innerH]);
+  }, [displayPoints, durationS, plotX, innerW, y, padY, innerH]);
 
   const areaPath = useMemo(() => {
     if (!path || durationS <= 0) return "";
     const baseline = y + padY + innerH;
-    const startX = timeToX(points[0]?.t ?? 0, durationS, plotX, innerW);
-    const endX = timeToX(points[points.length - 1]?.t ?? durationS, durationS, plotX, innerW);
+    const startX = timeToX(displayPoints[0]?.t ?? 0, durationS, plotX, innerW);
+    const endX = timeToX(displayPoints[displayPoints.length - 1]?.t ?? durationS, durationS, plotX, innerW);
     return `${path} L ${endX.toFixed(2)} ${baseline.toFixed(2)} L ${startX.toFixed(2)} ${baseline.toFixed(2)} Z`;
-  }, [path, points, durationS, plotX, innerW, y, padY, innerH]);
+  }, [path, displayPoints, durationS, plotX, innerW, y, padY, innerH]);
 
   const renderCrosshair = (timeS: number, key: string, opacity: number) => {
     const x = timeToX(timeS, durationS, plotX, innerW);

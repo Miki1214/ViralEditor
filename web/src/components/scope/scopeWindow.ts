@@ -62,3 +62,30 @@ export function xToTime(
   const ratio = Math.max(0, Math.min(1, (x - padX) / innerW));
   return ratio * durationS;
 }
+
+/** Drop times closer than minSpacingPx (keep earlier entries). */
+export function decimateTimesBySpacing(
+  times: number[],
+  durationS: number,
+  padX: number,
+  innerW: number,
+  minSpacingPx: number,
+): number[] {
+  if (times.length === 0 || durationS <= 0 || minSpacingPx <= 0) {
+    return [];
+  }
+
+  const sorted = [...times].sort((a, b) => a - b);
+  const visible: number[] = [];
+  let lastX = -Infinity;
+
+  for (const timeS of sorted) {
+    const x = timeToX(timeS, durationS, padX, innerW);
+    if (x - lastX >= minSpacingPx) {
+      visible.push(timeS);
+      lastX = x;
+    }
+  }
+
+  return visible;
+}

@@ -3,13 +3,14 @@ import type { SpatialFxSettings, StoryboardPayload, WaveformPayload } from "../t
 import { subscribePlayhead } from "../utils/playheadBus";
 import { planSpatialFxMarkers } from "../utils/spatialFxMarkers";
 import { slotColorForIndex } from "../utils/slotColors";
-import { ScopeBeatGrid } from "./scope/ScopeBeatGrid";
+import { ScopeMarkerStrip } from "./scope/ScopeMarkerStrip";
 import { SectionRibbon } from "./scope/SectionRibbon";
 import {
   buildTimeTicks,
   formatScopeTime,
   LABEL_COLOR,
   RULER_BG,
+  SCOPE_MARKER_STRIP_HEIGHT,
   SCOPE_PAD_X,
   SCOPE_RULER_HEIGHT,
   SCOPE_SECTION_RIBBON_HEIGHT,
@@ -30,7 +31,13 @@ const ZOOM = "#F4C430";
 const ROTATE = "#38BDF8";
 const WAVEFORM_HEIGHT = 72;
 const WAVEFORM_TOP = SCOPE_SECTION_RIBBON_HEIGHT;
-const TOTAL_HEIGHT = SCOPE_SECTION_RIBBON_HEIGHT + WAVEFORM_HEIGHT + SCOPE_RULER_HEIGHT;
+const RULER_TOP = WAVEFORM_TOP + WAVEFORM_HEIGHT;
+const MARKER_STRIP_TOP = RULER_TOP + SCOPE_RULER_HEIGHT;
+const TOTAL_HEIGHT =
+  SCOPE_SECTION_RIBBON_HEIGHT +
+  WAVEFORM_HEIGHT +
+  SCOPE_RULER_HEIGHT +
+  SCOPE_MARKER_STRIP_HEIGHT;
 const PAD_X = SCOPE_PAD_X;
 const PAD_Y = 8;
 
@@ -66,10 +73,6 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
     [waveform.points, blockStartS, blockEndS],
   );
 
-  const localBeats = useMemo(
-    () => cropTimesToWindow(waveform.beats ?? [], scopeWindow),
-    [waveform.beats, scopeWindow],
-  );
   const localDownbeats = useMemo(
     () => cropTimesToWindow(waveform.downbeats, scopeWindow),
     [waveform.downbeats, scopeWindow],
@@ -187,7 +190,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
         />
         <rect
           x={0}
-          y={WAVEFORM_TOP + WAVEFORM_HEIGHT}
+          y={RULER_TOP}
           width={viewWidth}
           height={SCOPE_RULER_HEIGHT}
           fill={RULER_BG}
@@ -195,18 +198,10 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
         <line
           x1={PAD_X}
           x2={viewWidth - PAD_X}
-          y1={WAVEFORM_TOP + WAVEFORM_HEIGHT}
-          y2={WAVEFORM_TOP + WAVEFORM_HEIGHT}
+          y1={RULER_TOP}
+          y2={RULER_TOP}
           stroke={TICK_COLOR}
           strokeWidth={1}
-        />
-        <ScopeBeatGrid
-          beats={localBeats}
-          downbeats={localDownbeats}
-          window={{ startS: 0, endS: blockDurationS }}
-          viewWidth={viewWidth}
-          topY={WAVEFORM_TOP + PAD_Y}
-          bottomY={WAVEFORM_TOP + WAVEFORM_HEIGHT - PAD_Y}
         />
         {orderedSlots.map((slot, index) => {
           const selected = slot.id === selectedSlotId;
@@ -299,24 +294,30 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
               );
             })}
 
+        <ScopeMarkerStrip
+          window={{ startS: 0, endS: blockDurationS }}
+          viewWidth={viewWidth}
+          y={MARKER_STRIP_TOP}
+          height={SCOPE_MARKER_STRIP_HEIGHT}
+          downbeats={localDownbeats}
+          accents={[]}
+        />
+
         {fxMarkers.map((marker, index) => {
           if (blockDurationS <= 0) return null;
           const x = PAD_X + (marker.timeS / blockDurationS) * innerW;
+          const baselineY = MARKER_STRIP_TOP + SCOPE_MARKER_STRIP_HEIGHT - 3;
+          const tickHeight = SCOPE_MARKER_STRIP_HEIGHT - 6;
           if (marker.kind === "zoom") {
             return (
               <g key={`fx-zoom-${index}-${marker.timeS}`} style={{ pointerEvents: "none" }}>
                 <line
                   x1={x}
                   x2={x}
-                  y1={WAVEFORM_TOP + PAD_Y}
-                  y2={WAVEFORM_TOP + PAD_Y + innerH * 0.55}
+                  y1={baselineY - tickHeight}
+                  y2={baselineY}
                   stroke={ZOOM}
                   strokeWidth={2}
-                  opacity={0.95}
-                />
-                <polygon
-                  points={`${x},${WAVEFORM_TOP + PAD_Y + 2} ${x - 3},${WAVEFORM_TOP + PAD_Y + 8} ${x + 3},${WAVEFORM_TOP + PAD_Y + 8}`}
-                  fill={ZOOM}
                   opacity={0.95}
                 />
               </g>
@@ -327,13 +328,12 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
               <line
                 x1={x}
                 x2={x}
-                y1={WAVEFORM_TOP + PAD_Y + innerH * 0.45}
-                y2={WAVEFORM_TOP + PAD_Y + innerH}
+                y1={baselineY - Math.round(tickHeight * 0.65)}
+                y2={baselineY}
                 stroke={ROTATE}
-                strokeWidth={1.5}
+                strokeWidth={1.75}
                 opacity={0.9}
               />
-              <circle cx={x} cy={WAVEFORM_TOP + PAD_Y + innerH - 3} r={2.5} fill={ROTATE} opacity={0.95} />
             </g>
           );
         })}
@@ -376,14 +376,14 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
               <line
                 x1={x}
                 x2={x}
-                y1={WAVEFORM_TOP + WAVEFORM_HEIGHT - 4}
-                y2={WAVEFORM_TOP + WAVEFORM_HEIGHT + 5}
+                y1={RULER_TOP + 2}
+                y2={RULER_TOP + 8}
                 stroke={TICK_COLOR}
                 strokeWidth={1}
               />
               <text
                 x={x}
-                y={TOTAL_HEIGHT - 5}
+                y={RULER_TOP + SCOPE_RULER_HEIGHT - 6}
                 fill={LABEL_COLOR}
                 fontSize={10}
                 fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"

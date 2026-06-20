@@ -1,5 +1,6 @@
 export const SCOPE_PAD_X = 4;
 export const SCOPE_RULER_HEIGHT = 22;
+export const SCOPE_MARKER_STRIP_HEIGHT = 28;
 export const SCOPE_SECTION_RIBBON_HEIGHT = 14;
 export const SCOPE_LANE_HEIGHT = 36;
 export const SCOPE_CHROMA_HEADER = 16;
@@ -15,6 +16,7 @@ export const TICK_COLOR = "rgba(139,146,152,0.35)";
 export const LABEL_COLOR = "#8B9298";
 export const MONITOR_BG = "#141618";
 export const RULER_BG = "#101214";
+export const MARKER_STRIP_BG = "#0C0E10";
 
 export const SECTION_FILLS = [
   "rgba(56,189,248,0.22)",

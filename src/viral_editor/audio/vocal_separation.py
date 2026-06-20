@@ -25,7 +25,10 @@ DEMUCS_MODEL_CACHE = os.environ.get(
     os.environ.get("TORCH_HOME", os.path.expanduser("~/.cache/torch")),
 )
 
-VOCAL_ACTIVITY_FLOOR = 0.08
+# Minimum Demucs vocal-stem energy share to treat a track as having vocals.
+VOCAL_STEM_SHARE_MIN = 0.15
+# Mix-relative scaling: vocal RMS / (mix p90 * ratio) before optional polish.
+VOCAL_MIX_RATIO_REF = 0.55
 
 
 def _resample_signal(signal: np.ndarray, target_length: int) -> np.ndarray:
@@ -63,8 +66,29 @@ def _normalize_activity(envelope: np.ndarray) -> np.ndarray:
     return np.clip(envelope / peak, 0.0, 1.0).astype(np.float32)
 
 
+def _calibrate_vocal_activity(vocal_rms: np.ndarray, mix_rms: np.ndarray | None) -> np.ndarray:
+    """Scale vocal RMS against mix loudness instead of peak-normalizing leakage to 1.0."""
+    if vocal_rms.size == 0:
+        return vocal_rms.astype(np.float32)
+    if mix_rms is None or mix_rms.size == 0:
+        return _normalize_activity(vocal_rms)
+
+    n = min(vocal_rms.size, mix_rms.size)
+    vocal = vocal_rms[:n].astype(np.float32)
+    mix = mix_rms[:n].astype(np.float32)
+    mix_ref = float(np.percentile(mix, 90))
+    if mix_ref <= 1e-9:
+        mix_ref = float(mix.max()) or 1e-9
+
+    scaled = np.clip(vocal / (mix_ref * VOCAL_MIX_RATIO_REF), 0.0, 1.0).astype(np.float32)
+    polish_peak = float(np.percentile(scaled, 98))
+    if polish_peak > 0.25:
+        scaled = np.clip(scaled / polish_peak, 0.0, 1.0).astype(np.float32)
+    return scaled
+
+
 def peak_normalize_lane(lane: np.ndarray) -> np.ndarray:
-    """Peak-normalize a scope lane to 0–1 (shared with beat_detector fallback)."""
+    """Peak-normalize a scope lane to 0–1."""
     return _normalize_activity(lane.astype(np.float32))
 
 
@@ -72,8 +96,8 @@ def separate_vocal_stem(
     audio_path: Path,
     *,
     model_sr: int = 44100,
-) -> tuple[np.ndarray, int]:
-    """Return mono vocal stem and the model sample rate."""
+) -> tuple[np.ndarray, int, dict[str, float]]:
+    """Return mono vocal stem, model sample rate, and per-stem energy shares."""
     resolved = audio_path.resolve()
     if not resolved.is_file():
         raise FileNotFoundError(f"Audio file not found: {resolved}")
@@ -112,6 +136,13 @@ def separate_vocal_stem(
             shifts=1,
         )[0]
 
+    energies: dict[str, float] = {}
+    for index, name in enumerate(model.sources):
+        mono = sources[index].mean(dim=0).cpu().numpy().astype(np.float32)
+        energies[name] = float(np.sqrt(np.mean(mono**2)))
+    total_energy = sum(energies.values()) or 1.0
+    shares = {name: energy / total_energy for name, energy in energies.items()}
+
     vocals = sources[vocal_index].mean(dim=0).cpu().numpy().astype(np.float32)
     effective_sr = int(model.samplerate)
     if model_sr and model_sr != effective_sr:
@@ -119,13 +150,14 @@ def separate_vocal_stem(
         effective_sr = model_sr
 
     logger.info(
-        "Demucs vocal stem extracted — %.1fs @ %d Hz from %s (peak %.4f)",
+        "Demucs vocal stem extracted — %.1fs @ %d Hz from %s (peak %.4f, share %.3f)",
         vocals.size / effective_sr,
         effective_sr,
         resolved.name,
         float(np.max(np.abs(vocals))) if vocals.size else 0.0,
+        shares.get("vocals", 0.0),
     )
-    return vocals, effective_sr
+    return vocals, effective_sr, shares
 
 
 def compute_vocal_activity(
@@ -136,9 +168,19 @@ def compute_vocal_activity(
     n_frames: int,
     target_samples: int | None = None,
     frame_length: int | None = None,
+    mix_rms: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Peak-normalized RMS envelope of the vocal stem, aligned to scope-lane frame count."""
-    vocal, model_sr = separate_vocal_stem(audio_path, model_sr=44100)
+    """Mix-relative RMS envelope of the vocal stem, aligned to scope-lane frame count."""
+    vocal, model_sr, shares = separate_vocal_stem(audio_path, model_sr=44100)
+    vocal_share = float(shares.get("vocals", 0.0))
+    if vocal_share < VOCAL_STEM_SHARE_MIN:
+        logger.info(
+            "Vocal stem share %.3f below %.2f — treating track as instrumental",
+            vocal_share,
+            VOCAL_STEM_SHARE_MIN,
+        )
+        return np.zeros(n_frames, dtype=np.float32)
+
     if model_sr != sr:
         vocal = librosa.resample(vocal, orig_sr=model_sr, target_sr=sr).astype(np.float32)
 
@@ -155,11 +197,12 @@ def compute_vocal_activity(
     )[0]
 
     activity = _resample_envelope(rms, n_frames)
-    activity = _normalize_activity(activity)
+    activity = _calibrate_vocal_activity(activity, mix_rms)
 
     logger.info(
-        "Vocal activity lane — %d frames, peak %.3f, mean %.3f",
+        "Vocal activity lane — %d frames, share %.3f, peak %.3f, mean %.3f",
         n_frames,
+        vocal_share,
         float(activity.max()) if activity.size else 0.0,
         float(activity.mean()) if activity.size else 0.0,
     )

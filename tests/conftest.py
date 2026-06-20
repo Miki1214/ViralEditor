@@ -31,9 +31,10 @@ def disable_demucs_vocal_separation(monkeypatch: pytest.MonkeyPatch) -> None:
         hop_length: int,
         sr: int,
         n_frames: int,
+        mix_rms: np.ndarray | None = None,
         **kwargs: object,
     ) -> np.ndarray:
-        del audio_path, hop_length, sr, kwargs
+        del audio_path, hop_length, sr, mix_rms, kwargs
         return np.zeros(n_frames, dtype=np.float32)
 
     monkeypatch.setattr(
