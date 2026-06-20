@@ -14,7 +14,7 @@ from viral_editor.models import (
     StorySlot,
     Transient,
 )
-from viral_editor.video.teaser import split_hook_crop
+from viral_editor.video.teaser import split_hook_crop_by_duration
 
 _MIN_SLOT_S = 1.5
 _DEFAULT_XFADE_S = 0.25
@@ -441,7 +441,6 @@ def apply_hook_inversion_layout(
     *,
     enabled: bool,
     payoff_duration_s: float,
-    tail_fraction: float,
     features: BeatSyncFeatures | None = None,
 ) -> Storyboard:
     """Split the hook into start/end storyboard slots aligned to the music block."""
@@ -507,19 +506,25 @@ def apply_hook_inversion_layout(
         )
         crop_start, crop_end = _full_hook_crop(hook_start, hook_end)
 
+    crop_span = max(crop_end - crop_start, 0.0)
+    effective_budget = hook_budget
+    if crop_span > 1e-6:
+        effective_budget = min(hook_budget, crop_span)
+        crop_end = crop_start + effective_budget
+
     payoff_d = min(
         max(payoff_duration_s, _HOOK_MIN_PART_S),
-        hook_budget - _HOOK_MIN_PART_S,
+        effective_budget - _HOOK_MIN_PART_S,
     )
     payoff_d = snap_hook_payoff_s(
         payoff_d,
-        hook_budget,
+        effective_budget,
         features,
         music_start_s=storyboard.music_start_s,
         music_end_s=storyboard.music_end_s,
     )
-    build_d = hook_budget - payoff_d
-    head, tail = split_hook_crop(crop_start, crop_end, tail_fraction)
+    build_d = effective_budget - payoff_d
+    head, tail = split_hook_crop_by_duration(crop_start, crop_end, payoff_d)
 
     start_slot = base.model_copy(
         update={

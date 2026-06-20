@@ -10,8 +10,8 @@ from viral_editor.models import ClipInput, MediaInfo, TeaserSpec
 # Total output duration equals the music window; the teaser occupies the first
 # ``out_duration_s`` seconds and the speed-ramped body fills the remainder.
 #
-# Storyboard hook split: when a hook slot exists, the teaser uses only the tail
-# slice of the hook crop (payoff first). The hook storyboard slot plays the
+# Storyboard hook split: when a hook slot exists, the teaser uses the payoff
+# segment (last ``duration_s`` of the hook crop). The hook_end slot plays the
 # remaining head so the loop reveals the full build-up without duplicating
 # the entire clip.
 
@@ -32,7 +32,7 @@ def split_hook_crop(
     min_head_s: float = 0.25,
     min_tail_s: float = 0.1,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Split a hook crop into (head, tail) source ranges for inversion + body."""
+    """Legacy fraction-based split — prefer ``split_hook_crop_by_duration``."""
     duration = max(crop_end - crop_start, 0.0)
     if duration <= 1e-9:
         empty = (crop_start, crop_start)
@@ -50,6 +50,29 @@ def split_hook_crop(
     return head, tail
 
 
+def split_hook_crop_by_duration(
+    crop_start: float,
+    crop_end: float,
+    payoff_duration_s: float,
+    *,
+    min_head_s: float = 0.25,
+    min_tail_s: float = 0.25,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Split hook crop for inversion at 1:1 — tail plays payoff, head plays build-up."""
+    duration = max(crop_end - crop_start, 0.0)
+    if duration <= 1e-9:
+        empty = (crop_start, crop_start)
+        return empty, empty
+
+    payoff_s = max(min(payoff_duration_s, duration - min_head_s), min_tail_s)
+    payoff_s = min(payoff_s, duration)
+    split = crop_end - payoff_s
+    split = max(split, crop_start)
+    head = (crop_start, split)
+    tail = (split, crop_end)
+    return head, tail
+
+
 def build_teaser_spec(
     media: MediaInfo,
     config: TeaserConfig,
@@ -60,14 +83,14 @@ def build_teaser_spec(
     """Build a spec for the prepended tail-inversion teaser clip."""
     if hook_clip is not None and hook_media is not None:
         crop_start, crop_end = _hook_crop_range(hook_clip, hook_media)
-        _, (tail_start, tail_end) = split_hook_crop(
+        _, (tail_start, tail_end) = split_hook_crop_by_duration(
             crop_start,
             crop_end,
-            config.tail_fraction,
+            config.duration_s,
         )
         if tail_end <= tail_start + 1e-9:
             raise ValueError(
-                "hook crop is too short to extract a teaser tail; widen the crop or lower tail_fraction"
+                "hook crop is too short for the payoff duration; widen the crop or shorten the hook split"
             )
         return TeaserSpec(
             src_start_s=round(tail_start, 6),

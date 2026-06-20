@@ -121,23 +121,30 @@ def test_apply_hook_inversion_layout_splits_hook_slots() -> None:
         storyboard,
         enabled=True,
         payoff_duration_s=1.0,
-        tail_fraction=0.2,
     )
     roles = [slot.role for slot in sorted(split.slots, key=lambda item: item.order)]
     assert roles[0] == "hook_start"
     assert roles[-1] == "hook_end"
     hook_start = split.slots[0]
     hook_end = next(slot for slot in split.slots if slot.role == "hook_end")
+    hook_budget = hook_start.target_duration_s + hook_end.target_duration_s
     positions = hook_payoff_downbeats_s(
-        hook.target_duration_s,
+        hook_budget,
         None,
         music_start_s=storyboard.music_start_s,
         music_end_s=storyboard.music_end_s,
     )
     assert hook_start.target_duration_s in positions
-    assert hook_end.target_duration_s == pytest.approx(hook.target_duration_s - hook_start.target_duration_s)
-    assert hook_start.crop_start_s == pytest.approx(2.4)
-    assert hook_end.crop_end_s == pytest.approx(2.4)
+    assert hook_end.target_duration_s == pytest.approx(hook_budget - hook_start.target_duration_s)
+    assert hook_start.crop_end_s - hook_start.crop_start_s == pytest.approx(
+        hook_start.target_duration_s,
+        abs=0.01,
+    )
+    assert hook_end.crop_end_s - hook_end.crop_start_s == pytest.approx(
+        hook_end.target_duration_s,
+        abs=0.01,
+    )
+    assert hook_end.crop_end_s == pytest.approx(hook_start.crop_start_s)
 
 
 def test_hook_inversion_realigns_slot_boundaries_to_downbeats() -> None:
@@ -149,7 +156,6 @@ def test_hook_inversion_realigns_slot_boundaries_to_downbeats() -> None:
         storyboard,
         enabled=True,
         payoff_duration_s=2.0,
-        tail_fraction=0.2,
         features=features,
     )
     hook_start = next(slot for slot in split.slots if slot.role == "hook_start")

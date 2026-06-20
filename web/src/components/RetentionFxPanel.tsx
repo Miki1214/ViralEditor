@@ -195,11 +195,6 @@ export function RetentionFxPanel({
       ? payoffDownbeats[nearestPayoffIndex(teaser.duration_s, payoffDownbeats)]
       : Math.min(teaser.duration_s, Math.max(0.5, hookBudget - 0.25));
 
-  const sourceSplit = useSliderDraft(
-    Math.round(teaser.tail_fraction * 100),
-    debouncedPatch,
-    (value) => ({ teaser: { tail_fraction: value / 100 } }),
-  );
   const intensitySplit = useSliderDraft(
     Math.round(spatialFx.intensity * 100),
     debouncedPatch,
@@ -211,7 +206,6 @@ export function RetentionFxPanel({
     (value) => ({ spatial_fx: { max_events_per_second: value } }),
   );
 
-  const sourceSplitPct = sourceSplit.localValue;
   const hookEndSlot = storyboard.slots.find((slot) => slot.role === "hook_end");
   const payoffS = serverPayoffS;
   const intensityPct = intensitySplit.localValue;
@@ -273,33 +267,6 @@ export function RetentionFxPanel({
             hint="Filmstrip: Hook · start → clips → Hook · end before loop."
             onChange={(enabled) => void onPatch({ teaser: { enabled } })}
           />
-          <label className="block">
-            <span className="field-label">Source split</span>
-            <div className="mt-1 flex items-center gap-2 font-mono text-[10px] text-monitor-muted">
-              <span className="w-4 text-scope-trace">1</span>
-              <div className="relative flex-1">
-                <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-monitor-border" />
-                <input
-                  type="range"
-                  min={1}
-                  max={25}
-                  step={1}
-                  disabled={saving || !teaser.enabled}
-                  value={sourceSplitPct}
-                  className="relative z-[1] w-full"
-                  {...sliderReleaseHandlers(
-                    sourceSplit.setValue,
-                    sourceSplit.commit,
-                    sourceSplit.cancelDrag,
-                  )}
-                />
-              </div>
-              <span className="w-4 text-right text-scope-trace">2</span>
-            </div>
-            <p className="mt-1 font-mono text-[10px] text-monitor-muted">
-              Tail slice {sourceSplitPct}% — part 2 is the payoff source; part 1 is build-up.
-            </p>
-          </label>
           <fieldset
             className="block border-0 p-0 m-0 min-w-0"
             disabled={saving || !teaser.enabled}
