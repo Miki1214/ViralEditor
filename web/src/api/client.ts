@@ -45,6 +45,7 @@ export async function fetchJobs(): Promise<JobSummary[]> {
 
 export interface CreateDraftJobInput {
   audio: File;
+  projectName: string;
   hookText: string;
   emphasisWords: string;
   fillColor: string;
@@ -58,6 +59,7 @@ export interface CreateDraftJobInput {
 export async function createDraftJob(input: CreateDraftJobInput): Promise<{ id: string }> {
   const form = new FormData();
   form.append("audio", input.audio);
+  form.append("project_name", input.projectName);
   form.append("hook_text", input.hookText);
   form.append("emphasis_words", input.emphasisWords);
   form.append("fill_color", input.fillColor);

@@ -147,6 +147,7 @@ def get_job(job_id: str, request: Request) -> JobDetail:
 async def create_job(
     request: Request,
     audio: UploadFile = File(...),
+    project_name: str = Form(""),
     hook_text: str = Form(...),
     emphasis_words: str = Form(""),
     fill_color: str = Form("#FFFFFF"),
@@ -179,6 +180,7 @@ async def create_job(
             raise HTTPException(status_code=400, detail=f"Invalid clips JSON: {exc}") from exc
 
     audio_name = Path(audio.filename or "audio.mp3").name
+    resolved_project_name = project_name.strip() or Path(audio_name).stem
 
     job_id = uuid.uuid4().hex
     workspace = job_workspace(job_id)
@@ -213,6 +215,7 @@ async def create_job(
         if len(clip_inputs) == 1 and not clips:
             config = build_job_config(
                 workspace=workspace,
+                project_name=resolved_project_name,
                 hook_text=hook_text,
                 emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
                 video_filename=clip_inputs[0].path.name,
@@ -231,6 +234,7 @@ async def create_job(
         elif clip_inputs:
             config = build_job_config(
                 workspace=workspace,
+                project_name=resolved_project_name,
                 hook_text=hook_text,
                 emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
                 audio_filename=audio_name,
@@ -249,6 +253,7 @@ async def create_job(
         else:
             config = build_job_config(
                 workspace=workspace,
+                project_name=resolved_project_name,
                 hook_text=hook_text,
                 emphasis_words=[w.strip() for w in emphasis_words.split(",") if w.strip()],
                 audio_filename=audio_name,

@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 
 export type FormState = {
+  projectName: string;
   hookText: string;
   emphasisWords: string;
   fillColor: string;
@@ -12,6 +13,8 @@ export type FormState = {
 };
 
 interface JobFormProps {
+  projectName: string;
+  onProjectNameChange: (value: string) => void;
   onAudioSelected: (file: File) => void;
   audioName: string | null;
   analyzing: boolean;
@@ -21,6 +24,8 @@ interface JobFormProps {
 }
 
 export function JobForm({
+  projectName,
+  onProjectNameChange,
   onAudioSelected,
   audioName,
   analyzing,
@@ -29,6 +34,7 @@ export function JobForm({
   audioScope = null,
 }: JobFormProps) {
   const audioInputId = useId();
+  const projectNameId = useId();
 
   return (
     <form
@@ -36,6 +42,23 @@ export function JobForm({
       onSubmit={(e) => e.preventDefault()}
     >
       <section className="space-y-3">
+        <div>
+          <label
+            htmlFor={projectNameId}
+            className="mb-1 block font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted"
+          >
+            Project name
+          </label>
+          <input
+            id={projectNameId}
+            type="text"
+            className="field-input w-full"
+            placeholder="My Vivaldi Short"
+            value={projectName}
+            disabled={analyzing}
+            onChange={(e) => onProjectNameChange(e.target.value)}
+          />
+        </div>
         <div>
           <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             Music

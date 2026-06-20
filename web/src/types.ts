@@ -11,6 +11,8 @@ export interface PipelineEvent {
 
 export interface JobSummary {
   id: string;
+  project_name: string;
+  created_at: number;
   status: JobStatus;
   stage: string | null;
   hook_text: string;

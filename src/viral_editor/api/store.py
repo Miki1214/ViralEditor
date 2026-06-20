@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,7 @@ JOBS_ROOT = Path("temp/jobs")
 @dataclass
 class JobRecord:
     id: str
+    created_at: float
     status: JobStatus
     config: JobConfig
     workspace: Path
@@ -33,6 +35,8 @@ class JobRecord:
     def to_summary(self) -> JobSummary:
         return JobSummary(
             id=self.id,
+            project_name=self.config.project_name,
+            created_at=self.created_at,
             status=self.status,
             stage=self.stage,
             hook_text=self.config.hook.text,
@@ -50,6 +54,7 @@ class JobStore:
         self._jobs: dict[str, JobRecord] = {}
         self._lock = threading.Lock()
         self._loops: dict[str, asyncio.AbstractEventLoop] = {}
+        self._rehydrate_from_disk()
 
     def create(
         self,
@@ -61,6 +66,7 @@ class JobStore:
         resolved_id = job_id or uuid.uuid4().hex
         record = JobRecord(
             id=resolved_id,
+            created_at=time.time(),
             status="queued",
             config=config,
             workspace=workspace.resolve(),
@@ -77,7 +83,7 @@ class JobStore:
         with self._lock:
             records = sorted(
                 self._jobs.values(),
-                key=lambda job: job.events[0].timestamp if job.events else 0,
+                key=lambda job: job.created_at,
                 reverse=True,
             )
         return [job.to_summary() for job in records]
@@ -164,6 +170,46 @@ class JobStore:
             job.config = config
             if config.music.start_s is not None and config.music.end_s is not None:
                 job.output_duration_s = config.music.end_s - config.music.start_s
+
+    def _rehydrate_from_disk(self) -> None:
+        jobs: dict[str, JobRecord] = {}
+        if not JOBS_ROOT.is_dir():
+            self._jobs = jobs
+            return
+        for config_path in JOBS_ROOT.glob("*/job.json"):
+            record = _job_record_from_job_json(config_path)
+            if record is not None:
+                jobs[record.id] = record
+        self._jobs = jobs
+
+
+def _infer_output_duration_s(config: JobConfig) -> float | None:
+    if config.music.start_s is not None and config.music.end_s is not None:
+        return config.music.end_s - config.music.start_s
+    return None
+
+
+def _job_record_from_job_json(config_path: Path) -> JobRecord | None:
+    try:
+        config = JobConfig.load(config_path)
+    except Exception:
+        return None
+
+    workspace = config_path.parent.resolve()
+    created_at = config_path.stat().st_mtime
+    output_exists = config.output_path.is_file()
+    status: JobStatus = "completed" if output_exists else "draft"
+    output_duration_s = _infer_output_duration_s(config)
+    artifacts = [str(config.output_path)] if output_exists else []
+    return JobRecord(
+        id=workspace.name,
+        created_at=created_at,
+        status=status,
+        config=config,
+        workspace=workspace,
+        output_duration_s=output_duration_s,
+        artifacts=artifacts,
+    )
 
 
 def job_workspace(job_id: str) -> Path:

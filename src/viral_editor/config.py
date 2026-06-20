@@ -166,6 +166,7 @@ class MusicSelectionConfig(DomainModel):
 class JobConfig(DomainModel):
     """Validated job request — single source of truth for a render run."""
 
+    project_name: str = ""
     video_path: Path | None = None
     audio_path: Path
     output_path: Path

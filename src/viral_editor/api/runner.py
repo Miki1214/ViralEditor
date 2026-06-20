@@ -79,6 +79,7 @@ def start_job(
 def build_job_config(
     *,
     workspace: Path,
+    project_name: str = "",
     hook_text: str,
     emphasis_words: list[str],
     audio_filename: str,
@@ -98,6 +99,7 @@ def build_job_config(
     input_dir = workspace / "input"
     output_dir = workspace / "output"
     common = dict(
+        project_name=project_name,
         audio_path=(input_dir / audio_filename).resolve(),
         output_path=(output_dir / "result.mp4").resolve(),
         seed=seed,

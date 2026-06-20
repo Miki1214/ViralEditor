@@ -810,3 +810,196 @@ def test_remap_fx_events_for_composite_skips_unassigned_slots() -> None:
     assert remapped[1].kind == "rotate"
     assert remapped[1].timestamp_s == pytest.approx(2.75)
     assert storyboard_time_to_composite_time(storyboard, 3.0) is None
+
+
+def test_reuse_storyboard_assignments_carries_slots_to_new_block() -> None:
+    from viral_editor.api.storyboard import reuse_storyboard_assignments
+    from viral_editor.models import SpatialCrop, Storyboard, StorySlot
+
+    previous = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=8.0,
+        total_duration_s=8.0,
+        slots=[
+            StorySlot(
+                id="slot_0_hook_start",
+                order=0,
+                label="Hook · start",
+                role="hook_start",
+                out_start_s=0.0,
+                out_end_s=2.0,
+                target_duration_s=2.0,
+                assigned_clip_id="hook_clip",
+                crop_start_s=7.0,
+                crop_end_s=10.0,
+                clip_filename="hook.mp4",
+                rotation_deg=90,
+                spatial_crop=SpatialCrop(x=0.1, y=0.0, w=0.5, h=0.9),
+            ),
+            StorySlot(
+                id="slot_1",
+                order=1,
+                label="Clip 1",
+                role="clip",
+                out_start_s=2.0,
+                out_end_s=6.0,
+                target_duration_s=4.0,
+                assigned_clip_id="body_clip",
+                crop_start_s=3.0,
+                crop_end_s=9.0,
+                clip_filename="body.mp4",
+            ),
+            StorySlot(
+                id="slot_0_hook_end",
+                order=2,
+                label="Hook · end",
+                role="hook_end",
+                out_start_s=6.0,
+                out_end_s=8.0,
+                target_duration_s=2.0,
+                assigned_clip_id="hook_clip",
+                crop_start_s=0.0,
+                crop_end_s=7.0,
+                clip_filename="hook.mp4",
+                rotation_deg=90,
+                spatial_crop=SpatialCrop(x=0.1, y=0.0, w=0.5, h=0.9),
+            ),
+        ],
+    )
+    new_block = Storyboard(
+        music_block_id="block_b",
+        music_start_s=20.0,
+        music_end_s=28.0,
+        total_duration_s=8.0,
+        slots=[
+            StorySlot(
+                id="slot_0_hook_start",
+                order=0,
+                label="Hook · start",
+                role="hook_start",
+                out_start_s=0.0,
+                out_end_s=2.0,
+                target_duration_s=2.0,
+            ),
+            StorySlot(
+                id="slot_1",
+                order=1,
+                label="Clip 1",
+                role="punch",
+                out_start_s=2.0,
+                out_end_s=5.5,
+                target_duration_s=3.5,
+            ),
+            StorySlot(
+                id="slot_2",
+                order=2,
+                label="Clip 2",
+                role="clip",
+                out_start_s=5.5,
+                out_end_s=7.0,
+                target_duration_s=1.5,
+            ),
+            StorySlot(
+                id="slot_0_hook_end",
+                order=3,
+                label="Hook · end",
+                role="hook_end",
+                out_start_s=7.0,
+                out_end_s=8.0,
+                target_duration_s=1.0,
+            ),
+        ],
+    )
+
+    reused = reuse_storyboard_assignments(new_block, previous)
+    hook_start = reused.slots[0]
+    body_1 = reused.slots[1]
+    body_2 = reused.slots[2]
+    hook_end = reused.slots[3]
+
+    assert hook_start.assigned_clip_id == "hook_clip"
+    assert hook_start.crop_start_s == pytest.approx(7.0)
+    assert body_1.assigned_clip_id == "body_clip"
+    assert body_1.crop_end_s == pytest.approx(9.0)
+    assert body_2.assigned_clip_id is None
+    assert hook_end.assigned_clip_id == "hook_clip"
+    assert hook_end.rotation_deg == 90
+
+
+def test_persist_storyboard_variant_restores_block_specific_assignments(tmp_path: Path) -> None:
+    from viral_editor.api.storyboard import (
+        load_storyboard_variants,
+        persist_storyboard_variant,
+        reuse_storyboard_assignments,
+    )
+    from viral_editor.models import Storyboard, StorySlot
+
+    block_a = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=8.0,
+        total_duration_s=8.0,
+        slots=[
+            StorySlot(
+                id="slot_0_hook_start",
+                order=0,
+                label="Hook · start",
+                role="hook_start",
+                out_start_s=0.0,
+                out_end_s=2.0,
+                target_duration_s=2.0,
+                assigned_clip_id="a_hook",
+                crop_start_s=8.0,
+                crop_end_s=10.0,
+            ),
+        ],
+    )
+    block_b = Storyboard(
+        music_block_id="block_b",
+        music_start_s=20.0,
+        music_end_s=28.0,
+        total_duration_s=8.0,
+        slots=[
+            StorySlot(
+                id="slot_0_hook_start",
+                order=0,
+                label="Hook · start",
+                role="hook_start",
+                out_start_s=0.0,
+                out_end_s=2.0,
+                target_duration_s=2.0,
+                assigned_clip_id="b_hook",
+                crop_start_s=1.0,
+                crop_end_s=3.0,
+            ),
+        ],
+    )
+
+    persist_storyboard_variant(tmp_path, block_a)
+    persist_storyboard_variant(tmp_path, block_b)
+    variants = load_storyboard_variants(tmp_path)
+
+    restored = reuse_storyboard_assignments(
+        Storyboard(
+            music_block_id="block_a",
+            music_start_s=0.0,
+            music_end_s=8.0,
+            total_duration_s=8.0,
+            slots=[
+                StorySlot(
+                    id="slot_0_hook_start",
+                    order=0,
+                    label="Hook · start",
+                    role="hook_start",
+                    out_start_s=0.0,
+                    out_end_s=2.0,
+                    target_duration_s=2.0,
+                ),
+            ],
+        ),
+        variants["block_a"],
+    )
+
+    assert restored.slots[0].assigned_clip_id == "a_hook"
+    assert restored.slots[0].crop_start_s == pytest.approx(8.0)

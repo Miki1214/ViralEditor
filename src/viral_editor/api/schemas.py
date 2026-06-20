@@ -20,6 +20,8 @@ class HealthResponse(BaseModel):
 
 class JobSummary(BaseModel):
     id: str
+    project_name: str
+    created_at: float
     status: JobStatus
     stage: str | None = None
     hook_text: str

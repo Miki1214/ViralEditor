@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, StoryboardPayload, WaveformPayload } from "./types";
 import {
   assignSlotClip,
@@ -42,6 +42,7 @@ import { StageTelemetry } from "./components/StageTelemetry";
 import { StoryboardPanel } from "./components/StoryboardPanel";
 
 const initialForm: FormState = {
+  projectName: "",
   hookText: "I built this in 30 days",
   emphasisWords: "30, days",
   fillColor: "#FFFFFF",
@@ -56,6 +57,7 @@ export default function App() {
   const [form, setForm] = useState<FormState>(initialForm);
   const [stages, setStages] = useState<StageInfo[]>([]);
   const [events, setEvents] = useState<PipelineEvent[]>([]);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobSummary["status"] | null>(null);
   const [jobArtifacts, setJobArtifacts] = useState<string[]>([]);
@@ -77,6 +79,9 @@ export default function App() {
   const [validatedPreviewUrl, setValidatedPreviewUrl] = useState<string | null>(null);
   const [previewLoadError, setPreviewLoadError] = useState<string | null>(null);
   const debugMode = isDebugMode();
+  const [restoreMenuOpen, setRestoreMenuOpen] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const restoreMenuRef = useRef<HTMLDivElement | null>(null);
   const [blockPlayheadS, setBlockPlayheadS] = useState(0);
   const blockPlayheadRef = useRef(0);
   const [compositePreviewPlaying, setCompositePreviewPlaying] = useState(false);
@@ -203,10 +208,99 @@ export default function App() {
       });
   };
 
+  const refreshJobsList = useCallback(async () => {
+    try {
+      const list = await fetchJobs();
+      setJobs(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const restoreJob = useCallback(
+    async (job: JobSummary) => {
+      eventsUnsubRef.current?.();
+      eventsUnsubRef.current = null;
+      setError(null);
+      setAnalyzing(false);
+      setRestoreLoading(true);
+      setRestoreMenuOpen(false);
+      setEvents([]);
+      setActiveJobId(job.id);
+      setJobStatus(job.status);
+      setJobArtifacts(job.artifacts);
+      setHasOutput(job.has_output);
+      patchForm({ projectName: job.project_name });
+      setPreviewVersion(0);
+      setPreviewReady(false);
+      setCompositePreviewPlaying(false);
+      setBlockPlayheadS(0);
+      blockPlayheadRef.current = 0;
+      emitPlayheadUi(0);
+      blockSeekRef.current?.(0);
+      try {
+        await Promise.all([loadScope(job.id), loadStoryboard(job.id)]);
+      } finally {
+        setRestoreLoading(false);
+      }
+    },
+    [],
+  );
+
+  const jobDisplayTitle = useCallback((job: JobSummary) => {
+    const projectName = job.project_name.trim();
+    if (projectName) {
+      return projectName;
+    }
+    const hook = job.hook_text.trim();
+    if (hook && hook !== initialForm.hookText) {
+      return hook;
+    }
+    const shortId = job.id.slice(0, 8);
+    if (job.output_duration_s != null) {
+      return `Project ${shortId} · ${job.output_duration_s.toFixed(1)}s cut`;
+    }
+    return `Project ${shortId}`;
+  }, []);
+
+  const formatJobCreatedAt = useCallback((timestampS: number) => {
+    return new Date(timestampS * 1000).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, []);
+
+  const jobsForRestore = useMemo(() => jobs, [jobs]);
+
   useEffect(() => {
     loadHealth();
     fetchStages().then(setStages).catch(() => undefined);
-  }, []);
+    void refreshJobsList();
+  }, [refreshJobsList]);
+
+  useEffect(() => {
+    if (!restoreMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (restoreMenuRef.current?.contains(target)) return;
+      setRestoreMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setRestoreMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [restoreMenuOpen]);
 
   const renderBlockedReason = (() => {
     if (apiOnline === false) {
@@ -275,6 +369,7 @@ export default function App() {
     try {
       const { id } = await createDraftJob({
         audio: file,
+        projectName: form.projectName,
         hookText: form.hookText,
         emphasisWords: form.emphasisWords,
         fillColor: form.fillColor,
@@ -299,12 +394,13 @@ export default function App() {
         },
         () => {
           setAnalyzing(false);
-          fetchJobs()
+          refreshJobsList()
             .then((list) => {
               const job = list.find((j) => j.id === id);
               if (job) {
                 setJobStatus(job.status);
                 setJobArtifacts(job.artifacts);
+                setHasOutput(job.has_output);
               }
             })
             .catch(() => undefined);
@@ -420,6 +516,12 @@ export default function App() {
     setSelectedBlockId(block.id);
     setMusicStartS(block.start_s);
     setMusicEndS(block.end_s);
+    setBlockPlayheadS(0);
+    blockPlayheadRef.current = 0;
+    emitPlayheadUi(0);
+    blockSeekRef.current?.(0);
+    setCompositePreviewPlaying(false);
+    setPreviewReady(false);
     try {
       await updateMusicSelection(activeJobId, { selected_block_id: block.id });
       loadScope(activeJobId);
@@ -622,7 +724,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-monitor-border bg-monitor-surface/80 backdrop-blur">
+      <header className="relative z-30 border-b border-monitor-border bg-monitor-surface/80 backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-5 py-4">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-scope-trace">
@@ -630,34 +732,95 @@ export default function App() {
             </p>
             <h1 className="text-lg font-semibold tracking-tight">Control Room</h1>
           </div>
-          <div className="flex items-center gap-3 font-mono text-xs">
-            <span
-              className={
-                apiOnline
-                  ? "text-scope-trace"
-                  : apiOnline === false
-                    ? "text-hook-gold"
-                    : "text-monitor-muted"
-              }
-            >
-              {apiOnline === null
-                ? "CHECKING API…"
-                : apiOnline
-                  ? "API ONLINE"
-                  : "API OFFLINE"}
-            </span>
-            <span className="text-monitor-muted">|</span>
-            <span
-              className={
-                ffmpegOk
-                  ? "text-scope-trace"
-                  : ffmpegOk === false
-                    ? "text-hook-gold"
-                    : "text-monitor-muted"
-              }
-            >
-              {ffmpegOk === null ? "CHECKING FFMPEG…" : ffmpegOk ? "FFMPEG OK" : "FFMPEG OFFLINE"}
-            </span>
+          <div className="flex items-center gap-3">
+            <div ref={restoreMenuRef} className="relative">
+              <button
+                type="button"
+                className="btn-ghost px-3 py-1.5 font-mono text-xs"
+                onClick={() => setRestoreMenuOpen((open) => !open)}
+                disabled={restoreLoading || jobs.length === 0}
+              >
+                {restoreLoading ? "Restoring…" : "Restore project"}
+              </button>
+              {restoreMenuOpen && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded border border-monitor-border bg-monitor-surface p-2 shadow-phone">
+                  <div className="mb-2 flex items-center justify-between px-2">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-monitor-muted">
+                      Previous projects
+                    </p>
+                    <button
+                      type="button"
+                      className="font-mono text-[10px] text-monitor-muted hover:text-monitor-text"
+                      onClick={() => void refreshJobsList()}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="max-h-72 space-y-1 overflow-y-auto">
+                    {jobsForRestore.length === 0 ? (
+                      <p className="px-2 py-3 text-xs text-monitor-muted">No saved jobs yet.</p>
+                    ) : (
+                      jobsForRestore.map((job) => (
+                        <button
+                          key={job.id}
+                          type="button"
+                          className={`w-full rounded border px-3 py-2 text-left transition ${
+                            job.id === activeJobId
+                              ? "border-scope-trace/60 bg-scope-trace/10"
+                              : "border-monitor-border bg-monitor-bg/40 hover:border-monitor-text/40"
+                          }`}
+                          onClick={() => void restoreJob(job)}
+                        >
+                          <p className="truncate font-mono text-[11px] text-monitor-text">
+                            {jobDisplayTitle(job)}
+                          </p>
+                          <p className="mt-1 font-mono text-[10px] text-monitor-muted">
+                            {job.status.toUpperCase()}
+                            {job.created_at ? ` · ${formatJobCreatedAt(job.created_at)}` : ""}
+                            {job.output_duration_s != null
+                              ? ` · ${job.output_duration_s.toFixed(1)}s`
+                              : ""}
+                            {job.has_output ? " · output ready" : ""}
+                          </p>
+                          <p className="mt-0.5 truncate font-mono text-[10px] text-monitor-muted/80">
+                            {job.hook_text || job.id}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 font-mono text-xs">
+              <span
+                className={
+                  apiOnline
+                    ? "text-scope-trace"
+                    : apiOnline === false
+                      ? "text-hook-gold"
+                      : "text-monitor-muted"
+                }
+              >
+                {apiOnline === null
+                  ? "CHECKING API…"
+                  : apiOnline
+                    ? "API ONLINE"
+                    : "API OFFLINE"}
+              </span>
+              <span className="text-monitor-muted">|</span>
+              <span
+                className={
+                  ffmpegOk
+                    ? "text-scope-trace"
+                    : ffmpegOk === false
+                      ? "text-hook-gold"
+                      : "text-monitor-muted"
+                }
+              >
+                {ffmpegOk === null ? "CHECKING FFMPEG…" : ffmpegOk ? "FFMPEG OK" : "FFMPEG OFFLINE"}
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -676,6 +839,8 @@ export default function App() {
       <main className="mx-auto grid max-w-[1400px] gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <section className="space-y-5">
           <JobForm
+            projectName={form.projectName}
+            onProjectNameChange={(projectName) => patchForm({ projectName })}
             onAudioSelected={handleAudioSelected}
             audioName={audioName}
             analyzing={analyzing}

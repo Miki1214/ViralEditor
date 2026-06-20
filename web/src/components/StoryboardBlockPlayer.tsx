@@ -95,6 +95,7 @@ export function StoryboardBlockPlayer({
   const [loopMode, setLoopMode] = useState<StoryboardLoopMode>("block");
   const [ready, setReady] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
+  const [sliderValue, setSliderValue] = useState(playheadS);
 
   const blockDurationS = storyboard.total_duration_s;
   const audioUrl = previewAudioUrl(jobId, storyboard.music_start_s, storyboard.music_end_s);
@@ -168,6 +169,7 @@ export function StoryboardBlockPlayer({
 
   useEffect(() => {
     if (scrubbingRef.current) return;
+    setSliderValue(playheadS);
     updatePlayheadDom(playheadS);
   }, [playheadS, blockDurationS, updatePlayheadDom]);
 
@@ -237,6 +239,7 @@ export function StoryboardBlockPlayer({
     setPlaying(false);
     setReady(false);
     setScrubbing(false);
+    setSliderValue(0);
     scrubbingRef.current = false;
     prevAudioTimeRef.current = 0;
     publishPlayhead(0, { commit: true });
@@ -373,6 +376,7 @@ export function StoryboardBlockPlayer({
       const commit = options?.commit !== false;
       const selectSlot = options?.selectSlot !== false;
       const clamped = Math.max(0, Math.min(timeS, blockDurationS));
+      setSliderValue(clamped);
 
       if (compositePreviewActive) {
         if (commit) {
@@ -417,6 +421,7 @@ export function StoryboardBlockPlayer({
     scrubbingRef.current = false;
     setScrubbing(false);
     const timeS = scrubValueRef.current;
+    setSliderValue(timeS);
     if (pendingSlotIdRef.current) {
       onSelectSlot?.(pendingSlotIdRef.current);
       pendingSlotIdRef.current = null;
@@ -440,6 +445,7 @@ export function StoryboardBlockPlayer({
       const clamped = Math.max(0, Math.min(timeS, blockDurationS));
       scrubValueRef.current = clamped;
       scrubbingRef.current = true;
+      setSliderValue(clamped);
       updatePlayheadDom(clamped);
       updateActiveSlotLabel(clamped);
       const hit = slotAtTime(clamped);
@@ -457,6 +463,7 @@ export function StoryboardBlockPlayer({
     setScrubbing(true);
     pendingSlotIdRef.current = null;
     scrubValueRef.current = Number(sliderRef.current?.value ?? playheadS);
+    setSliderValue(scrubValueRef.current);
   }, [playheadS]);
 
   useEffect(() => {
@@ -525,7 +532,7 @@ export function StoryboardBlockPlayer({
           min={0}
           max={blockDurationS}
           step={0.001}
-          defaultValue={playheadS}
+          value={sliderValue}
           disabled={!transportReady}
           onPointerDown={beginScrub}
           onChange={(e) => handleScrubInput(Number(e.target.value))}

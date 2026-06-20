@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from viral_editor.audio.block_planner import selected_block
@@ -19,6 +20,8 @@ from viral_editor.models import ClipInput, MediaInfo, SpatialCrop, Storyboard, S
 from viral_editor.video.clip_reel import normalize_crop_range
 from viral_editor.video.teaser import split_hook_crop_by_output_ratio
 
+_STORYBOARD_VARIANTS_FILE = "storyboard_variants.json"
+
 
 def load_storyboard(temp_dir: Path) -> Storyboard | None:
     path = temp_dir / "storyboard.json"
@@ -28,7 +31,94 @@ def load_storyboard(temp_dir: Path) -> Storyboard | None:
 
 
 def persist_storyboard(temp_dir: Path, storyboard: Storyboard) -> Path:
-    return write_artifact(storyboard, "storyboard", temp_dir)
+    path = write_artifact(storyboard, "storyboard", temp_dir)
+    persist_storyboard_variant(temp_dir, storyboard)
+    return path
+
+
+def _storyboard_variant_key(storyboard: Storyboard) -> str:
+    return storyboard.music_block_id or "__default__"
+
+
+def load_storyboard_variants(temp_dir: Path) -> dict[str, Storyboard]:
+    path = temp_dir / _STORYBOARD_VARIANTS_FILE
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    variants: dict[str, Storyboard] = {}
+    if not isinstance(payload, dict):
+        return variants
+    for key, value in payload.items():
+        if isinstance(key, str) and isinstance(value, dict):
+            try:
+                variants[key] = Storyboard.model_validate(value)
+            except Exception:
+                continue
+    return variants
+
+
+def persist_storyboard_variant(temp_dir: Path, storyboard: Storyboard) -> Path:
+    variants = load_storyboard_variants(temp_dir)
+    variants[_storyboard_variant_key(storyboard)] = storyboard
+    path = temp_dir / _STORYBOARD_VARIANTS_FILE
+    path.write_text(
+        json.dumps(
+            {key: value.model_dump(mode="json") for key, value in variants.items()},
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _slot_reuse_key(slot: StorySlot, slots: list[StorySlot]) -> str:
+    if slot.role in ("hook", "hook_start", "hook_end"):
+        return slot.role
+    ordered = sorted(slots, key=lambda item: item.order)
+    body_slots = [entry for entry in ordered if entry.role not in ("hook", "hook_start", "hook_end")]
+    ordinal = next((index for index, entry in enumerate(body_slots) if entry.id == slot.id), -1)
+    return f"body:{max(ordinal, 0)}"
+
+
+def _copy_slot_assignment(target: StorySlot, source: StorySlot) -> StorySlot:
+    return target.model_copy(
+        update={
+            "assigned_clip_id": source.assigned_clip_id,
+            "crop_start_s": source.crop_start_s,
+            "crop_end_s": source.crop_end_s,
+            "clip_filename": source.clip_filename,
+            "rotation_deg": source.rotation_deg,
+            "fit_mode": source.fit_mode,
+            "spatial_crop": source.spatial_crop,
+        }
+    )
+
+
+def reuse_storyboard_assignments(
+    storyboard: Storyboard,
+    source: Storyboard | None,
+) -> Storyboard:
+    """Copy per-slot clip assignments/crops/transforms from a prior storyboard."""
+    if source is None:
+        return storyboard
+    by_key = {
+        _slot_reuse_key(slot, source.slots): slot
+        for slot in source.slots
+        if slot.assigned_clip_id is not None
+    }
+    if not by_key:
+        return storyboard
+    slots: list[StorySlot] = []
+    for slot in storyboard.slots:
+        source_slot = by_key.get(_slot_reuse_key(slot, storyboard.slots))
+        if source_slot is None:
+            slots.append(slot)
+            continue
+        slots.append(_copy_slot_assignment(slot, source_slot))
+    return storyboard.model_copy(update={"slots": slots})
 
 
 def refresh_hook_inversion_layout(
@@ -262,6 +352,8 @@ def persist_storyboard_for_job(
     del sections
     from viral_editor.api.music import load_audio_timeline, load_beat_features, load_music_blocks
 
+    previous_storyboard = load_storyboard(temp_dir)
+    variants = load_storyboard_variants(temp_dir)
     try:
         block_plan = load_music_blocks(temp_dir)
         timeline = load_audio_timeline(temp_dir)
@@ -293,6 +385,9 @@ def persist_storyboard_for_job(
         temp_dir=temp_dir,
         reshape_crops=True,
     )
+    variant_key = _storyboard_variant_key(storyboard)
+    restore_from = variants.get(variant_key) or previous_storyboard
+    storyboard = reuse_storyboard_assignments(storyboard, restore_from)
     persist_storyboard(temp_dir, storyboard)
     return storyboard
 
