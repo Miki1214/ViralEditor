@@ -1,0 +1,7 @@
+---
+alwaysApply: true
+---
+
+- Use a strict telegraphic, zero-filler output mode. No greetings, introductions, or summaries.
+- When explaining data flow, file relationships, or audio/video pipelines, ALWAYS format the response using minimalist ASCII graphs, mind-maps, or markdown tables (Graphify style).
+- Output format must be: [ASCII Graph/Table showing structural impact] -> [Short Technical Bulletpoints] -> [Exact Code Block].
