@@ -25,13 +25,13 @@ export function OutputPanel({
   }
 
   return (
-    <div className="panel p-5">
-      <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+    <div id="output-panel" className="panel p-5">
+      <h2 id="output-panel-title" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
         Output
       </h2>
 
       {status === "failed" && (
-        <p className="mt-3 text-sm text-hook-gold">
+        <p id="output-panel-failed-msg" className="mt-3 text-sm text-hook-gold">
           Render failed. Check pipeline telemetry for details.
         </p>
       )}
@@ -39,28 +39,29 @@ export function OutputPanel({
       {hasOutput ? (
         <div className="mt-4 space-y-3">
           <video
+            id="output-panel-video"
             className="monitor-video w-full max-w-sm rounded-lg border border-monitor-border"
             controls
             src={outputUrl(jobId)}
           />
-          <a className="btn-ghost inline-flex" href={outputUrl(jobId)} download="result.mp4">
+          <a id="output-panel-download-btn" className="btn-ghost inline-flex" href={outputUrl(jobId)} download="result.mp4">
             Download MP4
           </a>
         </div>
       ) : analysisDone ? (
         <div className="mt-3 space-y-3 text-sm text-monitor-muted">
-          <p>
+          <p id="output-panel-analysis-msg">
             Audio analysis is ready — pick a music block in the scope above, then run again when
             encode is available.
           </p>
           {artifacts.length > 0 && (
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wider text-scope-trace">
+            <div id="output-panel-artifacts">
+              <p id="output-panel-artifacts-title" className="font-mono text-[10px] uppercase tracking-wider text-scope-trace">
                 Artifacts written
               </p>
               <ul className="mt-2 space-y-1 font-mono text-xs">
                 {artifacts.map((name) => (
-                  <li key={name} className="rounded border border-monitor-border bg-monitor-bg px-2 py-1">
+                  <li id={`output-panel-artifact-${name}`} key={name} className="rounded border border-monitor-border bg-monitor-bg px-2 py-1">
                     temp/{name}
                   </li>
                 ))}
@@ -69,7 +70,7 @@ export function OutputPanel({
           )}
         </div>
       ) : status === "running" ? (
-        <p className="mt-3 text-sm text-monitor-muted">Pipeline running…</p>
+        <p id="output-panel-pipeline-msg" className="mt-3 text-sm text-monitor-muted">Pipeline running…</p>
       ) : null}
     </div>
   );

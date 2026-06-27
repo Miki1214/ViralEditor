@@ -1,7 +1,0 @@
----
-alwaysApply: true
----
-
-- We rely on Engram's topological graph for repository structure.
-- Always cross-reference the current file topology before modifying imports.
-- Never assume a file structure; verify via the existing codebase map.

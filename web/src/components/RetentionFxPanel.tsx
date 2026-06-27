@@ -301,18 +301,18 @@ export function RetentionFxPanel({
     : "Off";
 
   return (
-    <div className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-4">
+    <div id="retention-fx-panel" className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-monitor-muted">
+          <h3 id="retention-fx-title" className="font-mono text-[10px] uppercase tracking-[0.18em] text-monitor-muted">
             Retention FX
           </h3>
-          <p className="mt-1 max-w-prose text-xs text-monitor-muted">
+          <p id="retention-fx-desc" className="mt-1 max-w-prose text-xs text-monitor-muted">
             Split the hook into start (payoff) and end (build-up) storyboard slots. Spatial FX
             land on RMS peaks and downbeats — not loudness valleys.
           </p>
           {retentionScore && (
-            <p className="mt-2 font-mono text-[10px] text-scope-trace">
+            <p id="retention-fx-score" className="mt-2 font-mono text-[10px] text-scope-trace">
               Viral readiness {Math.round(retentionScore.overall * 100)}% · hook{" "}
               {Math.round(retentionScore.hook_strength * 100)}% · cadence{" "}
               {Math.round(retentionScore.cadence_adherence * 100)}% · beat sync{" "}
@@ -320,11 +320,11 @@ export function RetentionFxPanel({
             </p>
           )}
         </div>
-        <p className="font-mono text-[10px] text-scope-trace">{teaserPreviewLabel}</p>
+        <p id="retention-fx-preview-label" className="font-mono text-[10px] text-scope-trace">{teaserPreviewLabel}</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="space-y-3 rounded border border-monitor-border/70 bg-monitor-surface/40 p-3">
+        <section id="retention-fx-teaser-section" className="space-y-3 rounded border border-monitor-border/70 bg-monitor-surface/40 p-3">
           <Toggle
             checked={teaser.enabled}
             disabled={saving}
@@ -333,76 +333,55 @@ export function RetentionFxPanel({
             onChange={(enabled) => void onPatch({ teaser: { enabled } })}
           />
           <fieldset
+            id="retention-fx-hook-split-fieldset"
             className="block border-0 p-0 m-0 min-w-0"
             disabled={saving || !teaser.enabled}
           >
-            <legend className="field-label">Hook split</legend>
+            <legend id="retention-fx-hook-split-legend" className="field-label">Hook split</legend>
             {payoffOptions.length === 0 ? (
-              <p className="mt-1 font-mono text-[10px] text-monitor-muted">
+              <p id="retention-fx-no-downbeat-msg" className="mt-1 font-mono text-[10px] text-monitor-muted">
                 No downbeat positions in hook budget ({hookBudget.toFixed(1)}s)
               </p>
             ) : (
-              <div
-                className="mt-2 space-y-1"
-                role="radiogroup"
-                aria-label="Hook split downbeat positions"
-              >
+              <div id="retention-fx-payoff-radios" className="mt-2 space-y-1" role="radiogroup" aria-label="Hook split downbeat positions">
                 {payoffOptions.map(({ payoff, buildup }) => {
                   const selected = Math.abs(serverPayoffS - payoff) < 0.05;
                   const singleOption = payoffOptions.length === 1;
                   return (
-                    <label
-                      key={payoff}
-                      className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 font-mono text-[10px] transition ${
+                    <label key={payoff} id={`retention-fx-payoff-${payoff}-label`} className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1.5 font-mono text-[10px] transition ${
                         selected
                           ? "border-scope-trace/60 bg-scope-trace/10 text-monitor-text"
                           : "border-monitor-border/60 text-monitor-muted hover:border-scope-dim"
                       } ${singleOption ? "cursor-default opacity-90" : ""}`}
                     >
-                      <input
-                        type="radio"
-                        name="hook-split-payoff"
-                        className="shrink-0 accent-[rgb(var(--scope-trace))]"
-                        checked={selected}
-                        disabled={singleOption}
-                        onChange={() => void onPatch({ teaser: { duration_s: payoff } })}
-                      />
-                      <span className="tabular-nums text-scope-trace">1 · {payoff.toFixed(1)}s</span>
+                      <input id={`retention-fx-payoff-${payoff}-radio`} type="radio" name="hook-split-payoff" className="shrink-0 accent-[rgb(var(--scope-trace))]" checked={selected} disabled={singleOption} onChange={() => void onPatch({ teaser: { duration_s: payoff } })} />
+                      <span id={`retention-fx-payoff-time-${payoff}`} className="tabular-nums text-scope-trace">1 · {payoff.toFixed(1)}s</span>
                       <span className="text-monitor-muted">→</span>
-                      <span className="tabular-nums text-scope-trace">2 · {buildup.toFixed(1)}s</span>
+                      <span id={`retention-fx-buildup-time-${payoff}`} className="tabular-nums text-scope-trace">2 · {buildup.toFixed(1)}s</span>
                       {singleOption && (
-                        <span className="ml-auto text-monitor-muted">only downbeat</span>
+                        <span id="retention-fx-only-downbeat" className="ml-auto text-monitor-muted">only downbeat</span>
                       )}
                     </label>
                   );
                 })}
               </div>
             )}
-            <p className="mt-1 font-mono text-[10px] text-monitor-muted">
+            <p id="retention-fx-payoff-share-msg" className="mt-1 font-mono text-[10px] text-monitor-muted">
               {payoffOptions.length <= 1
                 ? `Snapped to downbeat · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`
                 : `${payoffOptions.length} downbeat positions · ${Math.round(payoffShare * 100)}% payoff · ${Math.round((1 - payoffShare) * 100)}% build-up (${hookBudget.toFixed(1)}s hook budget)`}
             </p>
           </fieldset>
           <label className="block">
-            <span className="field-label">Mask</span>
-            <select
-              className="field-select mt-1 w-full"
-              disabled={saving || !teaser.enabled}
-              value={teaser.mask}
-              onChange={(e) =>
-                void onPatch({
-                  teaser: { mask: e.target.value as TeaserSettings["mask"] },
-                })
-              }
-            >
-              <option value="vignette">Vignette — soft dark edges</option>
-              <option value="dir_blur">Directional blur — hide detail</option>
+            <span id="retention-fx-mask-label" className="field-label">Mask</span>
+            <select id="retention-fx-mask-select" className="field-select mt-1 w-full" disabled={saving || !teaser.enabled} value={teaser.mask} onChange={(e) => void onPatch({ teaser: { mask: e.target.value as TeaserSettings["mask"] } })}>
+              <option id="retention-fx-mask-vignette" value="vignette">Vignette — soft dark edges</option>
+              <option id="retention-fx-mask-dir-blur" value="dir_blur">Directional blur — hide detail</option>
             </select>
           </label>
         </section>
 
-        <section className="space-y-3 rounded border border-monitor-border/70 bg-monitor-surface/40 p-3">
+        <section id="retention-fx-spatial-section" className="space-y-3 rounded border border-monitor-border/70 bg-monitor-surface/40 p-3">
           <Toggle
             checked={spatialFx.enabled}
             disabled={saving}
@@ -411,50 +390,20 @@ export function RetentionFxPanel({
             onChange={(enabled) => void onPatch({ spatial_fx: { enabled } })}
           />
           <label className="block">
-            <span className="field-label">Intensity</span>
+            <span id="retention-fx-intensity-label" className="field-label">Intensity</span>
             <div className="mt-1 flex items-center gap-2">
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                disabled={saving || !spatialFx.enabled}
-                value={intensityPct}
-                className="flex-1"
-                {...sliderReleaseHandlers(
-                  intensitySplit.setValue,
-                  intensitySplit.commit,
-                  intensitySplit.cancelDrag,
-                )}
-              />
-              <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
-                {intensityPct}%
-              </span>
+              <input id="retention-fx-intensity-range" type="range" min={0} max={100} step={5} disabled={saving || !spatialFx.enabled} value={intensityPct} className="flex-1" {...sliderReleaseHandlers(intensitySplit.setValue, intensitySplit.commit, intensitySplit.cancelDrag)} />
+              <span id="retention-fx-intensity-pct" className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">{intensityPct}%</span>
             </div>
           </label>
           <label className="block">
-            <span className="field-label">Event density cap</span>
+            <span id="retention-fx-density-label" className="field-label">Event density cap</span>
             <div className="mt-1 flex items-center gap-2">
-              <input
-                type="range"
-                min={2}
-                max={16}
-                step={1}
-                disabled={saving || !spatialFx.enabled}
-                value={maxEventsPerSecond}
-                className="flex-1"
-                {...sliderReleaseHandlers(
-                  densitySplit.setValue,
-                  densitySplit.commit,
-                  densitySplit.cancelDrag,
-                )}
-              />
-              <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
-                {maxEventsPerSecond}/s
-              </span>
+              <input id="retention-fx-density-range" type="range" min={2} max={16} step={1} disabled={saving || !spatialFx.enabled} value={maxEventsPerSecond} className="flex-1" {...sliderReleaseHandlers(densitySplit.setValue, densitySplit.commit, densitySplit.cancelDrag)} />
+              <span id="retention-fx-density-value" className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">{maxEventsPerSecond}/s</span>
             </div>
           </label>
-          <div className="space-y-3 rounded border border-monitor-border/60 bg-monitor-bg/30 p-3">
+          <div id="retention-fx-pan-section" className="space-y-3 rounded border border-monitor-border/60 bg-monitor-bg/30 p-3">
             <Toggle
               checked={panEnabled}
               disabled={saving || !spatialFx.enabled}
@@ -463,66 +412,25 @@ export function RetentionFxPanel({
               onChange={(translate_enabled) => void onPatch({ spatial_fx: { translate_enabled } })}
             />
             <label className="block">
-              <span className="field-label">Pan cadence</span>
-              <select
-                className="field-input mt-1 w-full font-mono text-xs"
-                disabled={saving || !spatialFx.enabled || !panEnabled}
-                value={panBeatMode}
-                onChange={(event) =>
-                  void onPatch({
-                    spatial_fx: {
-                      pan_beat_mode: event.target.value as SpatialFxSettings["pan_beat_mode"],
-                    },
-                  })
-                }
-              >
-                <option value="auto">Auto — beats when hot, downbeats when calm</option>
-                <option value="beats">Every beat</option>
-                <option value="downbeats">Downbeats only</option>
+              <span id="retention-fx-pan-cadence-label" className="field-label">Pan cadence</span>
+              <select id="retention-fx-pan-cadence-select" className="field-input mt-1 w-full font-mono text-xs" disabled={saving || !spatialFx.enabled || !panEnabled} value={panBeatMode} onChange={(event) => void onPatch({ spatial_fx: { pan_beat_mode: event.target.value as SpatialFxSettings["pan_beat_mode"] } })}>
+                <option id="retention-fx-pan-cadence-auto" value="auto">Auto — beats when hot, downbeats when calm</option>
+                <option id="retention-fx-pan-cadence-beats" value="beats">Every beat</option>
+                <option id="retention-fx-pan-cadence-downbeats" value="downbeats">Downbeats only</option>
               </select>
             </label>
             <label className="block">
-              <span className="field-label">Pan hold</span>
+              <span id="retention-fx-pan-hold-label" className="field-label">Pan hold</span>
               <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="range"
-                  min={150}
-                  max={400}
-                  step={25}
-                  disabled={saving || !spatialFx.enabled || !panEnabled}
-                  value={panHoldMs}
-                  className="flex-1"
-                  {...sliderReleaseHandlers(
-                    panHoldSplit.setValue,
-                    panHoldSplit.commit,
-                    panHoldSplit.cancelDrag,
-                  )}
-                />
-                <span className="w-12 font-mono text-[10px] tabular-nums text-scope-trace">
-                  {panHoldMs}ms
-                </span>
+                <input id="retention-fx-pan-hold-range" type="range" min={150} max={400} step={25} disabled={saving || !spatialFx.enabled || !panEnabled} value={panHoldMs} className="flex-1" {...sliderReleaseHandlers(panHoldSplit.setValue, panHoldSplit.commit, panHoldSplit.cancelDrag)} />
+                <span id="retention-fx-pan-hold-ms" className="w-12 font-mono text-[10px] tabular-nums text-scope-trace">{panHoldMs}ms</span>
               </div>
             </label>
             <label className="block">
-              <span className="field-label">Energy gate</span>
+              <span id="retention-fx-energy-gate-label" className="field-label">Energy gate</span>
               <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="range"
-                  min={25}
-                  max={70}
-                  step={5}
-                  disabled={saving || !spatialFx.enabled || !panEnabled}
-                  value={panEnergyPct}
-                  className="flex-1"
-                  {...sliderReleaseHandlers(
-                    panEnergySplit.setValue,
-                    panEnergySplit.commit,
-                    panEnergySplit.cancelDrag,
-                  )}
-                />
-                <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
-                  {panEnergyPct}%
-                </span>
+                <input id="retention-fx-energy-range" type="range" min={25} max={70} step={5} disabled={saving || !spatialFx.enabled || !panEnabled} value={panEnergyPct} className="flex-1" {...sliderReleaseHandlers(panEnergySplit.setValue, panEnergySplit.commit, panEnergySplit.cancelDrag)} />
+                <span id="retention-fx-energy-pct" className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">{panEnergyPct}%</span>
               </div>
             </label>
             <Toggle
@@ -530,34 +438,17 @@ export function RetentionFxPanel({
               disabled={saving || !spatialFx.enabled || !panEnabled}
               label="First pan"
               hint="Guarantee a left/right pan near the start of the music window."
-              onChange={(pan_hook_enabled) =>
-                void onPatch({ spatial_fx: { pan_hook_enabled } })
-              }
+              onChange={(pan_hook_enabled) => void onPatch({ spatial_fx: { pan_hook_enabled } })}
             />
             <label className="block">
-              <span className="field-label">First pan by</span>
+              <span id="retention-fx-first-pan-by-label" className="field-label">First pan by</span>
               <div className="mt-1 flex items-center gap-2">
-                <input
-                  type="range"
-                  min={5}
-                  max={20}
-                  step={1}
-                  disabled={saving || !spatialFx.enabled || !panEnabled || !panHookEnabled}
-                  value={panHookTenths}
-                  className="flex-1"
-                  {...sliderReleaseHandlers(
-                    panHookSplit.setValue,
-                    panHookSplit.commit,
-                    panHookSplit.cancelDrag,
-                  )}
-                />
-                <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">
-                  {(panHookTenths / 10).toFixed(1)}s
-                </span>
+                <input id="retention-fx-first-pan-range" type="range" min={5} max={20} step={1} disabled={saving || !spatialFx.enabled || !panEnabled || !panHookEnabled} value={panHookTenths} className="flex-1" {...sliderReleaseHandlers(panHookSplit.setValue, panHookSplit.commit, panHookSplit.cancelDrag)} />
+                <span className="w-10 font-mono text-[10px] tabular-nums text-scope-trace">{(panHookTenths / 10).toFixed(1)}s</span>
               </div>
             </label>
           </div>
-          <p className="font-mono text-[10px] text-monitor-muted">
+          <p id="retention-fx-fx-counts" className="font-mono text-[10px] text-monitor-muted">
             {spatialFx.enabled ? (
               <>
                 ~{fxCounts.zoom} zoom · ~{fxCounts.rotate} rotate · ~{fxCounts.translate} pan in this music window
@@ -567,7 +458,7 @@ export function RetentionFxPanel({
             )}
           </p>
           {spatialFx.enabled && (
-            <p className="font-mono text-[10px] leading-snug text-monitor-muted/80">
+            <p id="retention-fx-rotate-info" className="font-mono text-[10px] leading-snug text-monitor-muted/80">
               Rotates are brief tilt shakes on bass flux — a pattern interrupt to refresh attention span.
             </p>
           )}

@@ -69,35 +69,36 @@ export function StoryboardSegmentsPanel({
   const segmentCount = payload?.slots.length ?? 0;
 
   return (
-    <div className="space-y-2 border-t border-monitor-border/60 pt-3">
+    <div id="segments-panel" className="space-y-2 border-t border-monitor-border/60 pt-3">
       <button
+        id="segments-panel-toggle-btn"
         type="button"
         className="flex w-full items-center justify-between gap-2 text-left"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
       >
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-monitor-muted">
+        <span id="segments-panel-title" className="font-mono text-[10px] uppercase tracking-[0.14em] text-monitor-muted">
           Composite segments
           {segmentCount > 0 ? ` · ${segmentCount}` : ""}
         </span>
-        <span className="font-mono text-[10px] text-scope-dim">{expanded ? "Hide" : "Show"}</span>
+        <span id="segments-panel-expand-label" className="font-mono text-[10px] text-scope-dim">{expanded ? "Hide" : "Show"}</span>
       </button>
 
       {expanded && (
         <>
           {loading && (
-            <p className="font-mono text-[10px] text-monitor-muted">Loading segments…</p>
+            <p id="segments-panel-loading" className="font-mono text-[10px] text-monitor-muted">Loading segments…</p>
           )}
-          {error && <p className="font-mono text-[10px] text-red-400">{error}</p>}
+          {error && <p id="segments-panel-error" className="font-mono text-[10px] text-red-400">{error}</p>}
           {payload && payload.slots.length > 0 && (
-            <div className="overflow-x-auto rounded border border-monitor-border/50 bg-monitor-bg/30">
+            <div id="segments-panel-table" className="overflow-x-auto rounded border border-monitor-border/50 bg-monitor-bg/30">
               <table className="w-full font-mono text-[10px]">
-                <thead>
+                <thead id="segments-panel-thead">
                   <tr className="border-b border-monitor-border/40 text-left text-monitor-muted">
-                    <th className="px-2 py-1.5 font-normal">Role</th>
-                    <th className="px-2 py-1.5 font-normal">Src</th>
-                    <th className="px-2 py-1.5 font-normal">Target</th>
-                    <th className="px-2 py-1.5 font-normal">Speed</th>
+                    <th id="segments-panel-th-role" className="px-2 py-1.5 font-normal">Role</th>
+                    <th id="segments-panel-th-src" className="px-2 py-1.5 font-normal">Src</th>
+                    <th id="segments-panel-th-target" className="px-2 py-1.5 font-normal">Target</th>
+                    <th id="segments-panel-th-speed" className="px-2 py-1.5 font-normal">Speed</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -105,6 +106,7 @@ export function StoryboardSegmentsPanel({
                     const selected = row.id === selectedSlotId;
                     return (
                       <tr
+                        id={`segments-panel-row-${row.id}`}
                         key={row.id}
                         className={
                           selected
@@ -112,18 +114,18 @@ export function StoryboardSegmentsPanel({
                             : "text-monitor-text"
                         }
                       >
-                        <td className="px-2 py-1">{row.role}</td>
-                        <td className="px-2 py-1 whitespace-nowrap">
+                        <td id={`segments-panel-td-role-${row.id}`} className="px-2 py-1">{row.role}</td>
+                        <td id={`segments-panel-td-src-${row.id}`} className="px-2 py-1 whitespace-nowrap">
                           {row.src_start_s.toFixed(2)}→{row.src_end_s.toFixed(2)}
-                          <span className="text-monitor-muted">
+                          <span id={`segments-panel-td-src-span-${row.id}`} className="text-monitor-muted">
                             {" "}
                             ({row.src_span_s.toFixed(2)}s)
                           </span>
                         </td>
-                        <td className="px-2 py-1 whitespace-nowrap">
+                        <td id={`segments-panel-td-target-${row.id}`} className="px-2 py-1 whitespace-nowrap">
                           {row.target_duration_s.toFixed(2)}s
                         </td>
-                        <td className="px-2 py-1 whitespace-nowrap">
+                        <td id={`segments-panel-td-speed-${row.id}`} className="px-2 py-1 whitespace-nowrap">
                           {row.speed_factor.toFixed(2)}×
                         </td>
                       </tr>
@@ -134,7 +136,7 @@ export function StoryboardSegmentsPanel({
             </div>
           )}
           {payload && payload.summary.hook_speed_s != null && (
-            <p className="font-mono text-[10px] text-monitor-muted">
+            <p id="segments-panel-hook-summary" className="font-mono text-[10px] text-monitor-muted">
               Hook unified{" "}
               {payload.summary.unified_crop
                 ? `${payload.summary.unified_crop[0].toFixed(2)}→${payload.summary.unified_crop[1].toFixed(2)}s`

@@ -258,6 +258,7 @@ export function AudioScopePanel({
 
   return (
     <section
+      id="audio-scope-panel"
       className={
         embedded
           ? "space-y-4 pt-4"
@@ -266,10 +267,10 @@ export function AudioScopePanel({
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          <h2 id="audio-scope-panel-title" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             Audio scope
           </h2>
-          <p className="mt-1 font-mono text-sm text-scope-trace">
+          <p id="audio-scope-panel-track-info" className="mt-1 font-mono text-sm text-scope-trace">
             {waveform.global_bpm.toFixed(1)} BPM · {waveform.duration_s.toFixed(1)}s track
             {waveform.key ? ` · ${waveform.key}` : ""}
             {waveform.beat_engine ? ` · ${waveform.beat_engine}` : ""}
@@ -301,6 +302,7 @@ export function AudioScopePanel({
                   : undefined;
             return (
             <button
+              id={`audio-scope-panel-target-${preset.value}`}
               key={preset.value}
               type="button"
               disabled={unavailable || switchingTarget}
@@ -309,10 +311,9 @@ export function AudioScopePanel({
               onClick={() => onTargetChange(preset.value, false)}
             >
               <ChipSwitchOverlay switching={switching}>
-                <span>{preset.label}</span>
+                <span id={`audio-scope-panel-target-label-${preset.value}`}>{preset.label}</span>
                 {loopQualityPct != null && (
-                  <span
-                    className={`ml-1 text-[10px] ${
+                  <span id={`audio-scope-panel-target-pct-${preset.value}`} className={`ml-1 text-[10px] ${
                       active
                         ? "text-hook-gold/75"
                         : isBestLoop
@@ -328,6 +329,7 @@ export function AudioScopePanel({
             );
           })}
           <button
+            id="audio-scope-panel-full-btn"
             type="button"
             disabled={switchingTarget}
             className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
@@ -340,7 +342,7 @@ export function AudioScopePanel({
             <ChipSwitchOverlay
               switching={switchingTarget && (useFullTrack || trackShorterThanTarget)}
             >
-              <span>Full</span>
+              <span id="audio-scope-panel-full-label">Full</span>
             </ChipSwitchOverlay>
           </button>
         </div>
@@ -348,16 +350,18 @@ export function AudioScopePanel({
 
       <div className="space-y-1">
         {scopeContentWidth > 960 && (
-          <p className="font-mono text-[10px] text-monitor-muted">
+          <p id="audio-scope-panel-scroll-hint" className="font-mono text-[10px] text-monitor-muted">
             Scroll horizontally to inspect the full track
           </p>
         )}
         <div
+          id="audio-scope-panel-scroll-container"
           ref={scopeScrollRef}
           className="overflow-x-auto pb-1"
           onScroll={detailOpen ? syncHorizontalScroll("scope") : undefined}
         >
           <div
+            id="audio-scope-panel-waveform-container"
             className="overflow-hidden rounded border border-monitor-border bg-[#141618]"
             style={{ width: scopeContentWidth }}
           >
@@ -375,7 +379,7 @@ export function AudioScopePanel({
             />
           </div>
         </div>
-        <ScopeLegend />
+        <section id="audio-scope-panel-legend"><ScopeLegend /></section>
         {showDetailRack && (
           <MusicDetailRackToggle
             open={detailOpen}
@@ -386,6 +390,7 @@ export function AudioScopePanel({
         )}
         {showDetailRack && detailOpen && (
           <div
+            id="audio-scope-panel-detail-scroll"
             ref={detailScrollRef}
             className="overflow-x-auto pb-1"
             onScroll={syncHorizontalScroll("detail")}
@@ -403,7 +408,7 @@ export function AudioScopePanel({
 
       <div className="space-y-2">
         {(trackShorterThanTarget || targetMismatch) && !switchingTarget && (
-          <p className="text-sm text-monitor-muted">
+          <p id="audio-scope-panel-mismatch-msg" className="text-sm text-monitor-muted">
             {trackShorterThanTarget
               ? "Track is shorter than the target — the full track will drive the render."
               : suggestedTarget != null
@@ -412,8 +417,8 @@ export function AudioScopePanel({
           </p>
         )}
         <div className="flex items-center gap-2">
-          {switchingTarget && <TargetSwitchSpinner />}
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          {switchingTarget && <TargetSwitchSpinner id="audio-scope-panel-spinner" />}
+          <p id="audio-scope-panel-blocks-label" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             {switchingTarget
               ? "Updating blocks…"
               : onlyFullTrack
@@ -422,6 +427,7 @@ export function AudioScopePanel({
           </p>
         </div>
         <div
+          id="audio-scope-panel-block-list"
           className={`space-y-2 ${
             switchingTarget ? "pointer-events-none opacity-45" : ""
           }`}

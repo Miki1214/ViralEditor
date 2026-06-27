@@ -91,6 +91,7 @@ export function SpeedCurveCanvas({
 
   return (
     <svg
+      id="speed-curve-svg"
       viewBox={`0 0 ${width} ${height}`}
       className="h-[72px] w-full min-w-[320px] overflow-visible rounded border border-monitor-border bg-[#141618]"
       role="img"
@@ -101,6 +102,7 @@ export function SpeedCurveCanvas({
         const w = Math.max(1, ((section.end_s - section.start_s) / durationS) * innerW);
         return (
           <rect
+            id={`speed-curve-section-${section.id}`}
             key={section.id}
             x={x}
             y={padY}
@@ -113,6 +115,7 @@ export function SpeedCurveCanvas({
 
       {slowBands.map((band, index) => (
         <rect
+          id={`speed-curve-slow-${index}`}
           key={`slow-${index}`}
           x={band.x}
           y={padY}
@@ -126,6 +129,7 @@ export function SpeedCurveCanvas({
         const x = padX + (time / durationS) * innerW;
         return (
           <line
+            id={`speed-curve-db-${time}`}
             key={`db-${time}`}
             x1={x}
             x2={x}
@@ -143,12 +147,13 @@ export function SpeedCurveCanvas({
           const x = padX + (point.t / durationS) * innerW;
           const y = speedToY(point.speed, minSpeed, maxSpeed, innerH, padY);
           return (
-            <circle key={`bass-${point.t}`} cx={x} cy={y} r={2.5} fill={BASS} opacity={0.9} />
+            <circle id={`speed-curve-bass-${point.t}`} key={`bass-${point.t}`} cx={x} cy={y} r={2.5} fill={BASS} opacity={0.9} />
           );
         })}
 
       {path && (
         <path
+          id="speed-curve-path"
           ref={pathRef}
           d={path}
           fill="none"
@@ -163,17 +168,10 @@ export function SpeedCurveCanvas({
         />
       )}
 
-      <text x={width - padX - 2} y={padY + 10} textAnchor="end" fill={MUTED} fontSize={9} fontFamily="JetBrains Mono">
+      <text id="speed-curve-max-label" x={width - padX - 2} y={padY + 10} textAnchor="end" fill={MUTED} fontSize={9} fontFamily="JetBrains Mono">
         {maxSpeed.toFixed(1)}x
       </text>
-      <text
-        x={width - padX - 2}
-        y={padY + innerH - 2}
-        textAnchor="end"
-        fill={MUTED}
-        fontSize={9}
-        fontFamily="JetBrains Mono"
-      >
+      <text id="speed-curve-min-label" x={width - padX - 2} y={padY + innerH - 2} textAnchor="end" fill={MUTED} fontSize={9} fontFamily="JetBrains Mono">
         {minSpeed.toFixed(1)}x
       </text>
     </svg>

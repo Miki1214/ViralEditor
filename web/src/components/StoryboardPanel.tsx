@@ -351,69 +351,76 @@ export function StoryboardPanel({
   const canClearClip = Boolean(active?.assigned_clip_id);
 
   return (
-    <div className="panel space-y-4 p-5">
+    <div id="storyboard-panel" className="panel space-y-4 p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          <h2 id="storyboard-panel-title" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             Storyboard
           </h2>
-          <p className="mt-1 text-xs text-monitor-muted">
+          <p id="storyboard-panel-desc" className="mt-1 text-xs text-monitor-muted">
             Drop a clip into each slot — it uploads and assigns automatically.
           </p>
         </div>
-        <dl className="font-mono text-xs">
-          <dt className="text-monitor-muted">TIMELINE</dt>
-          <dd className="text-scope-trace">{storyboard.total_duration_s.toFixed(1)}s</dd>
+        <dl id="storyboard-panel-timeline" className="font-mono text-xs">
+          <dt id="storyboard-panel-timeline-label" className="text-monitor-muted">TIMELINE</dt>
+          <dd id="storyboard-panel-timeline-value" className="text-scope-trace">{storyboard.total_duration_s.toFixed(1)}s</dd>
         </dl>
       </div>
 
       {waveform && (
         <div className="space-y-2">
-          <StoryboardScopeCanvas
-            waveform={waveform}
-            storyboard={storyboard}
-            selectedSlotId={selectedSlotId}
-            onSelectSlot={selectSlotAndSeek}
-          />
-          <MusicDetailRack
-            lanes={waveform.lanes ?? []}
-            chroma={waveform.chroma ?? null}
-            window={{
-              startS: storyboard.music_start_s,
-              endS: storyboard.music_end_s,
-            }}
-            viewWidth={640}
-            playheadAnchorS={storyboard.music_start_s}
-          />
-          <StoryboardBlockPlayer
-            jobId={jobId}
-            storyboard={storyboard}
-            selectedSlotId={selectedSlotId}
-            playheadS={blockPlayheadS}
-            onPlayheadChange={handleBlockPlayheadChange}
-            onSelectSlot={onSelectSlot}
-            compositePreviewActive={compositePreviewActive}
-            compositePreviewPlaying={compositePreviewPlaying}
-            onToggleCompositePreview={onToggleCompositePreview}
-            onSeekCompositePreview={onSeekCompositePreview}
-            onPlayCompositePreview={onPlayCompositePreview}
-            onLoopModeChange={onLoopModeChange}
-            registerBlockSeek={registerBlockSeek}
-            registerBlockPause={registerBlockPause}
-            registerBlockPlaySlot={registerBlockPlaySlot}
-            registerBlockSetLoopMode={registerBlockSetLoopMode}
-          />
+          <div id="storyboard-panel-scope">
+            <StoryboardScopeCanvas
+              waveform={waveform}
+              storyboard={storyboard}
+              selectedSlotId={selectedSlotId}
+              onSelectSlot={selectSlotAndSeek}
+            />
+          </div>
+          <div id="storyboard-panel-detail-rack">
+            <MusicDetailRack
+              lanes={waveform.lanes ?? []}
+              chroma={waveform.chroma ?? null}
+              window={{
+                startS: storyboard.music_start_s,
+                endS: storyboard.music_end_s,
+              }}
+              viewWidth={640}
+              playheadAnchorS={storyboard.music_start_s}
+            />
+          </div>
+          <div id="storyboard-panel-block-player">
+            <StoryboardBlockPlayer
+              jobId={jobId}
+              storyboard={storyboard}
+              selectedSlotId={selectedSlotId}
+              playheadS={blockPlayheadS}
+              onPlayheadChange={handleBlockPlayheadChange}
+              onSelectSlot={onSelectSlot}
+              compositePreviewActive={compositePreviewActive}
+              compositePreviewPlaying={compositePreviewPlaying}
+              onToggleCompositePreview={onToggleCompositePreview}
+              onSeekCompositePreview={onSeekCompositePreview}
+              onPlayCompositePreview={onPlayCompositePreview}
+              onLoopModeChange={onLoopModeChange}
+              registerBlockSeek={registerBlockSeek}
+              registerBlockPause={registerBlockPause}
+              registerBlockPlaySlot={registerBlockPlaySlot}
+              registerBlockSetLoopMode={registerBlockSetLoopMode}
+            />
+          </div>
         </div>
       )}
 
-      <div className="relative flex gap-2 overflow-x-auto pb-2">
+      <div id="storyboard-panel-slots-bar" className="relative flex gap-2 overflow-x-auto pb-2">
         {ordered.map((slot, index) => {
           const selected = slot.id === active?.id;
           const color = slotColorForIndex(index);
           return (
-            <div key={slot.id} className="flex shrink-0 items-center gap-1">
+            <div id={`storyboard-panel-slot-${slot.id}`} key={slot.id} className="flex shrink-0 items-center gap-1">
               {index > 0 && (
                 <button
+                  id={`storyboard-panel-transition-${slot.id}`}
                   type="button"
                   className="font-mono text-[9px] uppercase text-monitor-muted hover:text-scope-trace"
                   title={`Transition: ${slot.transition_in}`}
@@ -424,6 +431,7 @@ export function StoryboardPanel({
                 </button>
               )}
               <button
+                id={`storyboard-panel-slot-btn-${slot.id}`}
                 type="button"
                 onClick={() => selectSlotAndSeek(slot.id)}
                 className={`min-w-[120px] rounded border p-3 text-left transition ${
@@ -435,18 +443,20 @@ export function StoryboardPanel({
                   boxShadow: selected ? `0 0 0 1px ${color.stroke}` : undefined,
                 }}
               >
-                <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-monitor-muted">
+                <p id={`storyboard-panel-slot-label-${slot.id}`} className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-monitor-muted">
                   <span
+                    id={`storyboard-panel-slot-color-${slot.id}`}
                     className="inline-block h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: color.stroke }}
                     aria-hidden
                   />
                   {slot.label}
                 </p>
-                <p className="mt-1 font-mono text-[11px] text-monitor-text">
+                <p id={`storyboard-panel-slot-duration-${slot.id}`} className="mt-1 font-mono text-[11px] text-monitor-text">
                   {slot.target_duration_s.toFixed(1)}s
                 </p>
                 <p
+                  id={`storyboard-panel-slot-clip-${slot.id}`}
                   className="mt-1 truncate font-mono text-[10px]"
                   style={{ color: color.stroke }}
                 >
@@ -457,17 +467,18 @@ export function StoryboardPanel({
           );
         })}
         {storyboard.loop_to_hook && ordered.length > 0 && (
-          <div className="flex shrink-0 items-center pl-2 font-mono text-[10px] text-hook-gold">
+          <div id="storyboard-panel-loop-hint" className="flex shrink-0 items-center pl-2 font-mono text-[10px] text-hook-gold">
             ↩ loop to hook
           </div>
         )}
       </div>
 
       {active && (
-        <div className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-3">
+        <div id={`storyboard-panel-active-${active.id}`} className="rounded border border-monitor-border bg-monitor-bg/40 p-4 space-y-3">
           <input
             ref={inputRef}
             id={inputId}
+            id="storyboard-panel-file-input"
             type="file"
             accept="video/*,.mp4,.mov,.webm,.mkv"
             className="sr-only"
@@ -478,58 +489,22 @@ export function StoryboardPanel({
             }}
           />
           <div className="flex items-center justify-between gap-2">
-            <p
-              className="font-mono text-[10px] uppercase tracking-[0.18em]"
-              style={{ color: activeSlotColor?.stroke ?? undefined }}
-            >
+            <p id="storyboard-panel-active-label" className="font-mono text-[10px] uppercase tracking-[0.18em]" style={{ color: activeSlotColor?.stroke ?? undefined }}>
               {active.label} · {active.target_duration_s.toFixed(1)}s target
             </p>
             {activeTransform && (
               <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  className="btn-ghost px-2 py-1 font-mono text-[10px]"
-                  disabled={saving}
-                  title="Rotate clip 90° counter-clockwise"
-                  onClick={() =>
-                    applySlotTransform(active, {
-                      rotation_deg: (activeTransform.rotation_deg - 90 + 360) % 360,
-                    })
-                  }
-                >
+                <button id="storyboard-panel-rotate-left-btn" type="button" className="btn-ghost px-2 py-1 font-mono text-[10px]" disabled={saving} title="Rotate clip 90° counter-clockwise" onClick={() => applySlotTransform(active, { rotation_deg: (activeTransform.rotation_deg - 90 + 360) % 360 })}>
                   ↺ 90°
                 </button>
-                <button
-                  type="button"
-                  className="btn-ghost px-2 py-1 font-mono text-[10px]"
-                  disabled={saving}
-                  title="Rotate clip 90° clockwise"
-                  onClick={() =>
-                    applySlotTransform(active, {
-                      rotation_deg: (activeTransform.rotation_deg + 90) % 360,
-                    })
-                  }
-                >
+                <button id="storyboard-panel-rotate-right-btn" type="button" className="btn-ghost px-2 py-1 font-mono text-[10px]" disabled={saving} title="Rotate clip 90° clockwise" onClick={() => applySlotTransform(active, { rotation_deg: (activeTransform.rotation_deg + 90) % 360 })}>
                   ↻ 90°
                 </button>
-                <button
-                  type="button"
-                  className={`btn-ghost px-2 py-1 font-mono text-[10px] ${
-                    activeTransform.spatial_crop ? "text-scope-trace" : ""
-                  }`}
-                  disabled={saving || !active?.clip_source_url}
-                  title="Open frame crop editor (9:16)"
-                  onClick={() => setSpatialCropOpen(true)}
-                >
+                <button id="storyboard-panel-frame-crop-btn" type="button" className={`btn-ghost px-2 py-1 font-mono text-[10px] ${activeTransform.spatial_crop ? "text-scope-trace" : ""}`} disabled={saving || !active?.clip_source_url} title="Open frame crop editor (9:16)" onClick={() => setSpatialCropOpen(true)}>
                   Frame crop
                 </button>
                 {canClearClip && (
-                  <button
-                    type="button"
-                    className="btn-ghost text-[10px]"
-                    disabled={saving}
-                    onClick={clearActiveClip}
-                  >
+                  <button id="storyboard-panel-clear-clip-btn" type="button" className="btn-ghost text-[10px]" disabled={saving} onClick={clearActiveClip}>
                     Clear clip
                   </button>
                 )}
@@ -538,23 +513,15 @@ export function StoryboardPanel({
           </div>
 
           {!activeClipSlot?.assigned_clip_id && (
-            <label
-              htmlFor={inputId}
-              className="flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border px-4 py-4 text-center hover:border-scope-dim"
-              onDrop={(event) => handleDrop(event)}
-              onDragOver={(event) => event.preventDefault()}
-            >
-              <span className="text-xs text-monitor-muted">
+            <label htmlFor={inputId} id={`storyboard-panel-drop-zone-${active.id}`} className="flex min-h-[72px] cursor-pointer flex-col items-center justify-center rounded border border-dashed border-monitor-border px-4 py-4 text-center hover:border-scope-dim" onDrop={(event) => handleDrop(event)} onDragOver={(event) => event.preventDefault()}>
+              <span id={`storyboard-panel-drop-text-${active.id}`} className="text-xs text-monitor-muted">
                 {saving ? "Uploading clip…" : "Drop video for this slot or click to browse"}
               </span>
             </label>
           )}
 
           {previewUrl && durationS != null && durationS > 0 && (
-            <div
-              onDrop={(event) => handleDrop(event)}
-              onDragOver={(event) => event.preventDefault()}
-            >
+            <div id={`storyboard-panel-crop-timeline-${active.id}`} onDrop={(event) => handleDrop(event)} onDragOver={(event) => event.preventDefault()}>
               <ClipCropTimeline
                 durationS={durationS}
                 cropStartS={cropStartS}
@@ -579,12 +546,14 @@ export function StoryboardPanel({
             </div>
           )}
 
-          <StoryboardSegmentsPanel
-            jobId={jobId}
-            storyboard={storyboard}
-            selectedSlotId={active.id}
-            pendingCropKey={`${active.id}:${cropStartS.toFixed(4)}:${cropEndS.toFixed(4)}`}
-          />
+          <div id="storyboard-panel-segments">
+            <StoryboardSegmentsPanel
+              jobId={jobId}
+              storyboard={storyboard}
+              selectedSlotId={active.id}
+              pendingCropKey={`${active.id}:${cropStartS.toFixed(4)}:${cropEndS.toFixed(4)}`}
+            />
+          </div>
         </div>
       )}
 
@@ -596,23 +565,25 @@ export function StoryboardPanel({
       />
 
       {activeClipSlot?.assigned_clip_id && activeClipSlot.clip_source_url && (
-        <SpatialCropModal
-          key={active?.id}
-          slotId={active?.id ?? ""}
-          open={spatialCropOpen}
-          videoUrl={activeClipSlot.clip_source_url}
-          rotationDeg={activeTransform?.rotation_deg ?? 0}
-          initialCrop={activeTransform?.spatial_crop ?? null}
-          onClose={() => setSpatialCropOpen(false)}
-          onApply={(crop) => {
-            applySlotTransform(active, { spatial_crop: crop });
-            setSpatialCropOpen(false);
-          }}
-        />
+        <div id="storyboard-panel-spatial-modal">
+          <SpatialCropModal
+            key={active?.id}
+            slotId={active?.id ?? ""}
+            open={spatialCropOpen}
+            videoUrl={activeClipSlot.clip_source_url}
+            rotationDeg={activeTransform?.rotation_deg ?? 0}
+            initialCrop={activeTransform?.spatial_crop ?? null}
+            onClose={() => setSpatialCropOpen(false)}
+            onApply={(crop) => {
+              applySlotTransform(active, { spatial_crop: crop });
+              setSpatialCropOpen(false);
+            }}
+          />
+        </div>
       )}
 
       {saving && (
-        <p className="font-mono text-[11px] text-monitor-muted">Syncing storyboard…</p>
+        <p id="storyboard-panel-saving-msg" className="font-mono text-[11px] text-monitor-muted">Syncing storyboard…</p>
       )}
     </div>
   );

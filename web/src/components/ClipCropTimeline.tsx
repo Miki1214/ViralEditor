@@ -124,10 +124,11 @@ export function ClipCropTimeline({
 
   return (
     <div className="space-y-2">
-      <div ref={trackRef} className="crop-slider-track" aria-label="Crop range">
-        <div className="crop-slider-shade left-0" style={{ width: `${startPct}%` }} />
-        <div className="crop-slider-shade right-0" style={{ width: `${100 - endPct}%` }} />
+      <div ref={trackRef} id="clip-crop-timeline-track" className="crop-slider-track" aria-label="Crop range">
+        <div id="clip-crop-timeline-shade-left" className="crop-slider-shade left-0" style={{ width: `${startPct}%` }} />
+        <div id="clip-crop-timeline-shade-right" className="crop-slider-shade right-0" style={{ width: `${100 - endPct}%` }} />
         <div
+          id="clip-crop-timeline-range-slider"
           role="slider"
           aria-label="Move crop window"
           aria-valuemin={0}
@@ -149,6 +150,7 @@ export function ClipCropTimeline({
           }}
         />
         <button
+          id="clip-crop-timeline-handle-in"
           type="button"
           className="crop-slider-handle"
           style={{ left: `${startPct}%` }}
@@ -160,6 +162,7 @@ export function ClipCropTimeline({
           aria-label="Crop in"
         />
         <button
+          id="clip-crop-timeline-handle-out"
           type="button"
           className="crop-slider-handle"
           style={{ left: `${endPct}%` }}
@@ -171,10 +174,10 @@ export function ClipCropTimeline({
           aria-label="Crop out"
         />
       </div>
-      <p className="font-mono text-[11px] text-monitor-muted">
+      <p id="clip-crop-timeline-time-display" className="font-mono text-[11px] text-monitor-muted">
         {cropStartS.toFixed(2)}s → {cropEndS.toFixed(2)}s ({cropSpanS.toFixed(2)}s selected)
         {" · "}
-        <span className="text-scope-dim">
+        <span id="clip-crop-timeline-preview-rate" className="text-scope-dim">
           preview at {playbackRate.toFixed(2)}× → {targetDurationS.toFixed(1)}s slot
         </span>
       </p>

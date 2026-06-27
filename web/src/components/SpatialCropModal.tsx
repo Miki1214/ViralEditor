@@ -273,14 +273,16 @@ export function SpatialCropModal({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
+    <div id="spatial-crop-overlay" className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
       <button
+        id="spatial-crop-close-btn"
         type="button"
         className="absolute inset-0 bg-monitor-bg/80 backdrop-blur-sm"
         aria-label="Close frame crop"
         onClick={onClose}
       />
       <div
+        id="spatial-crop-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="spatial-crop-title"
@@ -291,22 +293,24 @@ export function SpatialCropModal({
             <h2 id="spatial-crop-title" className="text-sm font-semibold tracking-tight">
               Frame crop
             </h2>
-            <p className="mt-1 text-xs text-monitor-muted">
+            <p id="spatial-crop-desc" className="mt-1 text-xs text-monitor-muted">
               Drag or resize the 9:16 window. Extend past the video to add black bars in the output. Use
               zoom controls or Ctrl+scroll for fine adjustments.
             </p>
           </div>
-          <button type="button" className="btn-ghost text-xs" onClick={onClose}>
+          <button id="spatial-crop-cancel-btn" type="button" className="btn-ghost text-xs" onClick={onClose}>
             Cancel
           </button>
         </div>
 
         <div
+          id="spatial-crop-viewport"
           ref={viewportRef}
           className="mx-auto max-h-[min(72vh,720px)] max-w-full overflow-auto rounded border border-monitor-border bg-black"
           onWheel={handleViewportWheel}
         >
           <div
+            id="spatial-crop-stage"
             className="relative"
             style={
               stageSize.width > 0 && stageSize.height > 0
@@ -327,6 +331,7 @@ export function SpatialCropModal({
               }}
             >
           <video
+            id="spatial-crop-video"
             ref={videoRef}
             key={videoUrl}
             src={videoUrl}
@@ -359,78 +364,22 @@ export function SpatialCropModal({
 
           {shade && stageSize.width > 0 && (
             <>
-              <div
-                className="pointer-events-none absolute left-0 right-0 top-0 bg-black/55"
-                style={{ height: shade.top }}
-              />
-              <div
-                className="pointer-events-none absolute left-0 right-0 bg-black/55"
-                style={{ top: shade.top + shade.height, bottom: 0 }}
-              />
-              <div
-                className="pointer-events-none absolute bg-black/55"
-                style={{
-                  top: shade.top,
-                  left: 0,
-                  width: shade.left,
-                  height: shade.height,
-                }}
-              />
-              <div
-                className="pointer-events-none absolute bg-black/55"
-                style={{
-                  top: shade.top,
-                  left: shade.left + shade.width,
-                  right: 0,
-                  height: shade.height,
-                }}
-              />
+              <div id="spatial-crop-shade-top" className="pointer-events-none absolute left-0 right-0 top-0 bg-black/55" style={{ height: shade.top }} />
+              <div id="spatial-crop-shade-bottom" className="pointer-events-none absolute left-0 right-0 bg-black/55" style={{ top: shade.top + shade.height, bottom: 0 }} />
+              <div id="spatial-crop-shade-left" className="pointer-events-none absolute bg-black/55" style={{ top: shade.top, left: 0, width: shade.left, height: shade.height }} />
+              <div id="spatial-crop-shade-right" className="pointer-events-none absolute bg-black/55" style={{ top: shade.top, left: shade.left + shade.width, right: 0, height: shade.height }} />
               {letterboxStrips(
                 { x: shade.left, y: shade.top, w: shade.width, h: shade.height },
                 videoBounds,
               ).map((strip, index) => (
-                <div
-                  key={`letterbox-${index}`}
-                  className="pointer-events-none absolute bg-black"
-                  style={{
-                    left: strip.x,
-                    top: strip.y,
-                    width: strip.w,
-                    height: strip.h,
-                  }}
-                />
+                <div id={`spatial-crop-letterbox-${index}`} key={`letterbox-${index}`} className="pointer-events-none absolute bg-black" style={{ left: strip.x, top: strip.y, width: strip.w, height: strip.h }} />
               ))}
-              <div
-                className="absolute cursor-move border-2 border-scope-trace shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
-                style={{
-                  left: shade.left,
-                  top: shade.top,
-                  width: shade.width,
-                  height: shade.height,
-                }}
-                onPointerDown={(event) => startDrag("move", event)}
-              >
-                <span className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] uppercase text-scope-trace">
+              <div id="spatial-crop-box" className="absolute cursor-move border-2 border-scope-trace shadow-[0_0_0_1px_rgba(0,0,0,0.5)]" style={{ left: shade.left, top: shade.top, width: shade.width, height: shade.height }} onPointerDown={(event) => startDrag("move", event)}>
+                <span id="spatial-crop-label-916" className="pointer-events-none absolute left-1 top-1 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] uppercase text-scope-trace">
                   9:16
                 </span>
-                <button
-                  type="button"
-                  aria-label="Resize top-left"
-                  className="absolute -left-1.5 -top-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border border-scope-trace bg-monitor-bg"
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    startDrag("resize-nw", event);
-                  }}
-                />
-                <button
-                  type="button"
-                  aria-label="Resize bottom-right"
-                  className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border border-scope-trace bg-monitor-bg"
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    startDrag("resize-se", event);
-                  }}
-                />
+                <button id="spatial-crop-resize-nw" type="button" aria-label="Resize top-left" className="absolute -left-1.5 -top-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border border-scope-trace bg-monitor-bg" onPointerDown={(event) => { event.stopPropagation(); startDrag("resize-nw", event); }} />
+                <button id="spatial-crop-resize-se" type="button" aria-label="Resize bottom-right" className="absolute -bottom-1.5 -right-1.5 h-3.5 w-3.5 cursor-nwse-resize rounded-full border border-scope-trace bg-monitor-bg" onPointerDown={(event) => { event.stopPropagation(); startDrag("resize-se", event); }} />
               </div>
             </>
           )}
@@ -440,63 +389,30 @@ export function SpatialCropModal({
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="btn-ghost text-xs"
-              onClick={() => setCropBox(defaultPortraitCrop(stageBounds))}
-            >
+            <button id="spatial-crop-reset-btn" type="button" className="btn-ghost text-xs" onClick={() => setCropBox(defaultPortraitCrop(stageBounds))}>
               Reset crop
             </button>
-            <button
-              type="button"
-              className="btn-ghost text-xs"
-              disabled={videoBounds.w <= 0 || videoBounds.h <= 0}
-              onClick={() => setCropBox(defaultPortraitCrop(videoBounds))}
-            >
+            <button id="spatial-crop-fit-btn" type="button" className="btn-ghost text-xs" disabled={videoBounds.w <= 0 || videoBounds.h <= 0} onClick={() => setCropBox(defaultPortraitCrop(videoBounds))}>
               Fit to video
             </button>
           </div>
-          <div
-            className="flex items-center gap-1 rounded border border-monitor-border bg-monitor-bg/40 px-1"
-            role="group"
-            aria-label="Preview zoom"
-          >
-            <button
-              type="button"
-              className="btn-ghost px-2 py-1 font-mono text-xs"
-              aria-label="Zoom out"
-              disabled={zoom <= ZOOM_MIN}
-              onClick={() => adjustZoom(-ZOOM_STEP)}
-            >
+          <div id="spatial-crop-zoom-group" className="flex items-center gap-1 rounded border border-monitor-border bg-monitor-bg/40 px-1" role="group" aria-label="Preview zoom">
+            <button id="spatial-crop-zoom-out" type="button" className="btn-ghost px-2 py-1 font-mono text-xs" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => adjustZoom(-ZOOM_STEP)}>
               −
             </button>
-            <button
-              type="button"
-              className="btn-ghost min-w-[3.25rem] px-2 py-1 font-mono text-[10px] tabular-nums"
-              aria-label="Reset zoom to 100%"
-              onClick={() => setZoom(1)}
-            >
+            <button id="spatial-crop-zoom-reset" type="button" className="btn-ghost min-w-[3.25rem] px-2 py-1 font-mono text-[10px] tabular-nums" aria-label="Reset zoom to 100%" onClick={() => setZoom(1)}>
               {Math.round(zoom * 100)}%
             </button>
-            <button
-              type="button"
-              className="btn-ghost px-2 py-1 font-mono text-xs"
-              aria-label="Zoom in"
-              disabled={zoom >= ZOOM_MAX}
-              onClick={() => adjustZoom(ZOOM_STEP)}
-            >
+            <span id="spatial-crop-zoom-pct" className="sr-only">{Math.round(zoom * 100)}%</span>
+            <button id="spatial-crop-zoom-in" type="button" className="btn-ghost px-2 py-1 font-mono text-xs" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => adjustZoom(ZOOM_STEP)}>
               +
             </button>
           </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              className="btn-ghost text-xs"
-              onClick={() => onApply(null)}
-            >
+            <button id="spatial-crop-clear-btn" type="button" className="btn-ghost text-xs" onClick={() => onApply(null)}>
               Clear crop
             </button>
-            <button type="button" className="btn-primary text-xs" onClick={handleApply}>
+            <button id="spatial-crop-apply-btn" type="button" className="btn-primary text-xs" onClick={handleApply}>
               Apply crop
             </button>
           </div>
