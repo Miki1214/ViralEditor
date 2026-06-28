@@ -164,14 +164,10 @@ export function StoryboardPanel({
       const slot = ordered.find((item) => item.id === slotId);
       if (!slot) return;
       onSelectSlot(slotId);
-      if (slot.assigned_clip_id) {
-        onPlayBlockSlot?.(slotId);
-        return;
-      }
       onPauseBlockPlayback?.();
       onSeekBlockPlayhead?.(slot.out_start_s);
     },
-    [ordered, onSelectSlot, onPlayBlockSlot, onPauseBlockPlayback, onSeekBlockPlayhead],
+    [ordered, onSelectSlot, onPauseBlockPlayback, onSeekBlockPlayhead],
   );
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -478,7 +474,6 @@ export function StoryboardPanel({
           <input
             ref={inputRef}
             id={inputId}
-            id="storyboard-panel-file-input"
             type="file"
             accept="video/*,.mp4,.mov,.webm,.mkv"
             className="sr-only"

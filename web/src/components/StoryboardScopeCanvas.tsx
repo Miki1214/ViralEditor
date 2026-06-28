@@ -161,16 +161,6 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
       .join(" ");
   }, [points, blockDurationS, innerW, innerH]);
 
-  const slotAtX = (clientX: number, rect: DOMRect): string | null => {
-    if (blockDurationS <= 0) return null;
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left - PAD_X) / innerW));
-    const timeS = ratio * blockDurationS;
-    const hit = orderedSlots.find(
-      (slot) => timeS >= slot.out_start_s - 0.001 && timeS < slot.out_end_s - 0.001,
-    );
-    return hit?.id ?? null;
-  };
-
   return (
     <div id="storyboard-scope-container" className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -211,12 +201,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
         className="block rounded border border-monitor-border bg-[#141618] cursor-pointer"
         role="img"
         aria-label="Storyboard music block waveform"
-        onClick={(event) => {
-          if (!onSelectSlot) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          const slotId = slotAtX(event.clientX, rect);
-          if (slotId) onSelectSlot(slotId);
-        }}
+        style={{ pointerEvents: "none" }}
       >
         <SectionRibbon
           sections={waveform.sections}
@@ -251,7 +236,23 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
             ((slot.out_end_s - slot.out_start_s) / blockDurationS) * innerW,
           );
           return (
-            <g id={`storyboard-scope-slot-${slot.id}`} key={slot.id}>
+            <g
+              id={`storyboard-scope-slot-${slot.id}`}
+              key={slot.id}
+              style={{ pointerEvents: "all" }}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (onSelectSlot) onSelectSlot(slot.id);
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  if (onSelectSlot) onSelectSlot(slot.id);
+                }
+              }}
+            >
               <rect
                 id={`storyboard-scope-slot-rect-${slot.id}`}
                 x={x}

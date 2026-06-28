@@ -91,7 +91,7 @@ export function SectionRibbon({
   }
 
   return (
-    <g aria-hidden>
+    <g aria-hidden style={{ pointerEvents: "none" }}>
       <rect x={0} y={y} width={viewWidth} height={layout.height} fill="#0d0f10" />
       {layout.segments.map(({ section, index, x, w, lane, fill, labelLines }) => {
         const laneY = laneTopY(y, lane, layout.laneHeights);
