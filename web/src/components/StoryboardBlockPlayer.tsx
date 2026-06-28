@@ -225,7 +225,7 @@ export function StoryboardBlockPlayer({
     const now = performance.now();
     emit(clamped, now - lastAppCommitRef.current >= 150);
     prevAudioTimeRef.current = clamped;
-  }, [publishPlayhead]);
+  }, [publishPlayhead, selectedSlotRef]);
 
   useEffect(() => {
     if (!compositePreviewActive) return;
@@ -373,9 +373,8 @@ export function StoryboardBlockPlayer({
   };
 
   const seek = useCallback(
-    (timeS: number, options?: { commit?: boolean; selectSlot?: boolean }) => {
+    (timeS: number, options?: { commit?: boolean }) => {
       const commit = options?.commit !== false;
-      const selectSlot = options?.selectSlot !== false;
       const clamped = Math.max(0, Math.min(timeS, blockDurationS));
       updatePlayheadDom(clamped);
 
@@ -385,12 +384,6 @@ export function StoryboardBlockPlayer({
         }
         publishPlayhead(clamped, { commit });
         prevAudioTimeRef.current = clamped;
-        if (selectSlot) {
-          const hit = slotAtTime(clamped);
-          if (hit && hit.id !== selectedSlotId) {
-            onSelectSlot?.(hit.id);
-          }
-        }
         return;
       }
       const audio = audioRef.current;
@@ -399,21 +392,12 @@ export function StoryboardBlockPlayer({
       }
       publishPlayhead(clamped, { commit });
       prevAudioTimeRef.current = clamped;
-      if (selectSlot) {
-        const hit = slotAtTime(clamped);
-        if (hit && hit.id !== selectedSlotId) {
-          onSelectSlot?.(hit.id);
-        }
-      }
     },
     [
       blockDurationS,
       compositePreviewActive,
       onSeekCompositePreview,
       publishPlayhead,
-      slotAtTime,
-      selectedSlotId,
-      onSelectSlot,
     ],
   );
 
@@ -423,12 +407,9 @@ export function StoryboardBlockPlayer({
     setScrubbing(false);
     const timeS = scrubValueRef.current;
     updatePlayheadDom(timeS);
-    if (pendingSlotIdRef.current) {
-      onSelectSlot?.(pendingSlotIdRef.current);
-      pendingSlotIdRef.current = null;
-    }
-    seek(timeS, { commit: true, selectSlot: false });
-  }, [onSelectSlot, seek]);
+    pendingSlotIdRef.current = null;
+    seek(timeS, { commit: true });
+  }, [seek]);
 
   useEffect(() => {
     if (!scrubbing) return;
@@ -448,13 +429,9 @@ export function StoryboardBlockPlayer({
       scrubbingRef.current = true;
       updatePlayheadDom(clamped);
       updateActiveSlotLabel(clamped);
-      const hit = slotAtTime(clamped);
-      if (hit && hit.id !== selectedSlotId) {
-        pendingSlotIdRef.current = hit.id;
-      }
-      seek(clamped, { commit: false, selectSlot: false });
+      seek(clamped, { commit: false });
     },
-    [blockDurationS, seek, slotAtTime, selectedSlotId, updatePlayheadDom, updateActiveSlotLabel],
+    [blockDurationS, seek, updatePlayheadDom, updateActiveSlotLabel],
   );
 
   const beginScrub = useCallback(() => {

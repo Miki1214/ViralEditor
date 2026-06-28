@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, StoryboardPayload, WaveformPayload } from "./types";
 import {
   assignSlotClip,
@@ -583,7 +583,7 @@ export default function App() {
       const payload = await updateSlotCrop(activeJobId, slotId, cropStartS, cropEndS);
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      refreshPreview();
+      refreshPreview({ selectedSlotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update crop");
     } finally {
@@ -605,7 +605,7 @@ export default function App() {
       const updated = await updateSlotTransform(activeJobId, slotId, payload);
       setStoryboard(updated);
       setPreviewReady(updated.preview_ready);
-      refreshPreview();
+      refreshPreview({ selectedSlotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update clip transform");
     } finally {
@@ -615,12 +615,14 @@ export default function App() {
 
   const handleClearClip = async (slotId: string) => {
     if (!activeJobId) return;
+    // Explicitly preserve the selected slot ID before the API call to prevent race conditions
+    setSelectedSlotId(slotId);
     setStoryboardSaving(true);
     try {
       const payload = await clearSlotClip(activeJobId, slotId);
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      refreshPreview();
+      refreshPreview({ selectedSlotId: slotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not clear clip");
     } finally {
@@ -649,7 +651,7 @@ export default function App() {
     try {
       const updated = await patchEffects(activeJobId, payload);
       setStoryboard(updated);
-      refreshPreview();
+      refreshPreview({ selectedSlotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update retention FX");
     } finally {
