@@ -563,8 +563,6 @@ export default function App() {
       const slot = payload.slots.find((item) => item.id === slotId);
       refreshPreview({
         playheadS: slot?.out_start_s ?? blockPlayheadS,
-        playing: true,
-        loopMode: "slot",
         selectedSlotId: slotId,
       });
     } catch (err) {
