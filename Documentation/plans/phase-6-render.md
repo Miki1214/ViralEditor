@@ -1,83 +1,237 @@
-# Phase 6 - FFmpeg Graph Builder & Renderer
+# Phase 6 — Final Render (FFmpeg Graph Builder & Encoder)
 
-**Goal:** Consume all stage artifacts (speed segments, teaser spec, FX events, title spec) and produce the final `1080x1920 / 60fps / H.264+AAC` MP4.
+**Goal:** Consume all stage artifacts (`SpeedSegment`s, `TeaserSpec`, `FxEvent`s, optional `TitleSpec`) and produce the final `1080×1920 / 60 fps / H.264+AAC` MP4.
 
-**Status:** Core. Depends on Phases [3](phase-3-speed-ramp.md), [4](phase-4-teaser-spatial-fx.md), [5](phase-5-title-overlay.md).
+**Status:** Core. Supersedes the low-res UI preview path in [`src/viral_editor/video/proxy_render.py`](../../src/viral_editor/video/proxy_render.py); extracted shared builders serve **both** preview and final render.
+
+**Depends on:** Phases [3](phase-3-speed-ramp.md), [4](phase-4-teaser-spatial-fx.md). Phase [5](phase-5-title-overlay.md) title burning is **optional** — renderer accepts `TitleSpec | None` and renders without overlay when absent.
+
+**Out of scope:** Full pipeline wiring (`pipeline.py` render stage) lands in [Phase 7](phase-7-cli-e2e.md).
+
+---
+
+## Current state (what already exists)
+
+| Asset | Location | Role |
+| :--- | :--- | :--- |
+| Preview FFmpeg graph + orchestration | [`video/proxy_render.py`](../../src/viral_editor/video/proxy_render.py) | ~90% of Phase 6 logic: segment `trim`/`setpts`, scale/crop, teaser mask, spatial FX, hook `drawtext`, multi-clip `concat`/`xfade`, `run_ffmpeg` — tuned for **360×640**, `ultrafast`/`crf 28` |
+| Locked encode spec | [`RenderConfig`](../../src/viral_editor/config.py) | `1080×1920`, `60 fps`, `libx264`/`aac`, `crf 18`, `preset medium`, `yuv420p` |
+| Aggregate render input | [`RenderPlan`](../../src/viral_editor/models.py) | `speed_segments`, `teaser`, `fx_events`, `title` — defined but not yet consumed |
+| Domain models | [`models.py`](../../src/viral_editor/models.py) | `SpeedSegment`, `TeaserSpec`, `FxEvent`, `TitleSpec` |
+| FFmpeg boundary | [`utils/ffmpeg.py`](../../src/viral_editor/utils/ffmpeg.py) | `run_ffmpeg`, `run_ffprobe_json`, `escape_filter_path`, `resolve_drawtext_fontfile` |
+| Builder unit tests | [`tests/test_proxy_render.py`](../../tests/test_proxy_render.py) | Assert on generated filtergraph strings (no FFmpeg execution) |
+
+Phase 5 (`plan_title` → `TitleSpec`) is **not implemented** — only the `TitleSpec` pydantic model exists. Title integration is a documented hook point, not a blocker.
 
 ---
 
 ## Objective
 
-Translate the pure plans into actual FFmpeg work and encode the output. Concentrate all FFmpeg knowledge here behind a small, testable builder so planners stay engine-agnostic.
+Translate pure planner artifacts into FFmpeg work and encode the output. Concentrate all FFmpeg filter knowledge behind **shared, testable builders** so planners stay engine-agnostic.
 
-## Strategy: segment-extract-then-concat (chosen over one mega-graph)
+## Strategy: single-pass `filter_complex` (matches existing preview)
 
-A single giant `filter_complex` for variable speed + FX + teaser + overlay is brittle and hard to debug. The plan uses a **two-stage approach**:
-
-1. **Per-segment clip extraction** (the body): for each `SpeedSegment`, run an FFmpeg job that `trim`s the source range, applies `setpts=PTS/speed_factor`, scales/pads to `1080x1920`, and writes an intermediate clip to `temp/segments/NNN.mp4` (or use the `concat` demuxer / `concat` filter without intermediate files where feasible).
-2. **Assembly pass:** concat the teaser clip + body segments, overlay FX and title, mux the music, and encode once to the final codec.
-
-This keeps each step inspectable (you can play any `temp/segments/NNN.mp4`) and isolates failures.
-
-> Optimization note: intermediate files cost disk/time. An alternative single-pass `concat` **filter** graph (all `trim`/`setpts` chains concatenated in memory) is documented as a faster path once correctness is proven. Start with intermediate files for debuggability; switch later if needed.
-
-## Files & responsibilities
-
-### `render/ffmpeg_builder.py`
-Pure-ish builders returning FFmpeg argument lists / filtergraph strings (no execution):
-- `build_segment_args(segment, media, render) -> list[str]` - trim + setpts + scale/pad/setsar for one segment.
-- `build_teaser_args(teaser_spec, render) -> list[str]` - tail extract + time-fit + mask (`vignette`/`gblur`).
-- `build_fx_filter(fx_events, render) -> str` - zoom (`scale`/`zoompan` or `crop` with time-keyed expressions) + `rotate`, with a base over-scale (e.g., 1.02) so rotation never reveals borders; exponential decay per event.
-- `build_title_filter(title_spec) -> str` OR `generate_ass(title_spec) -> Path` - drawtext filtergraph or burned ASS subtitle.
-- `build_concat_and_encode_args(clips, audio_path, render, overlays) -> list[str]` - concat, apply FX/title overlays, map audio, final encode.
-
-Returning argument lists makes these **unit-testable by asserting on the generated command** without running FFmpeg.
-
-### `render/renderer.py`
-- Orchestrates: extract segments -> assemble -> encode, all via `utils.ffmpeg.run_ffmpeg`.
-- Manages `temp/segments/` lifecycle (honor `--keep-temp`).
-- Verifies the output exists and `ffprobe`-matches the target spec (resolution, fps, codecs, duration ~= music).
-
-## Encode settings (locked)
+The preview renderer already uses an in-memory `filter_complex` graph (per-segment `trim`/`setpts` chains → `concat`/`xfade` → spatial FX). Phase 6 **reuses that architecture** at full resolution instead of introducing per-segment intermediate files.
 
 ```
--c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p
--r 60 -s 1080x1920 -vsync cfr
--c:a aac -b:a 192k
--movflags +faststart
+[clip inputs] ──► trim/setpts/scale per SpeedSegment ──► concat|xfade ──► spatial FX ──► [optional title] ──► encode
+                                                                                              ▲
+[music input] ───────────────────────────────────────────────────────────────────────────── mux ┘
 ```
 
-- Force CFR `60fps` to normalize any VFR source.
-- `+faststart` for web/streaming-friendly MP4.
-- Scale/pad strategy: `scale` to cover then `crop` to `1080x1920` (fill, no letterbox) - configurable to `pad` if desired.
+> **Why not segment-extract-then-concat?** Intermediate files aid debugging but duplicate logic already proven in `proxy_render.py`. A shared `filter_builders.py` is the single source of truth; add intermediate-file mode later only if single-pass graphs prove too brittle at 1080p.
 
-## FFmpeg technique notes
+---
 
-- **Speed:** `setpts=PTS/${speed_factor}` for video; audio is the untouched music track applied once at assembly (not per segment).
-- **Concat:** prefer the `concat` demuxer with a generated list file for same-codec intermediates, or the `concat` filter when chaining in-memory.
-- **Zoom punch with decay:** time-keyed `crop`/`scale` using `if(between(t,...))` expressions or `zoompan`; magnitude from `FxEvent`, decay over `decay_frames/fps` seconds.
-- **Rotation:** `rotate=a=...` with the same time-window expression; pre-scale to hide corners.
-- **Title:** burn ASS via `ass=temp/title.ass` (handles multi-color + box) or `drawtext` fallback; restrict to `window_s`.
+## Target module layout
+
+Replaces the old `render/ffmpeg_builder.py` + `render/renderer.py` proposal. All code stays under `src/viral_editor/video/`.
+
+### `video/filter_builders.py` (new — extracted)
+
+Pure filter-chain builders (no `run_ffmpeg`). Extracted from `proxy_render.py`:
+
+| Builder | Responsibility |
+| :--- | :--- |
+| `segment_filter_chains(...)` | `trim` → `setpts` → visual (scale/crop/pad, rotation, spatial crop) → duration trim |
+| `build_teaser_filter_chain(...)` | Tail extract, time-fit, mask (`vignette` / `gblur`) |
+| `apply_spatial_fx_chain(...)` | Beat-synced zoom / rotate / pan with linear decay |
+| `drawtext_hook_overlay(...)` | Simple hook text (preview + fallback) |
+| `build_composite_filtergraph(...)` | Multi-slot storyboard assembly with `concat`/`xfade` |
+| `composite_output_duration_s(...)` | Output length estimate for mux `-t` |
+
+Each builder takes explicit `width`/`height` (and `fps` where needed) — **not** hardcoded to preview scale.
+
+### `video/proxy_render.py` (slimmed)
+
+Preview-specific glue only:
+
+- Default scale `(360, 640)`, `ultrafast`/`crf 28`, preview FX gain constants.
+- Imports builders from `filter_builders.py`.
+- **Public API unchanged** — `tests/test_proxy_render.py` must keep passing.
+
+### `video/final_render.py` (new — Phase 6 deliverable)
+
+Final encode orchestrator:
+
+```python
+def render_final(
+    plan: RenderPlan,
+    render_cfg: RenderConfig,
+    *,
+    clip_paths: dict[str, Path],
+    clip_durations: dict[str, float],
+    audio_path: Path,
+    out_path: Path,
+    music_start_s: float | None = None,
+    music_end_s: float | None = None,
+    transitions: list[str] | None = None,
+    clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
+    segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
+    segment_roles: list[str] | None = None,
+    hook_start_mask: str | None = None,
+    fx_seed: int = 42,
+    fx_intensity: float = 1.0,
+    title: TitleSpec | None = None,
+    title_ass_path: Path | None = None,
+    temp_dir: Path | None = None,
+) -> Path: ...
+```
+
+- Builds filtergraph via `filter_builders.py` at `render_cfg.width` × `render_cfg.height`.
+- Muxes looped/trimmed music (reuses `ensure_loop_seam_audio` pattern from preview).
+- Encodes with `RenderConfig` values + `-movflags +faststart`, `-vsync cfr`.
+- Verifies output via `ffprobe` (resolution, fps, codecs, duration ≈ plan).
+
+`RenderPlan` is the typed input — avoids a bespoke parameter surface per stage artifact.
+
+### Title overlay hook point (deferred)
+
+- `title: TitleSpec | None = None` — when `None`, no `drawtext`/`ass` filter is inserted.
+- `title_ass_path: Path | None = None` — when set, burns pre-rendered ASS (Phase 5 output).
+- Phase 5 (`plan_title`) supplies real values later; Phase 6 tests the absent-title path explicitly.
+
+---
+
+## Encode settings
+
+Sourced from [`RenderConfig`](../../src/viral_editor/config.py) — do not hardcode elsewhere:
+
+| Field | Default | FFmpeg flag |
+| :--- | :--- | :--- |
+| `width` / `height` | `1080` / `1920` | filtergraph `scale`/`crop` target |
+| `fps` | `60` | `-r 60 -vsync cfr` |
+| `vcodec` | `libx264` | `-c:v libx264` |
+| `acodec` | `aac` | `-c:a aac` |
+| `crf` | `18` | `-crf 18` |
+| `preset` | `medium` | `-preset medium` |
+| `pix_fmt` | `yuv420p` | `-pix_fmt yuv420p` |
+
+Additional flags (not on `RenderConfig`, applied in `final_render.py`):
+
+- `-b:a 192k` — audio bitrate
+- `-movflags +faststart` — streaming-friendly MP4
+- Scale strategy: `cover` mode (`scale` to fill → `crop`) via existing `_visual_filters`; `contain` uses `pad`
+
+Audio is the untouched music track muxed once at assembly — never speed-adjusted per segment.
+
+---
+
+## FFmpeg technique notes (delta from preview)
+
+| Concern | Preview (`proxy_render`) | Final (`final_render`) |
+| :--- | :--- | :--- |
+| Resolution | `360×640` | `RenderConfig.width×height` |
+| Encode | `ultrafast`, `crf 28` | `preset medium`, `crf 18` |
+| FX gain | `PREVIEW_ROTATE_GAIN`, `PREVIEW_PAN_GAIN` boosted | Production magnitudes (intensity from `SpatialFxConfig`) |
+| CFR | `COMPOSITE_FPS = 30` internal normalize | `render_cfg.fps` (60) end-to-end |
+| Verification | None | `ffprobe` resolution/fps/codec/duration check |
+| Title | `drawtext` hook only | Optional `TitleSpec` / ASS path |
+
+Shared behavior (unchanged):
+
+- **Speed:** `setpts=PTS/${speed_factor}` on video; music muxed at assembly.
+- **Zoom punch:** time-keyed `scale`/`crop` with linear decay over `decay_frames/fps`.
+- **Rotation:** `rotate=a=...` with decay; pan uses headroom pre-scale.
+- **Teaser:** prepended via separate filter chain or `hook_start` slot role + mask.
+- **Concat:** `concat` filter for cuts; `xfade` for transitions.
+
+---
 
 ## Dependencies
 
-- All upstream plan artifacts; `utils/ffmpeg.py`; `RenderConfig`.
+- Upstream artifacts: `SpeedRampPlan.segments`, `TeaserSpec`, `list[FxEvent]`, optional `TitleSpec`.
+- [`video/filter_builders.py`](../../src/viral_editor/video/filter_builders.py) — shared pure builders.
+- [`utils/ffmpeg.py`](../../src/viral_editor/utils/ffmpeg.py) — subprocess boundary.
+- [`RenderConfig`](../../src/viral_editor/config.py), [`RenderPlan`](../../src/viral_editor/models.py).
 
-## Testing
+---
 
-- **Builder unit tests:** assert generated arg lists contain expected `setpts`, `scale`, `crop`, `rotate`, encode flags for representative inputs (no FFmpeg execution).
-- **Smoke render:** on a few-second fixture, run the full render and `ffprobe` the result: resolution `1080x1920`, `60fps`, `h264`/`aac`, duration ~= music.
-- **Concat continuity:** assert no gaps (segment count and summed duration match the plan).
+## Testing (strict TDD)
+
+Follow the `/tdd` skill: **one failing test → minimal implementation → green → refactor**. Activate venv before every run:
+
+```powershell
+& c:/Sources/ViralAutomation/.venv/Scripts/Activate.ps1
+python -m pytest tests/... -v
+```
+
+### Phase A — Baseline (before any edits)
+
+```powershell
+python -m pytest tests/test_proxy_render.py -v
+```
+
+Must be green. This is the regression anchor.
+
+### Phase B — Extract `filter_builders.py` (refactor only, no new behavior)
+
+1. Move pure builders from `proxy_render.py` → `filter_builders.py`.
+2. `proxy_render.py` re-exports / imports from `filter_builders`.
+3. Rerun `tests/test_proxy_render.py` — must stay green.
+4. Optionally add `tests/test_filter_builders.py` that imports builders directly (same assertions, clearer ownership).
+
+### Phase C — `final_render.py` (one test at a time)
+
+New file: `tests/test_final_render.py`. Write **exactly one** test per cycle; run pytest and capture the failure before implementing.
+
+| # | Test | Asserts |
+| :--- | :--- | :--- |
+| 1 | `test_final_filtergraph_uses_render_config_resolution` | Graph contains `scale=1080:1920` (or `crop=1080:1920`) for default `RenderConfig` |
+| 2 | `test_final_encode_args_locked_spec` | Command list includes `-crf 18 -preset medium -pix_fmt yuv420p -r 60 -c:a aac -b:a 192k -movflags +faststart` |
+| 3 | `test_final_segment_continuity` | Summed segment `out_end_s - out_start_s` matches `RenderPlan.output_duration_s` (±1 frame) |
+| 4 | `test_final_render_without_title_omits_overlay` | Filtergraph has no `drawtext` or `ass=` when `title=None` and `title_ass_path=None` |
+| 5 | `test_final_render_smoke_ffprobe` | Gated: `pytest.skip` when `not ffmpeg_available()`. Render tiny fixture; `ffprobe` confirms `1080×1920`, `60 fps`, `h264`/`aac`, duration ≈ music |
+
+Forbidden: writing test + implementation in the same turn; assuming pass/fail without terminal output.
+
+### Phase D — Refactor pass
+
+Once all green, clean up `final_render.py` for single-responsibility. Rerun full module suite:
+
+```powershell
+python -m pytest tests/test_proxy_render.py tests/test_final_render.py -v
+```
+
+---
 
 ## Acceptance criteria
 
-- Produces a playable `output/result.mp4` at the locked spec from the sample assets.
-- Speed changes and FX visibly land on beats; teaser + title appear in the first ~2.5 s.
-- Output duration matches the music within a frame.
+- `render_final(...)` produces a playable MP4 at the locked `RenderConfig` spec from sample assets.
+- Speed changes and FX visibly land on beats; teaser appears in the first ~2.5 s.
+- Output duration matches the music window within one frame.
+- Title absent → render succeeds without overlay filters.
+- Callable directly or via a thin CLI smoke path — **not** requiring full `pipeline.py` wiring (Phase 7).
+
+---
 
 ## Risks & mitigations
 
-- **Filtergraph complexity/escaping (Windows paths, special chars):** centralize escaping in the builder; use ASS files to avoid drawtext escaping pain.
-- **Quality loss from intermediate re-encode:** use a high-quality/lossless intermediate (e.g., `-crf 12` or ffv1) for segments, final encode once at `crf 18`.
-- **Slow renders:** start correct, then offer the single-pass `concat` filter path and `-preset` tuning.
-- **A/V drift:** mux audio once at assembly against the fixed output clock; never speed-adjust the music.
+| Risk | Mitigation |
+| :--- | :--- |
+| Filtergraph escaping (Windows paths, special chars) | Centralize in `filter_builders.py`; use `escape_filter_path`; prefer ASS files for multi-color title (Phase 5) |
+| Preview/final code drift | Shared `filter_builders.py` is the single source of truth for all filter chains |
+| Quality loss from re-encode | Single-pass `filter_complex` — encode once at `crf 18`; no intermediate segment files |
+| Slow renders at 1080p60 | Start correct; tune `-preset` per job later; preview stays low-res |
+| A/V drift | Mux audio once at assembly; never speed-adjust music; `-vsync cfr` |
+| Missing title planner (Phase 5) | Optional `title` param; hook point documented; tests cover absent path |

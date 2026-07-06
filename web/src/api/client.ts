@@ -74,21 +74,48 @@ export async function createDraftJob(input: CreateDraftJobInput): Promise<{ id: 
   return res.json();
 }
 
+export interface SubscribeJobEventsOptions {
+  /** @deprecated Live marker after replay makes this unnecessary. */
+  ignoreReplay?: boolean;
+}
+
 export function subscribeJobEvents(
   jobId: string,
   onEvent: (event: PipelineEvent) => void,
   onDone: () => void,
   onError: (error: Error) => void,
+  _options: SubscribeJobEventsOptions = {},
 ): () => void {
   const source = new EventSource(`/api/jobs/${jobId}/events`);
+  let streamLive = false;
+  let finished = false;
+
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    source.close();
+    onDone();
+  };
+
+  const isTerminal = (event: PipelineEvent) =>
+    (event.stage === "render" && (event.action === "complete" || event.action === "error"))
+    || (event.stage === "pipeline" && (event.action === "complete" || event.action === "error"));
 
   source.onmessage = (message) => {
     try {
       const event = JSON.parse(message.data) as PipelineEvent;
+      if (event.stage === "sse") {
+        if (event.message === "live") {
+          streamLive = true;
+        }
+        return;
+      }
+      if (!streamLive) {
+        return;
+      }
       onEvent(event);
-      if (event.stage === "pipeline" && (event.action === "complete" || event.action === "error")) {
-        source.close();
-        onDone();
+      if (isTerminal(event)) {
+        finish();
       }
     } catch (err) {
       onError(err instanceof Error ? err : new Error("Invalid event payload"));
@@ -96,11 +123,21 @@ export function subscribeJobEvents(
   };
 
   source.onerror = () => {
+    if (finished) return;
     source.close();
     onError(new Error("Event stream disconnected"));
   };
 
-  return () => source.close();
+  return () => {
+    finished = true;
+    source.close();
+  };
+}
+
+export async function fetchJob(jobId: string): Promise<JobSummary> {
+  const res = await fetch(`/api/jobs/${jobId}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }
 
 export async function fetchWaveform(jobId: string): Promise<WaveformPayload> {
@@ -142,8 +179,18 @@ export function loopSeamPreviewUrl(jobId: string, startS: number, endS: number):
   return `/api/jobs/${jobId}/audio/preview?${params.toString()}`;
 }
 
-export function outputUrl(jobId: string): string {
-  return `/api/jobs/${jobId}/output`;
+export function outputUrl(jobId: string, version = 0): string {
+  const base = `/api/jobs/${jobId}/output`;
+  if (version <= 0) {
+    return base;
+  }
+  return `${base}?v=${version}`;
+}
+
+export async function startFinalRender(jobId: string): Promise<{ status: string }> {
+  const res = await fetch(`/api/jobs/${jobId}/render`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }
 
 export async function fetchStoryboard(jobId: string): Promise<StoryboardPayload> {

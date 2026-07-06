@@ -472,3 +472,99 @@ def test_patch_effects_updates_hook_split_durations(
     assert hook_start["target_duration_s"] in body["teaser"]["payoff_downbeats_s"]
     assert hook_end["target_duration_s"] < hook_start["target_duration_s"]
     assert body["teaser"]["duration_s"] == pytest.approx(hook_start["target_duration_s"])
+
+
+def test_start_render_requires_all_slots(client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_render"
+    workspace.mkdir()
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=10.0,
+        duration_s=10.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+
+    response = client.post(f"/api/jobs/{job.id}/render")
+    assert response.status_code == 400
+    assert "all storyboard slots" in response.json()["detail"].lower()
+
+
+def test_start_render_accepts_filled_storyboard(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    started: list[str] = []
+
+    def fake_start(store, job_id: str) -> None:
+        started.append(job_id)
+
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_final_render", fake_start)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_render_ok"
+    workspace.mkdir()
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=10.0,
+        duration_s=10.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    filled = storyboard.model_copy(
+        update={
+            "slots": [
+                slot.model_copy(update={"assigned_clip_id": f"clip_{index}"})
+                for index, slot in enumerate(storyboard.slots)
+            ]
+        }
+    )
+    persist_storyboard(workspace / "temp", filled)
+
+    response = client.post(f"/api/jobs/{job.id}/render")
+    assert response.status_code == 202
+    assert response.json()["status"] == "rendering"
+    assert started == [job.id]

@@ -10,6 +10,7 @@ import {
   createDraftJob,
   fetchCompositePreview,
   fetchHealth,
+  fetchJob,
   fetchJobs,
   fetchStages,
   fetchStoryboard,
@@ -17,6 +18,7 @@ import {
   patchEffects,
   patchStoryboard,
   subscribeJobEvents,
+  startFinalRender,
   updateMusicSelection,
   updateSlotCrop,
   updateSlotTransform,
@@ -128,6 +130,8 @@ export default function App() {
   const playPreviewRef = useRef<(() => void) | null>(null);
   const previewRestoreRef = useRef<PreviewTransportRestore | null>(null);
   const activeJobIdRef = useRef<string | null>(null);
+  const renderSessionRef = useRef(0);
+  const renderSeenRunningRef = useRef(false);
   const eventsUnsubRef = useRef<(() => void) | null>(null);
 
   activeJobIdRef.current = activeJobId;
@@ -203,6 +207,9 @@ export default function App() {
     useFullTrack: boolean;
   } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [finalRendering, setFinalRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState<number | null>(null);
+  const [outputVersion, setOutputVersion] = useState(0);
 
   const patchForm = useCallback((partial: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -227,6 +234,16 @@ export default function App() {
       return list;
     } catch {
       return [];
+    }
+  }, []);
+
+  const applyJobSummary = useCallback((job: JobSummary) => {
+    setJobStatus(job.status);
+    setJobArtifacts(job.artifacts);
+    if (job.has_output) {
+      setHasOutput(true);
+      setOutputVersion((version) => version + 1);
+      setRenderProgress(100);
     }
   }, []);
 
@@ -689,6 +706,150 @@ export default function App() {
     }
   };
 
+  const handleFinalRender = async () => {
+    if (!activeJobId || !storyboard?.render_ready) return;
+    if (finalRendering) return;
+    setError(null);
+    setFinalRendering(true);
+    setRenderProgress(0);
+    renderSessionRef.current += 1;
+    renderSeenRunningRef.current = false;
+    eventsUnsubRef.current?.();
+    eventsUnsubRef.current = null;
+
+    const finishRenderUi = async () => {
+      try {
+        const job = await fetchJob(activeJobId);
+        if (job.status === "running") {
+          return;
+        }
+        applyJobSummary(job);
+        setFinalRendering(false);
+        if (!job.has_output) {
+          setRenderProgress(null);
+        }
+        void refreshJobsList();
+      } catch {
+        setRenderProgress(null);
+        setFinalRendering(false);
+      }
+    };
+
+    eventsUnsubRef.current = subscribeJobEvents(
+      activeJobId,
+      (event) => {
+        if (event.stage === "render" && event.action === "info") {
+          const message = event.message ?? "";
+          if (message.startsWith("progress:")) {
+            const pct = Number.parseFloat(message.slice("progress:".length));
+            if (Number.isFinite(pct)) {
+              setRenderProgress(pct);
+            }
+            return;
+          }
+        }
+        setEvents((prev) => [...prev, event]);
+        if (event.stage === "render" && event.action === "start") {
+          renderSeenRunningRef.current = true;
+          setRenderProgress(0);
+        }
+        if (event.stage === "render" && event.action === "complete") {
+          setRenderProgress(100);
+          void fetchJob(activeJobId)
+            .then((job) => {
+              applyJobSummary(job);
+              setFinalRendering(false);
+            })
+            .catch(() => undefined);
+        }
+        if (event.stage === "render" && event.action === "error") {
+          setFinalRendering(false);
+          setRenderProgress(null);
+          setJobStatus("failed");
+          if (event.message) {
+            setError(event.message);
+          }
+        }
+      },
+      () => {
+        void finishRenderUi();
+      },
+      (streamError) => {
+        void fetchJob(activeJobId)
+          .then((job) => {
+            if (job.status === "running") {
+              return;
+            }
+            setFinalRendering(false);
+            setRenderProgress(null);
+            setError(streamError.message);
+            setJobStatus("failed");
+          })
+          .catch(() => {
+            setFinalRendering(false);
+            setRenderProgress(null);
+            setError(streamError.message);
+            setJobStatus("failed");
+          });
+      },
+    );
+    try {
+      await startFinalRender(activeJobId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not start render";
+      if (message.includes("already running")) {
+        renderSeenRunningRef.current = true;
+        return;
+      }
+      eventsUnsubRef.current?.();
+      eventsUnsubRef.current = null;
+      setFinalRendering(false);
+      setRenderProgress(null);
+      setError(message);
+    }
+  };
+
+  useEffect(() => {
+    if (!finalRendering || !activeJobId) {
+      return;
+    }
+    const sessionAtStart = renderSessionRef.current;
+    const poll = window.setInterval(() => {
+      if (sessionAtStart !== renderSessionRef.current) {
+        return;
+      }
+      void fetchJob(activeJobId)
+        .then((job) => {
+          if (sessionAtStart !== renderSessionRef.current) {
+            return;
+          }
+          if (job.status === "running") {
+            renderSeenRunningRef.current = true;
+          }
+          if (
+            renderSeenRunningRef.current
+            && job.status === "completed"
+            && job.has_output
+          ) {
+            applyJobSummary(job);
+            setFinalRendering(false);
+            setRenderProgress(100);
+            eventsUnsubRef.current?.();
+            eventsUnsubRef.current = null;
+          } else if (job.status === "failed") {
+            setFinalRendering(false);
+            setRenderProgress(null);
+            setJobStatus("failed");
+            if (job.error) {
+              setError(job.error);
+            }
+          }
+        })
+        .catch(() => undefined);
+    }, 2500);
+    return () => window.clearInterval(poll);
+  }, [activeJobId, applyJobSummary, finalRendering]);
+
   const compositeUrl =
     activeJobId && previewReady
       ? (() => {
@@ -978,6 +1139,14 @@ export default function App() {
             hasOutput={hasOutput}
             artifacts={jobArtifacts}
             scopeReady={waveform !== null}
+            renderReady={storyboard?.render_ready ?? false}
+            rendering={finalRendering}
+            renderProgress={renderProgress}
+            outputVersion={outputVersion}
+            onRender={
+              storyboard?.render_ready ? handleFinalRender : undefined
+            }
+            renderBlockedReason={renderBlockedReason}
           />
         </section>
 

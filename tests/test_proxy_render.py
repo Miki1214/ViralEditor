@@ -83,7 +83,7 @@ def test_build_proxy_filtergraph_multi_input_source_id() -> None:
 
 def test_build_composite_filtergraph_xfade_and_drawtext(monkeypatch) -> None:
     monkeypatch.setattr(
-        "viral_editor.video.proxy_render.resolve_drawtext_fontfile",
+        "viral_editor.video.filter_builders.resolve_drawtext_fontfile",
         lambda: "C\\:/Windows/Fonts/arial.ttf",
     )
     segments = [
@@ -149,7 +149,7 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
     from viral_editor.models import FxEvent
 
     monkeypatch.setattr(
-        "viral_editor.video.proxy_render.resolve_drawtext_fontfile",
+        "viral_editor.video.filter_builders.resolve_drawtext_fontfile",
         lambda: "C\\:/Windows/Fonts/arial.ttf",
     )
     segments = [

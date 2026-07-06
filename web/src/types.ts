@@ -210,6 +210,7 @@ export interface StoryboardPayload {
   total_duration_s: number;
   loop_to_hook: boolean;
   preview_ready: boolean;
+  render_ready: boolean;
   teaser: TeaserSettings;
   spatial_fx: SpatialFxSettings;
   retention: RetentionSettings;

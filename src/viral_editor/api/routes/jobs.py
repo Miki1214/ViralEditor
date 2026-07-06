@@ -34,6 +34,7 @@ from viral_editor.api.clips import (
 )
 from viral_editor.video.clip_reel import clip_paths_by_id
 from viral_editor.api.runner import build_job_config, start_job
+from viral_editor.api.render_job import start_final_render
 from viral_editor.api.storyboard import (
     apply_storyboard_patch,
     assign_slot_clip,
@@ -97,6 +98,7 @@ from viral_editor.audio.storyboard import (
     assigned_storyboard_slots,
     remap_fx_events_for_composite,
     storyboard_filled_enough,
+    storyboard_slots_complete,
     storyboard_to_segments,
 )
 from viral_editor.pipeline import PIPELINE_STAGES
@@ -346,6 +348,30 @@ def get_output(job_id: str, request: Request) -> FileResponse:
     if not output_path.is_file():
         raise HTTPException(status_code=404, detail="Output not ready")
     return FileResponse(output_path, media_type="video/mp4", filename="result.mp4")
+
+
+@router.post("/{job_id}/render", status_code=202)
+def start_job_render(job_id: str, request: Request) -> dict[str, str]:
+    """Encode the final 1080p MP4 when all storyboard slots have clips assigned."""
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == "running":
+        raise HTTPException(status_code=409, detail="Job is already running")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    if not storyboard_slots_complete(storyboard):
+        raise HTTPException(
+            status_code=400,
+            detail="Assign clips to all storyboard slots before rendering",
+        )
+
+    start_final_render(store, job_id)
+    return {"status": "rendering"}
 
 
 @router.get("/{job_id}/audio/waveform", response_model=WaveformPayload)
@@ -722,6 +748,7 @@ def _storyboard_response(
         total_duration_s=storyboard.total_duration_s,
         loop_to_hook=storyboard.loop_to_hook,
         preview_ready=preview_ready,
+        render_ready=storyboard_slots_complete(storyboard),
         teaser=TeaserSettingsResponse(
             **teaser_settings_response(config, storyboard, temp_dir),
         ),

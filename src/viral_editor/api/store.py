@@ -99,6 +99,8 @@ class JobStore:
                 raise KeyError(job_id)
             for past in job.events:
                 queue.put_nowait(past)
+            # Marks end of replay; SSE clients ignore terminal events until this arrives.
+            queue.put_nowait(PipelineEvent.now("sse", "info", message="live"))
             job.subscribers.append(queue)
         return queue
 

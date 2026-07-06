@@ -67,6 +67,27 @@ def test_run_ffprobe_json_parses_output(
     assert ffmpeg_module.run_ffprobe_json(["-show_format"]) == payload
 
 
+def test_ffmpeg_encode_progress_percent_from_progress_file() -> None:
+    progress_text = "\n".join(
+        [
+            "frame=120",
+            "out_time=00:00:02.500000",
+            "progress=continue",
+        ]
+    )
+    assert ffmpeg_module.ffmpeg_encode_progress_percent(progress_text, 10.0) == pytest.approx(25.0)
+
+
+def test_ffmpeg_encode_progress_percent_caps_before_complete() -> None:
+    progress_text = "out_time=00:00:12.000000\nprogress=continue\n"
+    assert ffmpeg_module.ffmpeg_encode_progress_percent(progress_text, 10.0) == 99.0
+
+
+def test_ffmpeg_stderr_progress_percent_parses_time() -> None:
+    line = "frame=  42 fps= 30 q=28.0 size=    1024kB time=00:00:05.00 bitrate= 1234.5kbits/s speed=1.2x"
+    assert ffmpeg_module.ffmpeg_stderr_progress_percent(line, 10.0) == pytest.approx(50.0)
+
+
 def test_run_ffmpeg_raises_on_nonzero_exit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -19,6 +19,7 @@ from viral_editor.audio.storyboard import (
     relayout_beat_aligned_timeline,
     snap_hook_payoff_s,
     storyboard_filled_enough,
+    storyboard_slots_complete,
     storyboard_to_segments,
 )
 from viral_editor.models import MediaInfo, MusicBlock, MusicBlockPlan, Transient
@@ -703,6 +704,22 @@ def test_storyboard_filled_enough_requires_hook_clip() -> None:
     clip = storyboard.slots[1].model_copy(update={"assigned_clip_id": "b"})
     filled = storyboard.model_copy(update={"slots": [hook, clip, *storyboard.slots[2:]]})
     assert storyboard_filled_enough(filled) is True
+
+
+def test_storyboard_slots_complete_requires_every_slot() -> None:
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    assert storyboard_slots_complete(storyboard) is False
+
+    assigned = [
+        slot.model_copy(update={"assigned_clip_id": f"clip_{index}"})
+        for index, slot in enumerate(storyboard.slots)
+    ]
+    assert storyboard_slots_complete(storyboard.model_copy(update={"slots": assigned})) is True
+
+    partial = assigned.copy()
+    partial[-1] = partial[-1].model_copy(update={"assigned_clip_id": None})
+    assert storyboard_slots_complete(storyboard.model_copy(update={"slots": partial})) is False
 
 
 def test_update_slot_transform_rotates_and_sets_cover() -> None:

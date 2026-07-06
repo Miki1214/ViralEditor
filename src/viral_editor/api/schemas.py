@@ -197,6 +197,7 @@ class StoryboardResponse(BaseModel):
     loop_to_hook: bool
     slots: list[StorySlotResponse]
     preview_ready: bool = False
+    render_ready: bool = False
     teaser: TeaserSettingsResponse
     spatial_fx: SpatialFxSettingsResponse
     retention: RetentionSettingsResponse

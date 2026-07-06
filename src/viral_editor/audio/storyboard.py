@@ -1285,6 +1285,13 @@ def storyboard_filled_enough(storyboard: Storyboard) -> bool:
     )
 
 
+def storyboard_slots_complete(storyboard: Storyboard) -> bool:
+    """True when every storyboard slot has an assigned clip."""
+    if not storyboard.slots:
+        return False
+    return all(slot.assigned_clip_id for slot in storyboard.slots)
+
+
 def xfade_overlap_s(storyboard: Storyboard) -> float:
     """Total timeline compression from crossfade overlaps."""
     overlap = 0.0
