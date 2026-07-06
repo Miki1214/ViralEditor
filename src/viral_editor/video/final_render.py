@@ -7,7 +7,7 @@ from pathlib import Path
 
 from viral_editor.audio.preview import ensure_loop_seam_audio
 from viral_editor.config import RenderConfig
-from viral_editor.models import RenderPlan, TitleSpec
+from viral_editor.models import CaptionChunk, CaptionStyle, RenderPlan, TitleSpec
 from viral_editor.utils.ffmpeg import FFmpegError, escape_filter_path, run_ffmpeg_with_progress, run_ffprobe_json
 from viral_editor.video.filter_builders import build_composite_filtergraph, composite_output_duration_s
 
@@ -145,6 +145,10 @@ def build_final_filtergraph(
     segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     transitions: list[str] | None = None,
     hook_text: str | None = None,
+    hook_style: CaptionStyle | None = None,
+    caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
+    caption_style: CaptionStyle | None = None,
+    slot_ids: list[str] | None = None,
     segment_roles: list[str] | None = None,
     hook_start_mask: str | None = None,
     title: TitleSpec | None = None,
@@ -166,6 +170,10 @@ def build_final_filtergraph(
         clip_transforms=clip_transforms,
         segment_transforms=segment_transforms,
         hook_text=hook_text,
+        hook_style=hook_style,
+        caption_chunks_by_slot=caption_chunks_by_slot,
+        caption_style=caption_style,
+        slot_ids=slot_ids,
         segment_roles=segment_roles,
         hook_start_mask=hook_start_mask,
         fx_events=plan.fx_events,
@@ -193,6 +201,10 @@ def render_final(
     clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     hook_text: str | None = None,
+    hook_style: CaptionStyle | None = None,
+    caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
+    caption_style: CaptionStyle | None = None,
+    slot_ids: list[str] | None = None,
     segment_roles: list[str] | None = None,
     hook_start_mask: str | None = None,
     title: TitleSpec | None = None,
@@ -220,6 +232,10 @@ def render_final(
         segment_transforms=segment_transforms,
         transitions=transitions,
         hook_text=hook_text,
+        hook_style=hook_style,
+        caption_chunks_by_slot=caption_chunks_by_slot,
+        caption_style=caption_style,
+        slot_ids=slot_ids,
         segment_roles=segment_roles,
         hook_start_mask=hook_start_mask,
         title=title,

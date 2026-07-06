@@ -321,3 +321,70 @@ export interface AudioTimeline {
   sample_rate: number;
   transients: Transient[];
 }
+
+export type CaptionPosition = "top" | "center" | "bottom";
+
+export interface CaptionStylePayload {
+  font_family: string;
+  fill_color: string;
+  emphasis_color: string;
+  outline_color: string;
+  outline_enabled: boolean;
+  box_enabled: boolean;
+  box_color: string;
+  position: CaptionPosition;
+  size_scale: number;
+  safe_padding_pct: number;
+  karaoke_enabled: boolean;
+}
+
+export interface CaptionWordPayload {
+  text: string;
+  start_s: number;
+  end_s: number;
+  emphasis: boolean;
+}
+
+export interface CaptionChunkPayload {
+  words: CaptionWordPayload[];
+  start_s: number;
+  end_s: number;
+}
+
+export interface SlotCaptionBudget {
+  slot_id: string;
+  label: string;
+  duration_s: number;
+  suggested_words: number;
+  actual_words: number;
+  chunks: CaptionChunkPayload[];
+}
+
+export interface WpsPresetPayload {
+  words_per_second: number;
+  label: string;
+}
+
+export interface CaptionPayload {
+  script_text: string;
+  words_per_second: number;
+  hook_text: string;
+  emphasis_words: string[];
+  hook_style: CaptionStylePayload;
+  caption_style: CaptionStylePayload;
+  slot_overrides: Record<string, string>;
+  slot_budgets: SlotCaptionBudget[];
+  wps_presets: WpsPresetPayload[];
+  transcribe_available: boolean;
+}
+
+export interface CaptionPatchInput {
+  script_text?: string;
+  words_per_second?: number;
+  hook_text?: string;
+  emphasis_words?: string[];
+  hook_style?: Partial<CaptionStylePayload>;
+  caption_style?: Partial<CaptionStylePayload>;
+  slot_overrides?: Record<string, string>;
+  karaoke_enabled?: boolean;
+}

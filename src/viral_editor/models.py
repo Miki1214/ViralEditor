@@ -18,6 +18,7 @@ ClipRole = Literal["clip", "hook", "filler"]
 SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]
 SlotFitMode = Literal["contain", "cover"]
+CaptionPosition = Literal["top", "center", "bottom"]
 
 
 class DomainModel(BaseModel):
@@ -245,6 +246,39 @@ class StorySlot(DomainModel):
     fit_mode: SlotFitMode = "contain"
     spatial_crop: SpatialCrop | None = None
     rationale: str | None = None
+
+
+class CaptionWord(DomainModel):
+    """One timed word within a caption phrase chunk."""
+
+    text: str = Field(min_length=1)
+    start_s: float = Field(ge=0)
+    end_s: float = Field(ge=0)
+    emphasis: bool = False
+
+
+class CaptionChunk(DomainModel):
+    """A short phrase (2–4 words) shown together on screen."""
+
+    words: list[CaptionWord] = Field(min_length=1)
+    start_s: float = Field(ge=0)
+    end_s: float = Field(ge=0)
+
+
+class CaptionStyle(DomainModel):
+    """Typography and overlay styling for title or body captions."""
+
+    font_family: str = "Montserrat Black"
+    fill_color: str = "#FFFFFF"
+    emphasis_color: str = "#FFD700"
+    outline_color: str = "#000000"
+    outline_enabled: bool = True
+    box_enabled: bool = True
+    box_color: str = "rgba(0,0,0,0.85)"
+    position: CaptionPosition = "bottom"
+    size_scale: float = Field(default=1.0, gt=0, le=3.0)
+    safe_padding_pct: int = Field(default=10, ge=0, le=50)
+    karaoke_enabled: bool = True
 
 
 class RetentionPlanScore(DomainModel):

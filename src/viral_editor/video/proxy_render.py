@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from viral_editor.audio.preview import ensure_loop_seam_audio
-from viral_editor.models import SpeedRampPlan, SpeedSegment
+from viral_editor.models import CaptionChunk, CaptionStyle, SpeedRampPlan, SpeedSegment
 from viral_editor.utils.ffmpeg import FFmpegError, resolve_drawtext_fontfile, run_ffmpeg
 from viral_editor.video.filter_builders import (
     DEFAULT_COMPOSITE_FPS,
@@ -52,6 +52,10 @@ def render_composite(
     music_end_s: float | None,
     out_path: Path,
     hook_text: str | None = None,
+    hook_style: CaptionStyle | None = None,
+    caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
+    caption_style: CaptionStyle | None = None,
+    slot_ids: list[str] | None = None,
     scale: tuple[int, int] = (360, 640),
     temp_dir: Path | None = None,
     segment_roles: list[str] | None = None,
@@ -79,6 +83,10 @@ def render_composite(
         clip_transforms=clip_transforms,
         segment_transforms=segment_transforms,
         hook_text=hook_text,
+        hook_style=hook_style,
+        caption_chunks_by_slot=caption_chunks_by_slot,
+        caption_style=caption_style,
+        slot_ids=slot_ids,
         segment_roles=segment_roles,
         hook_start_mask=hook_start_mask,
         fx_events=fx_events,

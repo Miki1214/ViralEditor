@@ -5,6 +5,7 @@ import {
   compositeVideoTimeToBlockPlayhead,
 } from "../utils/compositePlayhead";
 import type { StoryboardLoopMode, BlockPlayheadChangeHandler } from "./StoryboardBlockPlayer";
+import { SafeZoneOverlay } from "./SafeZoneOverlay";
 
 export interface PreviewTransportRestore {
   playheadS: number;
@@ -35,6 +36,7 @@ interface PhonePreviewProps {
   registerPreviewToggle?: (handler: (() => void) | null) => void;
   registerPreviewSeek?: (handler: ((videoTimeS: number) => void) | null) => void;
   registerPreviewPlay?: (handler: (() => void) | null) => void;
+  showPlatformSafeZone?: boolean;
 }
 
 function renderHookLine(
@@ -82,6 +84,7 @@ export function PhonePreview({
   registerPreviewToggle,
   registerPreviewSeek,
   registerPreviewPlay,
+  showPlatformSafeZone = false,
 }: PhonePreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const storyboardRef = useRef(storyboard);
@@ -295,6 +298,7 @@ export function PhonePreview({
                 <p id="phone-preview-error-msg">{previewErrorText}</p>
               </div>
             )}
+            {compositeMode && showPlatformSafeZone && <SafeZoneOverlay visible />}
           </>
         ) : (
           <div className="absolute inset-0 bg-gradient-to-b from-monitor-surface to-monitor-bg" />

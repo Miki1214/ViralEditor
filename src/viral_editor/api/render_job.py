@@ -8,6 +8,7 @@ from pathlib import Path
 
 from viral_editor.api.effects import hook_teaser_for_storyboard, spatial_fx_for_preview
 from viral_editor.api.store import JobStore, write_job_config
+from viral_editor.audio.captions import build_caption_chunks_for_slots
 from viral_editor.audio.storyboard import (
     remap_fx_events_for_composite,
     storyboard_slots_complete,
@@ -111,6 +112,15 @@ def render_storyboard_final(
     clip_media = clip_media_for_storyboard(config, storyboard)
     clip_durations = {clip_id: info.duration_s for clip_id, info in clip_media.items()}
 
+    _, segment_roles, segment_slot_ids = storyboard_to_segments(storyboard, clip_media)
+    slots_by_id = {slot.id: slot for slot in storyboard.slots}
+    ordered_slots = [slots_by_id[slot_id] for slot_id in segment_slot_ids]
+    caption_chunks = build_caption_chunks_for_slots(
+        config.caption,
+        ordered_slots,
+        emphasis_words=config.hook.emphasis_words,
+    )
+
     render_final(
         plan,
         config.render,
@@ -123,6 +133,10 @@ def render_storyboard_final(
         transitions=transitions,
         segment_transforms=segment_transforms,
         hook_text=config.hook.text,
+        hook_style=config.hook_style,
+        caption_chunks_by_slot=caption_chunks,
+        caption_style=config.caption.style,
+        slot_ids=segment_slot_ids,
         segment_roles=segment_roles,
         hook_start_mask=config.teaser.mask if config.teaser.enabled else None,
         temp_dir=temp_dir,

@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from viral_editor.models import BudgetPolicy, ClipInput, ClipRole, DomainModel, TeaserMask
+from viral_editor.models import BudgetPolicy, CaptionStyle, ClipInput, ClipRole, DomainModel, TeaserMask
 
 PanBeatMode = Literal["auto", "beats", "downbeats"]
 
@@ -90,6 +90,16 @@ class TitleConfig(DomainModel):
 
     text: str = Field(min_length=1)
     emphasis_words: list[str] = Field(default_factory=list)
+
+
+class CaptionConfig(DomainModel):
+    """Body caption script, reading speed, and per-slot overrides."""
+
+    script_text: str = ""
+    words_per_second: float = Field(default=5.0, gt=0, le=15)
+    style: CaptionStyle = Field(default_factory=CaptionStyle)
+    slot_overrides: dict[str, str] = Field(default_factory=dict)
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] = Field(default_factory=dict)
 
 
 class SpeedRampConfig(DomainModel):
@@ -183,6 +193,8 @@ class JobConfig(DomainModel):
     clips: list[ClipInput] = Field(default_factory=list)
     seed: int = 42
     hook: TitleConfig
+    hook_style: CaptionStyle = Field(default_factory=CaptionStyle)
+    caption: CaptionConfig = Field(default_factory=CaptionConfig)
     style: StyleConfig = Field(default_factory=StyleConfig)
     render: RenderConfig = Field(default_factory=RenderConfig)
     speed_ramp: SpeedRampConfig = Field(default_factory=SpeedRampConfig)

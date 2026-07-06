@@ -1,4 +1,6 @@
 import type {
+  CaptionPatchInput,
+  CaptionPayload,
   HealthResponse,
   JobSummary,
   PipelineEvent,
@@ -317,6 +319,35 @@ export async function patchEffects(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function fetchCaption(jobId: string): Promise<CaptionPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/caption`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function patchCaption(
+  jobId: string,
+  payload: CaptionPatchInput,
+): Promise<CaptionPayload> {
+  const res = await fetch(`/api/jobs/${jobId}/caption`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function transcribeCaption(jobId: string): Promise<{
+  script_text: string;
+  words: CaptionPayload["slot_budgets"][0]["chunks"][0]["words"];
+  transcribe_available: boolean;
+}> {
+  const res = await fetch(`/api/jobs/${jobId}/caption/transcribe`, { method: "POST" });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

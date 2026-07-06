@@ -20,8 +20,8 @@
     "semantic_hash": ""
   },
   "pyproject.toml": {
-    "mtime": 1781955454.9187732,
-    "ast_hash": "4340441fd65d9c5252c4a2ed38df9e67",
+    "mtime": 1783374287.048845,
+    "ast_hash": "622ed4c252d1f68c3a65c089631294f5",
     "semantic_hash": ""
   },
   "scripts/debug_hook_split.py": {
@@ -75,18 +75,18 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783366901.0989964,
-    "ast_hash": "66c23268253eff89ca63f4d5cce08e8b",
+    "mtime": 1783374085.452067,
+    "ast_hash": "5d075f45eea13bc17eba9f2920225f61",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
-    "mtime": 1781970367.0560582,
-    "ast_hash": "b521c88aa1578072d6bbf0438945885d",
+    "mtime": 1783374022.4669628,
+    "ast_hash": "d66c47ae528d8011c16e0d8fb8526b1e",
     "semantic_hash": ""
   },
   "src/viral_editor/api/schemas.py": {
-    "mtime": 1783366874.3895628,
-    "ast_hash": "25d446f51587e72e4b2ca63eb882322e",
+    "mtime": 1783374041.7873905,
+    "ast_hash": "a62cf98862154321284ce195a510aaa5",
     "semantic_hash": ""
   },
   "src/viral_editor/api/speed.py": {
@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/config.py": {
-    "mtime": 1781974170.465785,
-    "ast_hash": "7976ba9fe885d61a533e74c70f808b73",
+    "mtime": 1783373825.2420647,
+    "ast_hash": "1fd8f935cd6fdec2f03c2f653fb9cb38",
     "semantic_hash": ""
   },
   "src/viral_editor/editing/__init__.py": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/models.py": {
-    "mtime": 1783352364.8922017,
-    "ast_hash": "bc19e35b3b096dbd1b85f30714d97be7",
+    "mtime": 1783373789.760991,
+    "ast_hash": "1a2924d0af40257495f48b923678e9c2",
     "semantic_hash": ""
   },
   "src/viral_editor/overlay/__init__.py": {
@@ -225,8 +225,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/utils/ffmpeg.py": {
-    "mtime": 1783368286.5424402,
-    "ast_hash": "9e1081520781e709c17ee72af9ad724b",
+    "mtime": 1783373945.3367932,
+    "ast_hash": "d52e8fd92c4e7741a3dfa73bb263cee8",
     "semantic_hash": ""
   },
   "src/viral_editor/utils/logging.py": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/proxy_render.py": {
-    "mtime": 1783366395.12957,
-    "ast_hash": "5c077d37593758309248edfba4b01dda",
+    "mtime": 1783373996.845116,
+    "ast_hash": "dbdbd0a0b92b202a204e9299eca48280",
     "semantic_hash": ""
   },
   "src/viral_editor/video/spatial_fx.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "tests/test_api.py": {
-    "mtime": 1783366944.594849,
-    "ast_hash": "dedcf63c17f0bb8acaa5e2a7a031cd4d",
+    "mtime": 1783374224.3987062,
+    "ast_hash": "d7a462bb8df7464a5f533832e8f8297c",
     "semantic_hash": ""
   },
   "tests/test_audio_fixtures.py": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "tests/test_proxy_render.py": {
-    "mtime": 1783366403.6132264,
-    "ast_hash": "aaa308f6294683ef90b857f46a3637c0",
+    "mtime": 1783373967.3675058,
+    "ast_hash": "47e6e3353e44c32c1ccab7ca609a7ff4",
     "semantic_hash": ""
   },
   "tests/test_retention_policy.py": {
@@ -410,13 +410,13 @@
     "semantic_hash": ""
   },
   "web/src/App.tsx": {
-    "mtime": 1783368313.1167054,
-    "ast_hash": "7cade78e6ee026f25078b56827ef7653",
+    "mtime": 1783374200.4310813,
+    "ast_hash": "47c6d136f3259c6b20bec47c7970a5ec",
     "semantic_hash": ""
   },
   "web/src/api/client.ts": {
-    "mtime": 1783368323.7902746,
-    "ast_hash": "3c0b5b9e4bb86b09a26ca1e9f15e91c7",
+    "mtime": 1783374128.5925655,
+    "ast_hash": "3a21a4050a2bb8c865d81c10162bd5d7",
     "semantic_hash": ""
   },
   "web/src/components/AudioScopePanel.tsx": {
@@ -460,8 +460,8 @@
     "semantic_hash": ""
   },
   "web/src/components/PhonePreview.tsx": {
-    "mtime": 1782568288.195218,
-    "ast_hash": "3c5937f097c61c0c13f53eccbf434753",
+    "mtime": 1783374172.0512285,
+    "ast_hash": "8104990942862940bf8dfa84aa1466b0",
     "semantic_hash": ""
   },
   "web/src/components/RetentionFxPanel.tsx": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "web/src/types.ts": {
-    "mtime": 1783366909.287437,
-    "ast_hash": "8a2280140951ff8f28cb5ff4ecb540f0",
+    "mtime": 1783374123.199718,
+    "ast_hash": "f793c7ab71065244b6cff6a2f31b5602",
     "semantic_hash": ""
   },
   "web/src/utils/compositePlayhead.ts": {
@@ -785,8 +785,8 @@
     "semantic_hash": ""
   },
   "requirements.txt": {
-    "mtime": 1781955392.050815,
-    "ast_hash": "6b621d8bf4b38534999a9b31790996ab",
+    "mtime": 1783374212.8259344,
+    "ast_hash": "508e3317a0f31fb2c3180d6696f99ec6",
     "semantic_hash": ""
   },
   "web/index.html": {
@@ -1030,13 +1030,13 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783366370.9497364,
-    "ast_hash": "f726f2ba9ab0fbcd18d6e6b123a85d45",
+    "mtime": 1783375201.9223533,
+    "ast_hash": "37aa1120c9951f8190d5e80b2615d77e",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
-    "mtime": 1783368289.677929,
-    "ast_hash": "b936e6d4c31bec5d84a11c04540b78cb",
+    "mtime": 1783374008.868527,
+    "ast_hash": "d940ef6bc1469872eb698c4f2ee584a4",
     "semantic_hash": ""
   },
   "tests/test_final_render.py": {
@@ -1050,8 +1050,73 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/render_job.py": {
-    "mtime": 1783368302.8852353,
-    "ast_hash": "91e80a705294b73e23d15b0df2255ba0",
+    "mtime": 1783374018.9768906,
+    "ast_hash": "370741c3798600dd8ab0e62532391389",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/api/caption.py": {
+    "mtime": 1783374049.6736388,
+    "ast_hash": "1706e8e0a3852b9da0b3da373e83caeb",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/audio/captions.py": {
+    "mtime": 1783373992.3886926,
+    "ast_hash": "6b7718f79ee995bb692da310c3c6426b",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/audio/transcribe.py": {
+    "mtime": 1783374045.231456,
+    "ast_hash": "4bac629e573da0ab131369f633ae0d84",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/utils/fonts.py": {
+    "mtime": 1783373863.6544025,
+    "ast_hash": "cfa201227ee3b70f1e19bf6fa5e0bad4",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/utils/text_metrics.py": {
+    "mtime": 1783373867.28072,
+    "ast_hash": "dbf11004ab158d0823df2e7e8c7c404f",
+    "semantic_hash": ""
+  },
+  "tests/test_captions.py": {
+    "mtime": 1783375201.7728076,
+    "ast_hash": "563bdbaf051a99e258fb3932ebcf490c",
+    "semantic_hash": ""
+  },
+  "tests/test_fonts.py": {
+    "mtime": 1783373840.4751353,
+    "ast_hash": "f554e8b1f61f8b3acb3fe90a3c4ff512",
+    "semantic_hash": ""
+  },
+  "web/src/components/CaptionPanel.tsx": {
+    "mtime": 1783374212.3052502,
+    "ast_hash": "b1cd076b2e3d3fe3cc52fe7ccfebf7af",
+    "semantic_hash": ""
+  },
+  "web/src/components/CaptionWordTimeline.tsx": {
+    "mtime": 1783374156.7674763,
+    "ast_hash": "6859957aa91629c0b832c1b5a53fd7a6",
+    "semantic_hash": ""
+  },
+  "web/src/components/SafeZoneOverlay.tsx": {
+    "mtime": 1783374158.6707268,
+    "ast_hash": "311905e5d5da7ac8dd173ef3e53763eb",
+    "semantic_hash": ""
+  },
+  "web/src/constants/captionPresets.ts": {
+    "mtime": 1783374119.867234,
+    "ast_hash": "3199984f1050173068ffd4f24f01deb9",
+    "semantic_hash": ""
+  },
+  ".cursor/plans/caption_&_overlay_panel_e522aaaf.plan.md": {
+    "mtime": 1783374281.608302,
+    "ast_hash": "b5a77d3f0942916932986058460d4cef",
+    "semantic_hash": ""
+  },
+  "tests/test_caption_filter_escape.py": {
+    "mtime": 1783375206.9742877,
+    "ast_hash": "1024175d93d3816ebc4b64c337942858",
     "semantic_hash": ""
   }
 }

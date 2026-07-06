@@ -7,9 +7,9 @@ from pathlib import Path
 
 from viral_editor.api.store import JobStore, write_job_config
 from viral_editor.audio.beat_detector import AudioAnalysisError
-from viral_editor.config import ConfigError, JobConfig, MusicSelectionConfig, StyleConfig, TitleConfig
+from viral_editor.config import ConfigError, CaptionConfig, JobConfig, MusicSelectionConfig, StyleConfig, TitleConfig
 from viral_editor.ingest.loader import IngestError
-from viral_editor.models import ClipInput
+from viral_editor.models import CaptionStyle, ClipInput
 from viral_editor.pipeline import run_pipeline
 from viral_editor.pipeline_events import PipelineEvent
 from viral_editor.utils.ffmpeg import ensure_ffmpeg
@@ -104,6 +104,23 @@ def build_job_config(
         output_path=(output_dir / "result.mp4").resolve(),
         seed=seed,
         hook=TitleConfig(text=hook_text, emphasis_words=emphasis_words),
+        hook_style=CaptionStyle(
+            font_family=font_family,
+            fill_color=fill_color,
+            emphasis_color=emphasis_color,
+            safe_padding_pct=safe_padding_pct,
+            position="top",
+            karaoke_enabled=False,
+        ),
+        caption=CaptionConfig(
+            style=CaptionStyle(
+                font_family=font_family,
+                fill_color=fill_color,
+                emphasis_color=emphasis_color,
+                safe_padding_pct=safe_padding_pct,
+                position="bottom",
+            ),
+        ),
         style=StyleConfig(
             font_family=font_family,
             fill_color=fill_color,

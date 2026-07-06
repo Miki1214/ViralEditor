@@ -6,8 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from viral_editor.config import JobConfig
-from viral_editor.models import SlotRole
+from viral_editor.config import CaptionConfig, JobConfig
+from viral_editor.models import CaptionStyle, SlotRole
 from viral_editor.pipeline_events import PipelineEvent
 
 JobStatus = Literal["queued", "running", "draft", "completed", "failed"]
@@ -268,3 +268,88 @@ class SlotTransformPatchRequest(BaseModel):
 class StoryboardPatchRequest(BaseModel):
     slots: list[StorySlotUpdate] | None = None
     loop_to_hook: bool | None = None
+
+
+class CaptionStylePatch(BaseModel):
+    font_family: str | None = None
+    fill_color: str | None = None
+    emphasis_color: str | None = None
+    outline_color: str | None = None
+    outline_enabled: bool | None = None
+    box_enabled: bool | None = None
+    box_color: str | None = None
+    position: Literal["top", "center", "bottom"] | None = None
+    size_scale: float | None = Field(default=None, gt=0, le=3.0)
+    safe_padding_pct: int | None = Field(default=None, ge=0, le=50)
+    karaoke_enabled: bool | None = None
+
+
+class CaptionWordResponse(BaseModel):
+    text: str
+    start_s: float
+    end_s: float
+    emphasis: bool = False
+
+
+class CaptionChunkResponse(BaseModel):
+    words: list[CaptionWordResponse]
+    start_s: float
+    end_s: float
+
+
+class CaptionStyleResponse(BaseModel):
+    font_family: str
+    fill_color: str
+    emphasis_color: str
+    outline_color: str
+    outline_enabled: bool
+    box_enabled: bool
+    box_color: str
+    position: Literal["top", "center", "bottom"]
+    size_scale: float
+    safe_padding_pct: int
+    karaoke_enabled: bool
+
+
+class WpsPresetResponse(BaseModel):
+    words_per_second: float
+    label: str
+
+
+class SlotCaptionBudgetResponse(BaseModel):
+    slot_id: str
+    label: str
+    duration_s: float
+    suggested_words: int
+    actual_words: int
+    chunks: list[CaptionChunkResponse] = Field(default_factory=list)
+
+
+class CaptionResponse(BaseModel):
+    script_text: str
+    words_per_second: float
+    hook_text: str
+    emphasis_words: list[str]
+    hook_style: CaptionStyleResponse
+    caption_style: CaptionStyleResponse
+    slot_overrides: dict[str, str] = Field(default_factory=dict)
+    slot_budgets: list[SlotCaptionBudgetResponse] = Field(default_factory=list)
+    wps_presets: list[WpsPresetResponse] = Field(default_factory=list)
+    transcribe_available: bool = False
+
+
+class CaptionPatchRequest(BaseModel):
+    script_text: str | None = None
+    words_per_second: float | None = Field(default=None, gt=0, le=15)
+    hook_text: str | None = None
+    emphasis_words: list[str] | None = None
+    hook_style: CaptionStylePatch | None = None
+    caption_style: CaptionStylePatch | None = None
+    slot_overrides: dict[str, str] | None = None
+    karaoke_enabled: bool | None = None
+
+
+class TranscribeCaptionResponse(BaseModel):
+    script_text: str
+    words: list[CaptionWordResponse]
+    transcribe_available: bool = True

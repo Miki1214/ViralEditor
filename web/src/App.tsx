@@ -8,6 +8,7 @@ import {
   clearSlotClip,
   compositePreviewUrl,
   createDraftJob,
+  fetchCaption,
   fetchCompositePreview,
   fetchHealth,
   fetchJob,
@@ -15,10 +16,12 @@ import {
   fetchStages,
   fetchStoryboard,
   fetchWaveform,
+  patchCaption,
   patchEffects,
   patchStoryboard,
   subscribeJobEvents,
   startFinalRender,
+  transcribeCaption,
   updateMusicSelection,
   updateSlotCrop,
   updateSlotTransform,
@@ -27,8 +30,9 @@ import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { blockPlayheadToCompositeVideoTime } from "./utils/compositePlayhead";
-import { HookOverlayPanel } from "./components/HookOverlayPanel";
+import { CaptionPanel } from "./components/CaptionPanel";
 import type { FormState } from "./components/JobForm";
+import type { CaptionPatchInput, CaptionPayload } from "./types";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { DebugConsolePanel } from "./components/DebugConsolePanel";
@@ -88,6 +92,10 @@ export default function App() {
   const [storyboard, setStoryboard] = useState<StoryboardPayload | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [storyboardSaving, setStoryboardSaving] = useState(false);
+  const [captionData, setCaptionData] = useState<CaptionPayload | null>(null);
+  const [captionSaving, setCaptionSaving] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [showPlatformSafeZone, setShowPlatformSafeZone] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewReady, setPreviewReady] = useState(false);
   const [validatedPreviewUrl, setValidatedPreviewUrl] = useState<string | null>(null);
@@ -381,17 +389,62 @@ export default function App() {
   };
 
   const loadStoryboard = (jobId: string) => {
-    return fetchStoryboard(jobId)
-      .then((payload) => {
+    return Promise.all([fetchStoryboard(jobId), fetchCaption(jobId).catch(() => null)])
+      .then(([payload, captionPayload]) => {
         if (activeJobIdRef.current !== jobId) return;
         setStoryboard(payload);
         setPreviewReady(payload.preview_ready);
         setSelectedSlotId((current) => current ?? payload.slots[0]?.id ?? null);
+        if (captionPayload) {
+          setCaptionData(captionPayload);
+          patchForm({
+            hookText: captionPayload.hook_text,
+            emphasisWords: captionPayload.emphasis_words.join(", "),
+            fontFamily: captionPayload.hook_style.font_family,
+            fillColor: captionPayload.hook_style.fill_color,
+            emphasisColor: captionPayload.hook_style.emphasis_color,
+            safePaddingPct: captionPayload.hook_style.safe_padding_pct,
+          });
+        }
       })
       .catch(() => {
         if (activeJobIdRef.current !== jobId) return;
         setStoryboard(null);
+        setCaptionData(null);
       });
+  };
+
+  const handlePatchCaption = async (payload: CaptionPatchInput) => {
+    if (!activeJobId) return;
+    setCaptionSaving(true);
+    try {
+      const updated = await patchCaption(activeJobId, payload);
+      setCaptionData(updated);
+      if (payload.hook_text !== undefined) {
+        patchForm({ hookText: payload.hook_text });
+      }
+      if (payload.emphasis_words !== undefined) {
+        patchForm({ emphasisWords: payload.emphasis_words.join(", ") });
+      }
+      refreshPreview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update captions");
+    } finally {
+      setCaptionSaving(false);
+    }
+  };
+
+  const handleTranscribe = async () => {
+    if (!activeJobId) return;
+    setTranscribing(true);
+    try {
+      const result = await transcribeCaption(activeJobId);
+      await handlePatchCaption({ script_text: result.script_text });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Transcription failed");
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const handleAudioSelected = async (file: File) => {
@@ -1107,7 +1160,16 @@ export default function App() {
                 registerBlockSetLoopMode={registerBlockSetLoopMode}
                 availableBlockCount={availableBlockCount}
               />
-              <HookOverlayPanel form={form} onPatch={patchForm} />
+              <CaptionPanel
+                form={form}
+                caption={captionData}
+                selectedSlotId={selectedSlotId}
+                saving={captionSaving}
+                transcribing={transcribing}
+                onPatchForm={patchForm}
+                onPatchCaption={handlePatchCaption}
+                onTranscribe={handleTranscribe}
+              />
             </>
           )}
 
@@ -1152,9 +1214,19 @@ export default function App() {
 
         <aside className="sticky top-6 flex max-h-[calc(100vh-1.5rem)] flex-col gap-5 self-start overflow-y-auto">
           <div className="panel flex flex-col items-center px-6 py-8">
-            <p className="mb-4 self-start font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-              Composed preview
-            </p>
+            <div className="mb-4 flex w-full items-center justify-between gap-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+                Composed preview
+              </p>
+              <label className="flex items-center gap-1.5 font-mono text-[10px] text-monitor-muted">
+                <input
+                  type="checkbox"
+                  checked={showPlatformSafeZone}
+                  onChange={(e) => setShowPlatformSafeZone(e.target.checked)}
+                />
+                Safe zone
+              </label>
+            </div>
             <PhonePreview
               hookText={form.hookText}
               emphasisWords={form.emphasisWords}
@@ -1175,6 +1247,7 @@ export default function App() {
               registerPreviewToggle={registerPreviewToggle}
               registerPreviewSeek={registerPreviewSeek}
               registerPreviewPlay={registerPreviewPlay}
+              showPlatformSafeZone={showPlatformSafeZone}
             />
             {musicStartS != null && musicEndS != null && (
               <dl className="mt-6 grid w-full grid-cols-2 gap-3 font-mono text-xs">

@@ -100,34 +100,9 @@ def escape_filter_path(path: Path) -> str:
 
 def resolve_drawtext_fontfile() -> str | None:
     """Return an ffmpeg-safe fontfile= path, or None if no bundled/system font exists."""
-    candidates: list[Path] = []
-    if sys.platform == "win32":
-        windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
-        candidates.extend(
-            [
-                windir / "Fonts" / "arial.ttf",
-                windir / "Fonts" / "segoeui.ttf",
-            ]
-        )
-    elif sys.platform == "darwin":
-        candidates.extend(
-            [
-                Path("/System/Library/Fonts/Supplemental/Arial.ttf"),
-                Path("/Library/Fonts/Arial.ttf"),
-            ]
-        )
-    else:
-        candidates.extend(
-            [
-                Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-                Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
-            ]
-        )
+    from viral_editor.utils.fonts import DEFAULT_FONT_FAMILY, resolve_font_for_ffmpeg
 
-    for candidate in candidates:
-        if candidate.is_file():
-            return escape_filter_path(candidate)
-    return None
+    return resolve_font_for_ffmpeg(DEFAULT_FONT_FAMILY)
 
 
 def ffmpeg_available() -> bool:

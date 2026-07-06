@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from viral_editor.models import FxEvent, SpeedRampPlan, SpeedSegment, TeaserSpec
+from viral_editor.models import CaptionChunk, CaptionStyle, FxEvent, SpeedRampPlan, SpeedSegment, TeaserSpec
 from viral_editor.utils.ffmpeg import resolve_drawtext_fontfile
+from viral_editor.utils.fonts import resolve_font_for_ffmpeg
 from viral_editor.video.spatial_fx import rotate_direction
 
 DEFAULT_COMPOSITE_FPS = 30
@@ -252,21 +253,191 @@ def segment_filter_chains(
     return parts, f"[{label_prefix}]"
 
 
+def _escape_drawtext(text: str) -> str:
+    text = text.replace("\\", "\\\\")
+    text = text.replace("%", "%%")
+    text = text.replace(":", "\\:")
+    # Inside drawtext's single-quoted text= value, double the apostrophe.
+    text = text.replace("'", "''")
+    return text
+
+
+def _enable_between_expr(start_s: float, end_s: float) -> str:
+    """Return an enable= expression with commas escaped for filter_complex."""
+    return f"between(t\\,{start_s:.6f}\\,{end_s:.6f})"
+
+
+def _ffmpeg_fontcolor(color: str) -> str:
+    if color.startswith("#") and len(color) in (4, 7):
+        hex_body = color[1:]
+        if len(hex_body) == 3:
+            hex_body = "".join(ch * 2 for ch in hex_body)
+        return f"0x{hex_body.upper()}"
+    return color
+
+
+def _ffmpeg_boxcolor(color: str) -> str:
+    if color.startswith("rgba(") and color.endswith(")"):
+        inner = color[5:-1]
+        parts = [part.strip() for part in inner.split(",")]
+        if len(parts) == 4:
+            alpha = parts[3]
+            return f"black@{alpha}"
+    return _ffmpeg_fontcolor(color)
+
+
+def _caption_y_expression(style: CaptionStyle) -> str:
+    padding = style.safe_padding_pct / 100.0
+    if style.position == "top":
+        return f"h*{padding:.4f}"
+    if style.position == "center":
+        return f"(h-text_h)/2"
+    return f"h*(1-{padding:.4f})-text_h"
+
+
+def _base_font_size(style: CaptionStyle, height: int) -> int:
+    return max(12, int(height * 0.045 * style.size_scale))
+
+
+def styled_drawtext(
+    parts: list[str],
+    input_ref: str,
+    text: str,
+    style: CaptionStyle,
+    label: str,
+    *,
+    width: int,
+    height: int,
+    enable_expr: str | None = None,
+    font_path: str | None = None,
+    x_expr: str | None = None,
+    fontcolor_override: str | None = None,
+) -> str:
+    """Append a styled drawtext filter and return the output label ref."""
+    resolved_font = font_path or resolve_font_for_ffmpeg(style.font_family)
+    if not resolved_font or not text.strip():
+        return input_ref
+
+    escaped = _escape_drawtext(text)
+    fontsize = _base_font_size(style, height)
+    fontcolor = _ffmpeg_fontcolor(fontcolor_override or style.fill_color)
+    y_expr = _caption_y_expression(style)
+    x = x_expr or "(w-text_w)/2"
+    enable = f":enable='{enable_expr}'" if enable_expr else ""
+
+    border = ""
+    if style.outline_enabled:
+        border = (
+            f":borderw={max(2, fontsize // 14)}"
+            f":bordercolor={_ffmpeg_fontcolor(style.outline_color)}"
+        )
+
+    box = ""
+    if style.box_enabled:
+        box = (
+            f":box=1:boxcolor={_ffmpeg_boxcolor(style.box_color)}"
+            f":boxborderw={max(4, fontsize // 6)}"
+        )
+
+    parts.append(
+        f"{input_ref}drawtext=text='{escaped}':fontfile='{resolved_font}'"
+        f":fontsize={fontsize}:fontcolor={fontcolor}:x={x}:y={y_expr}{border}{box}{enable}[{label}]"
+    )
+    return f"[{label}]"
+
+
 def drawtext_hook_overlay(
     parts: list[str],
     input_ref: str,
     hook_text: str,
     label: str,
+    *,
+    style: CaptionStyle | None = None,
+    width: int = 360,
+    height: int = 640,
 ) -> str:
-    font_path = resolve_drawtext_fontfile()
-    if not font_path:
-        return input_ref
-    escaped = hook_text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-    parts.append(
-        f"{input_ref}drawtext=text='{escaped}':fontfile='{font_path}':fontsize=28:fontcolor=white:"
-        f"x=(w-text_w)/2:y=h*0.12:box=1:boxcolor=black@0.55:boxborderw=8[{label}]"
+    caption_style = style or CaptionStyle(position="top")
+    return styled_drawtext(
+        parts,
+        input_ref,
+        hook_text,
+        caption_style,
+        label,
+        width=width,
+        height=height,
     )
-    return f"[{label}]"
+
+
+def build_caption_filter_chain(
+    parts: list[str],
+    input_ref: str,
+    *,
+    chunks_by_slot: dict[str, list[CaptionChunk]],
+    segments: list[SpeedSegment],
+    slot_ids: list[str],
+    style: CaptionStyle,
+    label_prefix: str,
+    width: int,
+    height: int,
+) -> str:
+    """Overlay timed phrase captions on a composed segment reference."""
+    current = input_ref
+    chunk_index = 0
+
+    for segment_index, segment in enumerate(segments):
+        slot_id = slot_ids[segment_index] if segment_index < len(slot_ids) else f"slot{segment_index}"
+        slot_offset = segment.out_start_s
+        for chunk in chunks_by_slot.get(slot_id, []):
+            phrase = " ".join(word.text for word in chunk.words)
+            abs_start = slot_offset + chunk.start_s
+            abs_end = slot_offset + chunk.end_s
+            label = f"{label_prefix}{chunk_index}"
+            chunk_index += 1
+            current = styled_drawtext(
+                parts,
+                current,
+                phrase,
+                style,
+                label,
+                width=width,
+                height=height,
+                enable_expr=_enable_between_expr(abs_start, abs_end),
+            )
+
+            if style.karaoke_enabled:
+                from viral_editor.utils.fonts import resolve_font_path
+                from viral_editor.utils.text_metrics import measure_phrase_word_offsets
+
+                font_path = resolve_font_path(style.font_family)
+                if font_path is not None:
+                    words = [word.text for word in chunk.words]
+                    fontsize = _base_font_size(style, height)
+                    offsets = measure_phrase_word_offsets(
+                        words,
+                        font_path=font_path,
+                        font_size_px=fontsize,
+                    )
+                    phrase_width = offsets[-1].x_px + offsets[-1].width_px if offsets else 0.0
+                    for word_index, word in enumerate(chunk.words):
+                        offset = offsets[word_index]
+                        x_expr = f"(w-{phrase_width:.2f})/2+{offset.x_px:.2f}"
+                        word_start = slot_offset + word.start_s
+                        word_end = slot_offset + word.end_s
+                        karaoke_label = f"{label_prefix}k{chunk_index - 1}w{word_index}"
+                        current = styled_drawtext(
+                            parts,
+                            current,
+                            word.text,
+                            style,
+                            karaoke_label,
+                            width=width,
+                            height=height,
+                            enable_expr=_enable_between_expr(word_start, word_end),
+                            x_expr=x_expr,
+                            fontcolor_override=style.emphasis_color,
+                        )
+
+    return current
 
 
 def teaser_mask_filter(mask: str) -> str:
@@ -312,7 +483,14 @@ def build_teaser_filter_chain(
     parts.append(chain)
     current = f"[{label}]"
     if hook_text:
-        current = drawtext_hook_overlay(parts, current, hook_text, f"{label}titled")
+        current = drawtext_hook_overlay(
+            parts,
+            current,
+            hook_text,
+            f"{label}titled",
+            width=width,
+            height=height,
+        )
     norm = normalize_segment_timeline(parts, current, "teasernorm", fps=fps)
     return parts, norm
 
@@ -453,6 +631,10 @@ def build_composite_filtergraph(
     clip_transforms: dict[str, tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     hook_text: str | None = None,
+    hook_style: CaptionStyle | None = None,
+    caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
+    caption_style: CaptionStyle | None = None,
+    slot_ids: list[str] | None = None,
     xfade_s: float = 0.25,
     segment_roles: list[str] | None = None,
     hook_start_mask: str | None = None,
@@ -514,7 +696,15 @@ def build_composite_filtergraph(
             role in ("hook", "hook_start") or (role is None and index == 0)
         )
         if show_hook_title:
-            concat_ref = drawtext_hook_overlay(parts, concat_ref, hook_text, f"{label}titled")
+            concat_ref = drawtext_hook_overlay(
+                parts,
+                concat_ref,
+                hook_text,
+                f"{label}titled",
+                style=hook_style,
+                width=width,
+                height=height,
+            )
         segment_labels.append(concat_ref)
 
     if segment_labels:
@@ -554,6 +744,20 @@ def build_composite_filtergraph(
     else:
         parts.append(f"nullsrc=s={width}x{height}:d=0.1,format=yuv420p[bodyv]")
         composed_ref = "[bodyv]"
+
+    if caption_chunks_by_slot and caption_style and any(caption_chunks_by_slot.values()):
+        ids = slot_ids or [f"slot{index}" for index in range(len(segments))]
+        composed_ref = build_caption_filter_chain(
+            parts,
+            composed_ref,
+            chunks_by_slot=caption_chunks_by_slot,
+            segments=segments,
+            slot_ids=ids,
+            style=caption_style,
+            label_prefix="cap",
+            width=width,
+            height=height,
+        )
 
     apply_spatial_fx_chain(
         parts,

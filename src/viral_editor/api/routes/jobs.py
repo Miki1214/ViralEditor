@@ -33,6 +33,7 @@ from viral_editor.api.clips import (
     speed_planning_context,
 )
 from viral_editor.video.clip_reel import clip_paths_by_id
+from viral_editor.api.caption import apply_caption_style_patch, build_caption_response
 from viral_editor.api.runner import build_job_config, start_job
 from viral_editor.api.render_job import start_final_render
 from viral_editor.api.storyboard import (
@@ -78,6 +79,9 @@ from viral_editor.api.schemas import (
     StoryboardSegmentDebugRow,
     StorySlotResponse,
     TeaserSettingsResponse,
+    CaptionPatchRequest,
+    CaptionResponse,
+    TranscribeCaptionResponse,
 )
 from viral_editor.api.effects import (
     apply_effects_patch,
@@ -93,7 +97,9 @@ from viral_editor.api.store import JobStore, job_workspace, save_upload, write_j
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
 from viral_editor.config import ConfigError
-from viral_editor.models import ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
+from viral_editor.utils.ffmpeg import FFmpegError
+from viral_editor.models import CaptionStyle, ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
+from viral_editor.audio.captions import build_caption_chunks_for_slots
 from viral_editor.audio.storyboard import (
     assigned_storyboard_slots,
     remap_fx_events_for_composite,
@@ -102,7 +108,7 @@ from viral_editor.audio.storyboard import (
     storyboard_to_segments,
 )
 from viral_editor.pipeline import PIPELINE_STAGES
-from viral_editor.utils.ffmpeg import FFmpegError
+from viral_editor.audio.transcribe import transcribe_audio, transcribe_available
 from viral_editor.video.proxy_render import render_composite, render_speed_proxy
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -1218,6 +1224,100 @@ def _segment_transform_for_slot(slot: StorySlot) -> tuple[int, str, tuple[float,
     return (slot.rotation_deg, slot.fit_mode, spatial)
 
 
+@router.get("/{job_id}/caption", response_model=CaptionResponse)
+def get_caption(job_id: str, request: Request) -> CaptionResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    storyboard = load_storyboard(job.workspace / "temp")
+    return build_caption_response(job.config, storyboard)
+
+
+@router.patch("/{job_id}/caption", response_model=CaptionResponse)
+def patch_caption(
+    job_id: str,
+    payload: CaptionPatchRequest,
+    request: Request,
+) -> CaptionResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    config = job.config
+    caption = config.caption
+    hook = config.hook
+    hook_style = config.hook_style
+
+    if payload.script_text is not None:
+        caption = caption.model_copy(update={"script_text": payload.script_text})
+    if payload.words_per_second is not None:
+        caption = caption.model_copy(update={"words_per_second": payload.words_per_second})
+    if payload.slot_overrides is not None:
+        caption = caption.model_copy(update={"slot_overrides": payload.slot_overrides})
+    if payload.caption_style is not None:
+        caption = caption.model_copy(
+            update={"style": apply_caption_style_patch(caption.style, payload.caption_style)}
+        )
+    if payload.karaoke_enabled is not None:
+        caption = caption.model_copy(
+            update={"style": caption.style.model_copy(update={"karaoke_enabled": payload.karaoke_enabled})}
+        )
+    if payload.hook_style is not None:
+        hook_style = apply_caption_style_patch(hook_style, payload.hook_style)
+    if payload.hook_text is not None:
+        if not payload.hook_text.strip():
+            raise HTTPException(status_code=400, detail="hook_text cannot be empty")
+        hook = hook.model_copy(update={"text": payload.hook_text.strip()})
+    if payload.emphasis_words is not None:
+        hook = hook.model_copy(update={"emphasis_words": payload.emphasis_words})
+
+    updated_config = config.model_copy(
+        update={"caption": caption, "hook": hook, "hook_style": hook_style}
+    )
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    _invalidate_composite_previews(job.workspace / "temp")
+
+    storyboard = load_storyboard(job.workspace / "temp")
+    return build_caption_response(updated_config, storyboard)
+
+
+@router.post("/{job_id}/caption/transcribe", response_model=TranscribeCaptionResponse)
+def transcribe_caption(job_id: str, request: Request) -> TranscribeCaptionResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not transcribe_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-transcribe requires faster-whisper. Install with: pip install faster-whisper",
+        )
+    if not job.config.audio_path.is_file():
+        raise HTTPException(status_code=400, detail="Job audio file not found")
+
+    try:
+        script_text, words = transcribe_audio(job.config.audio_path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    from viral_editor.api.schemas import CaptionWordResponse
+
+    return TranscribeCaptionResponse(
+        script_text=script_text,
+        words=[
+            CaptionWordResponse(
+                text=word.text,
+                start_s=word.start_s,
+                end_s=word.end_s,
+                emphasis=word.emphasis,
+            )
+            for word in words
+        ],
+        transcribe_available=True,
+    )
+
+
 @router.get("/{job_id}/preview")
 def get_composite_preview(
     job_id: str,
@@ -1276,12 +1376,20 @@ def get_composite_preview(
     )
     fx_events = remap_fx_events_for_composite(fx_events, storyboard)
 
+    caption_chunks = build_caption_chunks_for_slots(
+        job.config.caption,
+        ordered_slots,
+        emphasis_words=job.config.hook.emphasis_words,
+    )
+
     import hashlib
     import json
 
     cache_payload = {
         "storyboard": storyboard.model_dump(mode="json"),
         "hook": job.config.hook.text,
+        "hook_style": job.config.hook_style.model_dump(mode="json"),
+        "caption": job.config.caption.model_dump(mode="json"),
         "teaser": job.config.teaser.model_dump(mode="json"),
         "spatial_fx": job.config.spatial_fx.model_dump(mode="json"),
         "seed": job.config.seed,
@@ -1305,6 +1413,10 @@ def get_composite_preview(
                 music_end_s=job.config.music.end_s,
                 out_path=preview_path,
                 hook_text=job.config.hook.text,
+                hook_style=job.config.hook_style,
+                caption_chunks_by_slot=caption_chunks,
+                caption_style=job.config.caption.style,
+                slot_ids=segment_slot_ids,
                 temp_dir=temp_dir,
                 segment_roles=segment_roles,
                 hook_start_mask=(
