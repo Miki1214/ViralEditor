@@ -67,6 +67,8 @@ export interface MusicBlock {
   section_label: string | null;
   key: string | null;
   is_repeated_section: boolean;
+  expected_slot_count?: number | null;
+  preset_target_duration_s?: number | null;
 }
 
 export interface MusicSection {
@@ -128,6 +130,7 @@ export interface WaveformPayload {
   lanes: ScopeLaneSeries[];
   chroma: ChromaGram | null;
   blocks: MusicBlock[];
+  all_blocks?: MusicBlock[];
   selected_block_id: string | null;
   target_match_failed?: boolean;
   suggested_target_duration_s?: number | null;

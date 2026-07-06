@@ -85,6 +85,8 @@ class MusicBlock(DomainModel):
     section_label: str | None = None
     key: str | None = None
     is_repeated_section: bool = False
+    expected_slot_count: int | None = None
+    preset_target_duration_s: float | None = None
 
 
 class MusicSection(DomainModel):
@@ -175,6 +177,7 @@ class WaveformPayload(DomainModel):
     lanes: list[ScopeLaneSeries] = Field(default_factory=list)
     chroma: ChromaGram | None = None
     blocks: list[MusicBlock] = Field(default_factory=list)
+    all_blocks: list[MusicBlock] = Field(default_factory=list)
     selected_block_id: str | None = None
     target_match_failed: bool = False
     suggested_target_duration_s: float | None = Field(default=None, gt=0)

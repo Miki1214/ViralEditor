@@ -10,6 +10,9 @@ build/
 .mypy_cache/
 .ruff_cache/
 
+# Graphify knowledge graph (generated)
+graphify-out/
+
 # Pipeline artifacts
 output/
 temp/

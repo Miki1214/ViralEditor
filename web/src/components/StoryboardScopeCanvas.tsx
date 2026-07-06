@@ -23,6 +23,7 @@ interface StoryboardScopeCanvasProps {
   waveform: WaveformPayload;
   storyboard: StoryboardPayload;
   selectedSlotId: string | null;
+  availableBlockCount: number;
   spatialFx?: SpatialFxSettings;
   onSelectSlot?: (slotId: string) => void;
 }
@@ -46,6 +47,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
   waveform,
   storyboard,
   selectedSlotId,
+  availableBlockCount,
   spatialFx,
   onSelectSlot,
 }: StoryboardScopeCanvasProps) {
@@ -235,18 +237,21 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
             2,
             ((slot.out_end_s - slot.out_start_s) / blockDurationS) * innerW,
           );
+          const hasAvailableBlocks = availableBlockCount > 0;
           return (
             <g
               id={`storyboard-scope-slot-${slot.id}`}
               key={slot.id}
-              style={{ pointerEvents: "all" }}
+              style={{ pointerEvents: hasAvailableBlocks ? "all" : "none", opacity: hasAvailableBlocks ? 1 : 0.4 }}
               onClick={(event) => {
                 event.stopPropagation();
+                if (!hasAvailableBlocks) return;
                 if (onSelectSlot) onSelectSlot(slot.id);
               }}
               role="button"
-              tabIndex={0}
+              tabIndex={hasAvailableBlocks ? 0 : -1}
               onKeyDown={(event) => {
+                if (!hasAvailableBlocks) return;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   if (onSelectSlot) onSelectSlot(slot.id);

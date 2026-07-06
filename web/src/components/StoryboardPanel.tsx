@@ -40,6 +40,7 @@ interface StoryboardPanelProps {
   storyboard: StoryboardPayload;
   waveform: WaveformPayload | null;
   selectedSlotId: string | null;
+  availableBlockCount: number;
   onSelectSlot: (slotId: string) => void;
   onAssignClip: (
     slotId: string,
@@ -124,6 +125,7 @@ export function StoryboardPanel({
   storyboard,
   waveform,
   selectedSlotId,
+  availableBlockCount,
   onSelectSlot,
   onAssignClip,
   onUpdateSlotCrop,
@@ -370,6 +372,7 @@ export function StoryboardPanel({
               waveform={waveform}
               storyboard={storyboard}
               selectedSlotId={selectedSlotId}
+              availableBlockCount={availableBlockCount}
               onSelectSlot={selectSlotAndSeek}
             />
           </div>

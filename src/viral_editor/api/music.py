@@ -20,6 +20,7 @@ from viral_editor.audio.structure import analyze_structure
 from viral_editor.config import JobConfig
 from viral_editor.models import (
     AudioTimeline,
+    MusicBlock,
     MusicBlockCatalog,
     MusicBlockPlan,
     MusicStructurePlan,
@@ -82,6 +83,38 @@ def load_music_block_catalog(temp_dir: Path) -> MusicBlockCatalog | None:
     if not path.is_file():
         return None
     return read_artifact(MusicBlockCatalog, path)
+
+
+def collect_all_blocks_from_catalog(
+    catalog: MusicBlockCatalog | None,
+) -> list[MusicBlock]:
+    """Flatten phrase-aligned catalog plans into tagged blocks for client-side filtering."""
+    if catalog is None:
+        return []
+
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
+    all_blocks: list[MusicBlock] = []
+    for key, plan in catalog.plans.items():
+        if plan.use_full_track or plan.target_match_failed:
+            continue
+        preset_s = float(key)
+        for block in plan.blocks:
+            slot_count = (
+                block.expected_slot_count
+                if block.expected_slot_count is not None
+                else _recommended_slot_count(block.duration_s)
+            )
+            all_blocks.append(
+                block.model_copy(
+                    update={
+                        "preset_target_duration_s": preset_s,
+                        "expected_slot_count": slot_count,
+                    }
+                )
+            )
+    all_blocks.sort(key=lambda block: (block.preset_target_duration_s or 0, -block.loop_quality))
+    return all_blocks
 
 
 def _catalog_key(target_duration_s: float) -> str:

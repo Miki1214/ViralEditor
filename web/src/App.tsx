@@ -1,5 +1,8 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, StoryboardPayload, WaveformPayload } from "./types";
+import { blockPoolFromWaveform } from "./components/audioScopeHelpers";
+import { filterBlocks } from "./utils/blockFilter";
+import { targetDurationForBlockSelection } from "./utils/appBlockSelection";
 import {
   assignSlotClip,
   clearSlotClip,
@@ -69,6 +72,15 @@ export default function App() {
   const [audioName, setAudioName] = useState<string | null>(null);
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedSlotCount, setSelectedSlotCount] = useState<number | null>(null);
+  const [targetDurationFilter, setTargetDurationFilter] = useState<number | null>(null);
+
+  const availableBlockCount = useMemo(() => {
+    if (!waveform) return 0;
+    const activeBlocks = waveform.blocks.length > 0 ? waveform.blocks : [];
+    const pool = blockPoolFromWaveform(waveform, activeBlocks);
+    return filterBlocks(pool, targetDurationFilter, selectedSlotCount).length;
+  }, [waveform, targetDurationFilter, selectedSlotCount]);
   const [musicStartS, setMusicStartS] = useState<number | null>(null);
   const [musicEndS, setMusicEndS] = useState<number | null>(null);
   const [storyboard, setStoryboard] = useState<StoryboardPayload | null>(null);
@@ -229,6 +241,8 @@ export default function App() {
       setRestoreMenuOpen(false);
       setEvents([]);
       setSelectedSlotId(null);
+      setSelectedSlotCount(null);
+      setTargetDurationFilter(null);
       setActiveJobId(job.id);
       setJobStatus(job.status);
       setJobArtifacts(job.artifacts);
@@ -369,6 +383,8 @@ export default function App() {
     setAudioName(file.name);
     setWaveform(null);
     setStoryboard(null);
+    setSelectedSlotCount(null);
+    setTargetDurationFilter(null);
     setEvents([]);
     setPreviewReady(false);
     setPreviewVersion(0);
@@ -522,6 +538,12 @@ export default function App() {
 
   const handleSelectBlock = async (block: MusicBlock) => {
     if (!activeJobId) return;
+    const newTarget = targetDurationForBlockSelection(block, form.targetDurationS);
+    if (newTarget != null && hasAssignedClip) {
+      requestTargetChange(newTarget, false);
+      return;
+    }
+
     setSelectedBlockId(block.id);
     setMusicStartS(block.start_s);
     setMusicEndS(block.end_s);
@@ -531,8 +553,16 @@ export default function App() {
     blockSeekRef.current?.(0);
     setCompositePreviewPlaying(false);
     setPreviewReady(false);
+    if (newTarget != null) {
+      patchForm({ targetDurationS: newTarget, useFullTrack: false });
+    }
     try {
-      await updateMusicSelection(activeJobId, { selected_block_id: block.id });
+      await updateMusicSelection(activeJobId, {
+        selected_block_id: block.id,
+        ...(newTarget != null
+          ? { target_duration_s: newTarget, use_full_track: false }
+          : {}),
+      });
       loadScope(activeJobId);
       loadStoryboard(activeJobId);
     } catch (err) {
@@ -869,6 +899,10 @@ export default function App() {
                   selectedBlockId={selectedBlockId}
                   onTargetChange={requestTargetChange}
                   onSelectBlock={handleSelectBlock}
+                  targetDurationFilter={targetDurationFilter}
+                  onTargetDurationFilterChange={setTargetDurationFilter}
+                  selectedSlotCount={selectedSlotCount}
+                  onSlotCountChange={setSelectedSlotCount}
                   switchingTarget={regenerating}
                 />
               ) : analyzing && activeJobId ? (
@@ -910,6 +944,7 @@ export default function App() {
                 registerBlockPause={registerBlockPause}
                 registerBlockPlaySlot={registerBlockPlaySlot}
                 registerBlockSetLoopMode={registerBlockSetLoopMode}
+                availableBlockCount={availableBlockCount}
               />
               <HookOverlayPanel form={form} onPatch={patchForm} />
             </>

@@ -197,6 +197,8 @@ def _make_full_track_block(
         else 0.5
     )
     drops = sum(1 for t in timeline.transients if t.type == "drop")
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
     return MusicBlock(
         id="block_full",
         start_s=0.0,
@@ -210,6 +212,7 @@ def _make_full_track_block(
         loop_quality=round(loop_q, 4),
         phrase_bars=0,
         key=features.meta.key,
+        expected_slot_count=_recommended_slot_count(track_duration),
     )
 
 
@@ -561,6 +564,8 @@ def _select_block_plan_from_candidates(
             break
     kept.sort(key=lambda c: c.loop_quality, reverse=True)
 
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
     blocks = [
         MusicBlock(
             id=f"block_{chr(ord('a') + i)}",
@@ -577,6 +582,7 @@ def _select_block_plan_from_candidates(
             section_label=c.section_label,
             key=features.meta.key,
             is_repeated_section=c.is_repeated_section,
+            expected_slot_count=_recommended_slot_count(c.end_s - c.start_s),
         )
         for i, c in enumerate(kept)
     ]

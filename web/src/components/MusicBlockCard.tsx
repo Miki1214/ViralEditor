@@ -64,6 +64,11 @@ export function MusicBlockCard({
             {block.phrase_bars > 0 ? ` · ${block.phrase_bars}-bar phrase` : ""}
             {block.section_label ? ` · ${block.section_label}` : ""}
             {block.key ? ` · ${block.key}` : ""}
+            {block.expected_slot_count != null && (
+              <span id={`music-block-card-slot-badge-${block.id}`} className="ml-1 font-mono text-[10px] text-monitor-muted/70">
+                · {block.expected_slot_count} slot{block.expected_slot_count !== 1 ? "s" : ""}
+              </span>
+            )}
           </p>
           <div className="mt-2 flex items-center gap-2">
             <span id={`music-block-card-loop-label-${block.id}`} className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">

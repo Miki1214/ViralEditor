@@ -12,9 +12,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse, StreamingResponse
 
 from viral_editor.api.music import (
+    collect_all_blocks_from_catalog,
     load_audio_timeline,
     load_beat_features,
     target_loop_qualities_from_artifacts,
+    load_music_block_catalog,
     load_music_blocks,
     load_music_structure,
     load_onset_envelope,
@@ -369,6 +371,25 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
             selected_block_id=job.config.music.selected_block_id,
         )
 
+    # Normalize expected_slot_count on any blocks that are missing it.
+    # This handles cached music_blocks.json / catalog entries written before this field existed.
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
+    if block_plan.blocks:
+        updated_blocks = [
+            block.model_copy(
+                update={
+                    "expected_slot_count": (
+                        block.expected_slot_count
+                        if block.expected_slot_count is not None
+                        else _recommended_slot_count(block.duration_s)
+                    )
+                }
+            )
+            for block in block_plan.blocks
+        ]
+        block_plan = block_plan.model_copy(update={"blocks": updated_blocks})
+
     features = load_beat_features(temp_dir)
     loop_qualities = (
         target_loop_qualities_from_artifacts(temp_dir, timeline, features)
@@ -376,7 +397,10 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
         else None
     )
 
-    return build_waveform_payload(
+    catalog = load_music_block_catalog(temp_dir)
+    all_blocks = collect_all_blocks_from_catalog(catalog)
+
+    payload = build_waveform_payload(
         timeline,
         envelope,
         block_plan,
@@ -385,6 +409,7 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
         scope_lanes=load_scope_lanes(temp_dir),
         loop_qualities=loop_qualities,
     )
+    return payload.model_copy(update={"all_blocks": all_blocks})
 
 
 @router.get("/{job_id}/audio/preview")
