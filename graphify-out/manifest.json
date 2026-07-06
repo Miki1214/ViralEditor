@@ -145,8 +145,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/audio/storyboard.py": {
-    "mtime": 1781969052.894284,
-    "ast_hash": "1485752adf4a506f15de996a751884f5",
+    "mtime": 1783356048.4525287,
+    "ast_hash": "708fe808ddc51bc407ca421f123e948b",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/structure.py": {
@@ -375,8 +375,8 @@
     "semantic_hash": ""
   },
   "tests/test_storyboard.py": {
-    "mtime": 1781969742.959416,
-    "ast_hash": "5a456cce7a09836fa83c9ce4a5c332be",
+    "mtime": 1783356072.136377,
+    "ast_hash": "9b404a9fc3ccc31ec0e0f7b8e3d8d2c0",
     "semantic_hash": ""
   },
   "tests/test_structure.py": {
@@ -1012,6 +1012,21 @@
   "web/src/components/audioScopeHelpers.test.ts": {
     "mtime": 1783353118.2172716,
     "ast_hash": "2351690a21338e1347b4c582a8eae9d0",
+    "semantic_hash": ""
+  },
+  ".cursor/plans/audio-driven_slot_planning_f4aec4c9.plan.md": {
+    "mtime": 1783356154.8653245,
+    "ast_hash": "04ce339ab5854e452d372c64f37a2a92",
+    "semantic_hash": ""
+  },
+  "Documentation/Studies/viral_video_retention_studies_documentation.md": {
+    "mtime": 1783355352.6211329,
+    "ast_hash": "705a3ddd570a9773c4f88fb90e547585",
+    "semantic_hash": ""
+  },
+  "Documentation/Studies/viral_video_retention_suggestions.md": {
+    "mtime": 1783355333.4132497,
+    "ast_hash": "f1d9befa3d0bd952403197482898c542",
     "semantic_hash": ""
   }
 }

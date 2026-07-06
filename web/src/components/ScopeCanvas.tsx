@@ -151,7 +151,7 @@ export function ScopeCanvas({
         layout={sectionLayout}
       />
 
-      {blocks.map((block) => {
+      {blocks.map((block, blockIndex) => {
         const geometry = blockWaveformRect(
           block,
           scopeWindow,
@@ -167,7 +167,7 @@ export function ScopeCanvas({
         return (
           <rect
             id={`scope-canvas-block-${block.id}`}
-            key={block.id}
+            key={`block-bg-${blockIndex}-${block.id}`}
             x={geometry.x}
             y={geometry.y}
             width={geometry.w}
@@ -194,7 +194,7 @@ export function ScopeCanvas({
       )}
 
       {onSelectBlock &&
-        blocks.map((block) => {
+        blocks.map((block, blockIndex) => {
           const geometry = blockWaveformRect(
             block,
             scopeWindow,
@@ -210,7 +210,7 @@ export function ScopeCanvas({
           return (
             <rect
               id={`scope-canvas-block-hit-${block.id}`}
-              key={`hit-${block.id}`}
+              key={`hit-${blockIndex}-${block.id}`}
               x={geometry.x}
               y={geometry.y}
               width={geometry.w}
