@@ -11,6 +11,8 @@ from viral_editor.audio.features import BeatFeaturesMeta, BeatSyncFeatures
 from viral_editor.audio.storyboard import (
     _compute_boundaries,
     _recommended_slot_count,
+    _salient_boundaries,
+    _soft_count_range,
     apply_hook_inversion_layout,
     hook_payoff_downbeats_s,
     plan_storyboard,
@@ -131,7 +133,7 @@ def test_recommended_slot_count_respects_explicit_cap() -> None:
 def test_compute_boundaries_no_duplicate_endpoints() -> None:
     """Regression: sparse downbeats used to pad with repeated window_end (e.g. [0, 2, 5.5, 5.5])."""
     downbeats = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
-    bounds = _compute_boundaries(0.0, 5.5, downbeats, 3)
+    bounds = _compute_boundaries(0.0, 5.5, downbeats, 3).boundaries
     assert len(bounds) == 4
     assert bounds[0] == pytest.approx(0.0)
     assert bounds[-1] == pytest.approx(5.5)
@@ -1003,3 +1005,162 @@ def test_persist_storyboard_variant_restores_block_specific_assignments(tmp_path
 
     assert restored.slots[0].assigned_clip_id == "a_hook"
     assert restored.slots[0].crop_start_s == pytest.approx(8.0)
+
+
+_SALIENT_HOP = 512
+_SALIENT_SR = 22050
+
+
+def _frame_at(time_s: float) -> int:
+    return int(time_s * _SALIENT_SR / _SALIENT_HOP)
+
+
+def _scope_with_peaks(
+    peak_times_s: list[float],
+    *,
+    duration_s: float = 16.0,
+) -> dict[str, np.ndarray]:
+    """Synthetic scope lanes with local maxima at ``peak_times_s``."""
+    n = _frame_at(duration_s) + 20
+    rms = np.full(n, 0.15, dtype=np.float32)
+    drop_salience = np.zeros(n, dtype=np.float32)
+    surge = np.zeros(n, dtype=np.float32)
+    build = np.zeros(n, dtype=np.float32)
+    flux_low = np.zeros(n, dtype=np.float32)
+    for time_s in peak_times_s:
+        center = _frame_at(time_s)
+        for offset in range(-4, 5):
+            frame = center + offset
+            if 0 <= frame < n:
+                val = 0.55 + 0.45 * (1.0 - abs(offset) / 5.0)
+                rms[frame] = max(float(rms[frame]), 0.2 + 0.75 * val)
+                drop_salience[frame] = max(float(drop_salience[frame]), val)
+                surge[frame] = max(float(surge[frame]), val * 0.95)
+                build[frame] = max(float(build[frame]), val * 0.8)
+    return {
+        "rms": rms,
+        "drop_salience": drop_salience,
+        "surge": surge,
+        "build": build,
+        "flux_low": flux_low,
+    }
+
+
+def _downbeats_every(step_s: float, duration_s: float) -> list[float]:
+    count = int(duration_s / step_s) + 1
+    return [round(index * step_s, 6) for index in range(count)]
+
+
+def test_salient_boundaries_align_to_injected_peaks() -> None:
+    """Cycle A: cuts land near injected drop/surge peaks."""
+    duration_s = 16.0
+    scope = _scope_with_peaks([4.0, 8.5], duration_s=duration_s)
+    downbeats = _downbeats_every(2.0, duration_s)
+    plan = _salient_boundaries(
+        0.0,
+        duration_s,
+        downbeats=downbeats,
+        scope_lanes=scope,
+        absolute_downbeats=downbeats,
+        soft_count_range=(2, 6),
+    )
+    interior = plan.boundaries[1:-1]
+    assert any(abs(boundary - 4.0) <= 0.2 for boundary in interior)
+    assert any(abs(boundary - 8.5) <= 0.2 for boundary in interior)
+
+
+def test_salient_boundaries_enforce_cadence_limits() -> None:
+    """Cycle B: spans stay within viral floor/ceiling; large gaps subdivide."""
+    duration_s = 18.0
+    scope = _scope_with_peaks([3.1, 3.3, 15.5], duration_s=duration_s)
+    downbeats = _downbeats_every(1.0, duration_s)
+    plan = _salient_boundaries(
+        0.0,
+        duration_s,
+        downbeats=downbeats,
+        scope_lanes=scope,
+        absolute_downbeats=downbeats,
+        soft_count_range=(2, 8),
+    )
+    spans = [
+        plan.boundaries[index + 1] - plan.boundaries[index]
+        for index in range(len(plan.boundaries) - 1)
+    ]
+    assert all(span >= 1.5 - 1e-3 for span in spans)
+    assert all(span <= 6.5 + 1e-3 for span in spans)
+    assert len(plan.boundaries) >= 4
+
+
+def test_salient_boundaries_respect_soft_count_range() -> None:
+    """Cycle C: slot count stays inside chip soft band."""
+    duration_s = 16.0
+    scope = _scope_with_peaks([3.5, 7.0, 10.5, 13.5], duration_s=duration_s)
+    downbeats = _downbeats_every(1.0, duration_s)
+    lo, hi = _soft_count_range(duration_s, 4)
+    assert lo == 3
+    assert hi == 6
+    plan = _salient_boundaries(
+        0.0,
+        duration_s,
+        downbeats=downbeats,
+        scope_lanes=scope,
+        absolute_downbeats=downbeats,
+        soft_count_range=(lo, hi),
+    )
+    slot_count = len(plan.boundaries) - 1
+    assert lo <= slot_count <= hi
+
+
+def test_plan_storyboard_middle_slots_non_uniform_with_scope_lanes() -> None:
+    """Cycle D: salience-driven layout yields unequal slot durations."""
+    duration_s = 18.0
+    block = MusicBlock(
+        id="salient",
+        start_s=0.0,
+        end_s=duration_s,
+        duration_s=duration_s,
+        score=0.9,
+        drop_count=2,
+        transient_count=4,
+        label="Test",
+        reason="test",
+        loop_quality=0.8,
+        phrase_bars=4,
+    )
+    scope = _scope_with_peaks([3.2, 6.0, 12.5], duration_s=duration_s)
+    downbeats = _downbeats_every(1.0, duration_s)
+    features = _features(downbeats)
+    storyboard = plan_storyboard(
+        block,
+        features=features,
+        transients=[],
+        scope_lanes=scope,
+        target_slot_count=4,
+    )
+    durations = [slot.target_duration_s for slot in storyboard.slots]
+    assert len(durations) >= 3
+    assert max(durations) - min(durations) > 0.8
+
+
+def test_slot_rationales_describe_salient_events() -> None:
+    """Cycle E: rationales reference energy/surge events, not generic downbeats."""
+    duration_s = 16.0
+    scope = _scope_with_peaks([4.0, 8.5], duration_s=duration_s)
+    downbeats = _downbeats_every(2.0, duration_s)
+    storyboard = plan_storyboard(
+        _short_block(duration_s),
+        features=_features(downbeats),
+        transients=[],
+        scope_lanes=scope,
+        target_slot_count=4,
+    )
+    body_reasons = [
+        slot.rationale
+        for slot in storyboard.slots[1:]
+        if slot.rationale
+    ]
+    assert body_reasons
+    assert any(
+        "peak" in reason.lower() or "surge" in reason.lower() or "flux" in reason.lower()
+        for reason in body_reasons
+    )

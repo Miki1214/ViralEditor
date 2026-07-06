@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import bisect
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -12,7 +13,9 @@ from viral_editor.editing.retention_policy import (
     HOOK_WINDOW_S,
     INTERRUPT_MAX_GAP_S,
     INTERRUPT_MIN_GAP_S,
+    SURGE_SCORE_THRESHOLD,
     find_energy_peaks,
+    find_flux_peaks,
     place_interrupts,
     score_plan,
 )
@@ -33,6 +36,32 @@ _MIN_SLOT_S = 1.5
 _DEFAULT_XFADE_S = 0.25
 _PUNCH_SPEED = 0.65
 _MAX_SLOT_COUNT = 8
+_SLOT_HARD_FLOOR_S = 2.0
+_SLOT_HARD_CEIL_S = 6.5
+_CANDIDATE_DEDUPE_S = 0.12
+
+
+@dataclass(frozen=True)
+class _SalientCut:
+    time_s: float
+    magnitude: float
+    reason: str
+
+
+@dataclass(frozen=True)
+class _BoundaryPlan:
+    boundaries: list[float]
+    slot_reasons: list[str | None]
+
+
+def _soft_count_range(duration: float, target_slot_count: int) -> tuple[int, int]:
+    """Soft slot-count band around the user's Slots chip."""
+    max_fit = max(1, int(duration / _MIN_SLOT_S))
+    lo = max(1, min(target_slot_count - 1, max_fit))
+    hi = max(1, min(target_slot_count + 2, _MAX_SLOT_COUNT, max_fit))
+    if lo > hi:
+        lo = hi
+    return lo, hi
 
 
 def _recommended_slot_count(duration: float, target_slot_count: int | None = None) -> int:
@@ -98,7 +127,7 @@ def plan_storyboard(
 
     downbeats = _downbeats_in_window(features, window_start, window_end)
     slot_count = _recommended_slot_count(duration, target_slot_count)
-    boundaries = _compute_boundaries(
+    boundary_plan = _compute_boundaries(
         window_start,
         window_end,
         downbeats,
@@ -108,6 +137,7 @@ def plan_storyboard(
             features.downbeat_times_s.tolist() if features is not None else []
         ),
     )
+    boundaries = boundary_plan.boundaries
 
     drop_counts = _drop_counts_by_slot(transients or [], boundaries)
     punch_index = drop_counts.index(max(drop_counts)) if drop_counts else -1
@@ -119,6 +149,7 @@ def plan_storyboard(
         absolute_downbeats=(
             features.downbeat_times_s.tolist() if features is not None else []
         ),
+        slot_reasons=boundary_plan.slot_reasons,
     )
 
     slots: list[StorySlot] = []
@@ -182,7 +213,11 @@ def _slot_rationales(
     *,
     scope_lanes: dict[str, np.ndarray] | None,
     absolute_downbeats: list[float],
+    slot_reasons: list[str | None] | None = None,
 ) -> list[str | None]:
+    if slot_reasons is not None and len(slot_reasons) == max(len(boundaries) - 1, 0):
+        return list(slot_reasons)
+
     rationales: list[str | None] = []
     peaks = find_energy_peaks(
         scope_lanes,
@@ -212,6 +247,315 @@ def _slot_rationales(
     return rationales
 
 
+def _nearest_time_in_range(
+    target_s: float,
+    candidates: list[float],
+    *,
+    min_s: float,
+    max_s: float,
+) -> float:
+    in_range = [value for value in candidates if min_s - 1e-6 <= value <= max_s + 1e-6]
+    if not in_range:
+        return round((min_s + max_s) / 2.0, 6)
+    return round(min(in_range, key=lambda value: abs(value - target_s)), 6)
+
+
+def _collect_salient_candidates(
+    *,
+    window_start: float,
+    window_end: float,
+    scope_lanes: dict[str, np.ndarray],
+    absolute_downbeats: list[float],
+) -> list[_SalientCut]:
+    candidates: list[_SalientCut] = []
+    for peak in find_energy_peaks(
+        scope_lanes,
+        absolute_downbeats,
+        window_start_s=window_start,
+        window_end_s=window_end,
+    ):
+        rel = peak.time_s - window_start
+        if peak.surge_score >= SURGE_SCORE_THRESHOLD:
+            label = "Energy surge"
+        else:
+            label = "RMS peak"
+        if peak.on_downbeat:
+            label += " on downbeat"
+        candidates.append(
+            _SalientCut(
+                time_s=peak.time_s,
+                magnitude=peak.magnitude,
+                reason=f"{label} @ {rel:.2f}s",
+            )
+        )
+    for band in ("low", "high"):
+        for peak in find_flux_peaks(
+            scope_lanes,
+            band,
+            window_start_s=window_start,
+            window_end_s=window_end,
+        ):
+            rel = peak.time_s - window_start
+            candidates.append(
+                _SalientCut(
+                    time_s=peak.time_s,
+                    magnitude=peak.magnitude,
+                    reason=f"{band.capitalize()}-band flux @ {rel:.2f}s",
+                )
+            )
+
+    candidates.sort(key=lambda cut: (-cut.magnitude, cut.time_s))
+    deduped: list[_SalientCut] = []
+    for cut in candidates:
+        if window_start - 1e-6 <= cut.time_s < window_end - 1e-6 and all(
+            abs(cut.time_s - kept.time_s) >= _CANDIDATE_DEDUPE_S for kept in deduped
+        ):
+            deduped.append(cut)
+    deduped.sort(key=lambda cut: cut.time_s)
+    return deduped
+
+
+def _greedy_salient_cuts(
+    *,
+    window_start: float,
+    window_end: float,
+    candidates: list[_SalientCut],
+    beat_grid: list[float],
+) -> tuple[list[float], list[_SalientCut]]:
+    boundaries = [round(window_start, 6)]
+    cuts: list[_SalientCut] = []
+    while True:
+        cursor = boundaries[-1]
+        remaining = window_end - cursor
+        if remaining <= _MIN_SLOT_S + 1e-6:
+            break
+        if remaining <= _SLOT_HARD_FLOOR_S + 1e-6:
+            break
+
+        hard_min = cursor + _SLOT_HARD_FLOOR_S
+        hard_max = min(cursor + _SLOT_HARD_CEIL_S, window_end - _MIN_SLOT_S)
+        ideal_min = cursor + INTERRUPT_MIN_GAP_S
+        ideal_max = min(cursor + INTERRUPT_MAX_GAP_S, hard_max)
+
+        pool = [cut for cut in candidates if hard_min - 1e-6 <= cut.time_s <= hard_max + 1e-6]
+        ideal_pool = [
+            cut for cut in pool if ideal_min - 1e-6 <= cut.time_s <= ideal_max + 1e-6
+        ]
+        pick: _SalientCut | None = None
+        if ideal_pool:
+            pick = max(ideal_pool, key=lambda cut: cut.magnitude)
+        elif pool:
+            pick = max(pool, key=lambda cut: cut.magnitude)
+        elif remaining > _SLOT_HARD_CEIL_S:
+            target = cursor + (INTERRUPT_MIN_GAP_S + INTERRUPT_MAX_GAP_S) / 2.0
+            cut_time = _nearest_time_in_range(
+                target,
+                beat_grid,
+                min_s=hard_min,
+                max_s=hard_max,
+            )
+            rel = cut_time - window_start
+            pick = _SalientCut(
+                time_s=cut_time,
+                magnitude=0.0,
+                reason=f"Cadence fill @ {rel:.2f}s",
+            )
+        else:
+            break
+
+        if pick.time_s >= window_end - _MIN_SLOT_S:
+            break
+        boundaries.append(round(pick.time_s, 6))
+        cuts.append(pick)
+
+    boundaries.append(round(window_end, 6))
+    return boundaries, cuts
+
+
+def _clamp_boundary_count(
+    boundaries: list[float],
+    cuts: list[_SalientCut],
+    *,
+    lo: int,
+    hi: int,
+    window_start: float,
+    beat_grid: list[float],
+) -> tuple[list[float], list[_SalientCut]]:
+    while len(boundaries) - 1 > hi and len(cuts) > 0:
+        drop_index = min(
+            range(len(cuts)),
+            key=lambda index: (cuts[index].magnitude, cuts[index].time_s),
+        )
+        drop_time = cuts[drop_index].time_s
+        boundary_index = boundaries.index(round(drop_time, 6))
+        boundaries.pop(boundary_index)
+        cuts.pop(drop_index)
+
+    while len(boundaries) - 1 < lo:
+        spans = [
+            (boundaries[index + 1] - boundaries[index], index)
+            for index in range(len(boundaries) - 1)
+        ]
+        if not spans:
+            break
+        span, index = max(spans, key=lambda item: item[0])
+        if span < 2.0 * _SLOT_HARD_FLOOR_S:
+            break
+        start = boundaries[index]
+        end = boundaries[index + 1]
+        target = start + span / 2.0
+        cut_time = _nearest_time_in_range(
+            target,
+            beat_grid,
+            min_s=start + _SLOT_HARD_FLOOR_S,
+            max_s=end - _SLOT_HARD_FLOOR_S,
+        )
+        if cut_time <= start + _MIN_SLOT_S or cut_time >= end - _MIN_SLOT_S:
+            break
+        rel = cut_time - window_start
+        boundaries.insert(index + 1, round(cut_time, 6))
+        cuts.insert(
+            index,
+            _SalientCut(
+                time_s=cut_time,
+                magnitude=0.0,
+                reason=f"Cadence fill @ {rel:.2f}s",
+            ),
+        )
+
+    return boundaries, cuts
+
+
+def _slot_reasons_from_cuts(
+    boundaries: list[float],
+    cuts: list[_SalientCut],
+    *,
+    window_start: float,
+) -> list[str | None]:
+    cut_by_time = {round(cut.time_s, 6): cut for cut in cuts}
+    reasons: list[str | None] = []
+    for index in range(len(boundaries) - 1):
+        if index == 0:
+            reasons.append(
+                f"Hook slot — aim FX by {EARLY_HOOK_FX_BY_S:.0f}s"
+                if boundaries[0] - window_start <= HOOK_WINDOW_S
+                else "Hook slot"
+            )
+            continue
+        cut = cut_by_time.get(round(boundaries[index], 6))
+        if cut is not None:
+            reasons.append(cut.reason)
+        else:
+            rel = boundaries[index] - window_start
+            reasons.append(f"Cadence fill @ {rel:.2f}s")
+    return reasons
+
+
+def _salient_boundaries(
+    window_start: float,
+    window_end: float,
+    *,
+    downbeats: list[float],
+    scope_lanes: dict[str, np.ndarray],
+    absolute_downbeats: list[float],
+    soft_count_range: tuple[int, int],
+) -> _BoundaryPlan:
+    duration = max(window_end - window_start, _MIN_SLOT_S)
+    lo, hi = soft_count_range
+    abs_downbeats = absolute_downbeats or [
+        window_start + value for value in downbeats
+    ]
+    beat_grid = sorted(
+        {
+            round(value, 6)
+            for value in abs_downbeats
+            if window_start - 1e-6 <= value <= window_end + 1e-6
+        }
+    )
+    if not beat_grid or beat_grid[0] > window_start + 1e-6:
+        beat_grid = [round(window_start, 6), *beat_grid]
+    if beat_grid[-1] < window_end - 1e-6:
+        beat_grid.append(round(window_end, 6))
+
+    candidates = _collect_salient_candidates(
+        window_start=window_start,
+        window_end=window_end,
+        scope_lanes=scope_lanes,
+        absolute_downbeats=abs_downbeats,
+    )
+    boundaries, cuts = _greedy_salient_cuts(
+        window_start=window_start,
+        window_end=window_end,
+        candidates=candidates,
+        beat_grid=beat_grid,
+    )
+    boundaries, cuts = _clamp_boundary_count(
+        boundaries,
+        cuts,
+        lo=lo,
+        hi=hi,
+        window_start=window_start,
+        beat_grid=beat_grid,
+    )
+
+    spans = [
+        boundaries[index + 1] - boundaries[index]
+        for index in range(len(boundaries) - 1)
+    ]
+    if not spans or any(span < _MIN_SLOT_S - 1e-6 for span in spans):
+        fallback_count = max(lo, min(hi, lo))
+        step = duration / fallback_count
+        boundaries = [round(window_start + step * index, 6) for index in range(fallback_count)]
+        boundaries.append(round(window_end, 6))
+        cuts = []
+    elif any(span > _SLOT_HARD_CEIL_S + 1e-3 for span in spans):
+        repaired: list[float] = [round(window_start, 6)]
+        repaired_cuts: list[_SalientCut] = []
+        cursor = window_start
+        while cursor < window_end - _MIN_SLOT_S:
+            remaining = window_end - cursor
+            if remaining <= _SLOT_HARD_CEIL_S + 1e-6:
+                break
+            hard_max = min(cursor + _SLOT_HARD_CEIL_S, window_end - _MIN_SLOT_S)
+            pool = [
+                cut for cut in candidates
+                if cursor + _SLOT_HARD_FLOOR_S - 1e-6 <= cut.time_s <= hard_max + 1e-6
+            ]
+            if pool:
+                pick = max(pool, key=lambda cut: cut.magnitude)
+            else:
+                target = cursor + (INTERRUPT_MIN_GAP_S + INTERRUPT_MAX_GAP_S) / 2.0
+                cut_time = _nearest_time_in_range(
+                    target,
+                    beat_grid,
+                    min_s=cursor + _SLOT_HARD_FLOOR_S,
+                    max_s=hard_max,
+                )
+                rel = cut_time - window_start
+                pick = _SalientCut(
+                    time_s=cut_time,
+                    magnitude=0.0,
+                    reason=f"Cadence fill @ {rel:.2f}s",
+                )
+            if pick.time_s >= window_end - _MIN_SLOT_S:
+                break
+            repaired.append(round(pick.time_s, 6))
+            repaired_cuts.append(pick)
+            cursor = pick.time_s
+        repaired.append(round(window_end, 6))
+        boundaries, cuts = _clamp_boundary_count(
+            repaired,
+            repaired_cuts,
+            lo=lo,
+            hi=hi,
+            window_start=window_start,
+            beat_grid=beat_grid,
+        )
+
+    reasons = _slot_reasons_from_cuts(boundaries, cuts, window_start=window_start)
+    return _BoundaryPlan(boundaries=boundaries, slot_reasons=reasons)
+
+
 def _compute_boundaries(
     window_start: float,
     window_end: float,
@@ -220,16 +564,31 @@ def _compute_boundaries(
     *,
     scope_lanes: dict[str, np.ndarray] | None = None,
     absolute_downbeats: list[float] | None = None,
-) -> list[float]:
-    """Pick downbeat-aligned boundaries near energy peaks for ``target_slot_count`` slots."""
+) -> _BoundaryPlan:
+    """Pick boundaries from salient audio events or fall back to even/downbeat splits."""
     duration = max(window_end - window_start, _MIN_SLOT_S)
     if target_slot_count <= 0:
-        return [window_start, window_end]
+        return _BoundaryPlan(
+            boundaries=[window_start, window_end],
+            slot_reasons=["Hook slot"],
+        )
 
     slot_count = min(target_slot_count, max(1, int(duration / _MIN_SLOT_S)))
     abs_downbeats = absolute_downbeats if absolute_downbeats is not None else [
         window_start + t for t in downbeats
     ]
+
+    if scope_lanes is not None:
+        soft_range = _soft_count_range(duration, slot_count)
+        return _salient_boundaries(
+            window_start,
+            window_end,
+            downbeats=downbeats,
+            scope_lanes=scope_lanes,
+            absolute_downbeats=abs_downbeats,
+            soft_count_range=soft_range,
+        )
+
     energy_peaks = find_energy_peaks(
         scope_lanes,
         abs_downbeats,
@@ -238,11 +597,12 @@ def _compute_boundaries(
     )
     peak_times = [peak.time_s for peak in energy_peaks]
 
-    def _even_split(count: int) -> list[float]:
+    def _even_split(count: int) -> _BoundaryPlan:
         step = duration / count
         bounds = [round(window_start + step * index, 6) for index in range(count)]
         bounds.append(round(window_end, 6))
-        return bounds
+        reasons = _slot_reasons_from_cuts(bounds, [], window_start=window_start)
+        return _BoundaryPlan(boundaries=bounds, slot_reasons=reasons)
 
     local_downbeats = [
         t for t in downbeats if window_start - 1e-6 <= t < window_end - 1e-6
@@ -278,7 +638,9 @@ def _compute_boundaries(
         for index in range(slot_count)
     ):
         return _even_split(slot_count)
-    return boundaries[: slot_count + 1]
+    trimmed = boundaries[: slot_count + 1]
+    reasons = _slot_reasons_from_cuts(trimmed, [], window_start=window_start)
+    return _BoundaryPlan(boundaries=trimmed, slot_reasons=reasons)
 
 
 def _relative_downbeats(
@@ -475,7 +837,7 @@ def relayout_beat_aligned_timeline(
                 build_start,
                 downbeats,
                 len(middle),
-            )
+            ).boundaries
             bounds[0] = payoff_end
             bounds[-1] = build_start
             if any(bounds[i + 1] - bounds[i] < _MIN_SLOT_S - 1e-6 for i in range(len(middle))):
@@ -503,7 +865,7 @@ def relayout_beat_aligned_timeline(
 
     if hook is not None:
         slot_count = 1 + len(middle)
-        bounds = _compute_boundaries(0.0, total_duration_s, downbeats, slot_count)
+        bounds = _compute_boundaries(0.0, total_duration_s, downbeats, slot_count).boundaries
         relaid = [
             _slot_from_boundary(hook, start_s=bounds[0], end_s=bounds[1]),
         ]
