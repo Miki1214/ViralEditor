@@ -32,7 +32,7 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { blockPlayheadToCompositeVideoTime } from "./utils/compositePlayhead";
 import { CaptionPanel } from "./components/CaptionPanel";
 import type { FormState } from "./components/JobForm";
-import type { CaptionPatchInput, CaptionPayload } from "./types";
+import type { CaptionPatchInput, CaptionPayload, TranscribeOptions, TranscribeSource } from "./types";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { DebugConsolePanel } from "./components/DebugConsolePanel";
@@ -434,12 +434,18 @@ export default function App() {
     }
   };
 
-  const handleTranscribe = async () => {
+  const handleTranscribe = async (
+    source: TranscribeSource,
+    options: TranscribeOptions,
+    file?: File,
+  ) => {
     if (!activeJobId) return;
     setTranscribing(true);
     try {
-      const result = await transcribeCaption(activeJobId);
-      await handlePatchCaption({ script_text: result.script_text });
+      await transcribeCaption(activeJobId, source, options, file);
+      const updated = await fetchCaption(activeJobId);
+      setCaptionData(updated);
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transcription failed");
     } finally {

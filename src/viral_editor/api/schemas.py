@@ -16,6 +16,8 @@ JobStatus = Literal["queued", "running", "draft", "completed", "failed"]
 class HealthResponse(BaseModel):
     status: str = "ok"
     ffmpeg_available: bool
+    whisper_available: bool = False
+    whisper_runtime: str | None = None
 
 
 class JobSummary(BaseModel):
@@ -347,9 +349,18 @@ class CaptionPatchRequest(BaseModel):
     caption_style: CaptionStylePatch | None = None
     slot_overrides: dict[str, str] | None = None
     karaoke_enabled: bool | None = None
+    auto_allocate: bool = False
 
 
 class TranscribeCaptionResponse(BaseModel):
     script_text: str
     words: list[CaptionWordResponse]
+    slot_overrides: dict[str, str] = Field(default_factory=dict)
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] = Field(
+        default_factory=dict
+    )
+    source: str = "audio_track"
+    language: str | None = None
+    translate: bool = False
+    skipped_clip_ids: list[str] = Field(default_factory=list)
     transcribe_available: bool = True

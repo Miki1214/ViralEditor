@@ -108,7 +108,16 @@ from viral_editor.audio.storyboard import (
     storyboard_to_segments,
 )
 from viral_editor.pipeline import PIPELINE_STAGES
-from viral_editor.audio.transcribe import transcribe_audio, transcribe_available
+from viral_editor.audio.transcribe import (
+    TranscribeOptions,
+    normalize_transcribe_language,
+    transcribe_available,
+)
+from viral_editor.audio.transcribe_sources import (
+    transcribe_from_audio_track,
+    transcribe_from_clips,
+    transcribe_from_custom_upload,
+)
 from viral_editor.video.proxy_render import render_composite, render_speed_proxy
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -1250,11 +1259,34 @@ def patch_caption(
     hook_style = config.hook_style
 
     if payload.script_text is not None:
-        caption = caption.model_copy(update={"script_text": payload.script_text})
+        script_text = payload.script_text
+        if payload.auto_allocate:
+            from viral_editor.audio.captions import cleanup_script_text
+
+            script_text = cleanup_script_text(script_text)
+        caption = caption.model_copy(update={"script_text": script_text})
     if payload.words_per_second is not None:
         caption = caption.model_copy(update={"words_per_second": payload.words_per_second})
-    if payload.slot_overrides is not None:
+    if payload.slot_overrides:
         caption = caption.model_copy(update={"slot_overrides": payload.slot_overrides})
+    elif payload.script_text is not None and payload.auto_allocate:
+        # Splitting the script across slots is an explicit action (triggered by the
+        # "Clean up & auto-allocate" button), not an implicit side effect of every
+        # script_text patch (e.g. blur), so partial edits mid-typing don't reshuffle
+        # per-slot overrides out from under the user.
+        from viral_editor.audio.captions import distribute_script_to_slot_overrides
+
+        storyboard = load_storyboard(job.workspace / "temp")
+        if storyboard and storyboard.slots:
+            caption = caption.model_copy(
+                update={
+                    "slot_overrides": distribute_script_to_slot_overrides(
+                        caption.script_text,
+                        storyboard.slots,
+                        words_per_second=caption.words_per_second,
+                    )
+                }
+            )
     if payload.caption_style is not None:
         caption = caption.model_copy(
             update={"style": apply_caption_style_patch(caption.style, payload.caption_style)}
@@ -1284,8 +1316,16 @@ def patch_caption(
 
 
 @router.post("/{job_id}/caption/transcribe", response_model=TranscribeCaptionResponse)
-def transcribe_caption(job_id: str, request: Request) -> TranscribeCaptionResponse:
-    job = _store(request).get(job_id)
+async def transcribe_caption(
+    job_id: str,
+    request: Request,
+    source: str = Form("audio_track"),
+    language: str = Form("auto"),
+    translate: bool = Form(False),
+    media: UploadFile | None = File(default=None),
+) -> TranscribeCaptionResponse:
+    store = _store(request)
+    job = store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     if not transcribe_available():
@@ -1293,18 +1333,79 @@ def transcribe_caption(job_id: str, request: Request) -> TranscribeCaptionRespon
             status_code=503,
             detail="Auto-transcribe requires faster-whisper. Install with: pip install faster-whisper",
         )
-    if not job.config.audio_path.is_file():
-        raise HTTPException(status_code=400, detail="Job audio file not found")
+
+    normalized_source = source.strip().lower()
+    if normalized_source not in {"audio_track", "clips", "custom"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported transcribe source: {source}")
 
     try:
-        script_text, words = transcribe_audio(job.config.audio_path)
+        transcribe_options = TranscribeOptions(
+            language=normalize_transcribe_language(language),
+            translate=translate,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    storyboard = load_storyboard(job.workspace / "temp")
+
+    try:
+        if normalized_source == "audio_track":
+            if not job.config.audio_path.is_file():
+                raise HTTPException(status_code=400, detail="Job audio file not found")
+            result = transcribe_from_audio_track(
+                job.config,
+                storyboard,
+                options=transcribe_options,
+            )
+        elif normalized_source == "clips":
+            if storyboard is None or not storyboard.slots:
+                raise HTTPException(status_code=400, detail="Storyboard with assigned clips required")
+            clip_media = clip_media_for_storyboard(job.config, storyboard)
+            result = transcribe_from_clips(
+                job.config,
+                storyboard,
+                clip_media,
+                workspace=job.workspace,
+                options=transcribe_options,
+            )
+        else:
+            if media is None:
+                raise HTTPException(status_code=400, detail="Custom transcribe requires a media upload")
+            media_bytes = await media.read()
+            if not media_bytes:
+                raise HTTPException(status_code=400, detail="Uploaded media file is empty")
+            scratch = job.workspace / "temp" / "transcribe_scratch"
+            scratch.mkdir(parents=True, exist_ok=True)
+            media_name = Path(media.filename or "custom_media").name
+            media_path = save_upload(media_bytes, scratch / media_name)
+            result = transcribe_from_custom_upload(
+                job.config,
+                storyboard,
+                media_path,
+                workspace=job.workspace,
+                options=transcribe_options,
+            )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     from viral_editor.api.schemas import CaptionWordResponse
 
+    caption = job.config.caption.model_copy(
+        update={
+            "script_text": result.script_text,
+            "slot_overrides": result.slot_overrides,
+            "word_timing_overrides": result.word_timing_overrides,
+        }
+    )
+    updated_config = job.config.model_copy(update={"caption": caption})
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    _invalidate_composite_previews(job.workspace / "temp")
+
     return TranscribeCaptionResponse(
-        script_text=script_text,
+        script_text=result.script_text,
         words=[
             CaptionWordResponse(
                 text=word.text,
@@ -1312,8 +1413,14 @@ def transcribe_caption(job_id: str, request: Request) -> TranscribeCaptionRespon
                 end_s=word.end_s,
                 emphasis=word.emphasis,
             )
-            for word in words
+            for word in result.words
         ],
+        slot_overrides=result.slot_overrides,
+        word_timing_overrides=result.word_timing_overrides,
+        source=normalized_source,
+        language=transcribe_options.language,
+        translate=transcribe_options.translate,
+        skipped_clip_ids=result.skipped_clip_ids,
         transcribe_available=True,
     )
 

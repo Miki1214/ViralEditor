@@ -1,7 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { CAPTION_STYLE_PRESETS } from "../constants/captionPresets";
 import { HOOK_FONT_OPTIONS } from "../constants/fonts";
-import type { CaptionPayload, CaptionPatchInput } from "../types";
+import { WHISPER_LANGUAGE_OPTIONS } from "../constants/whisperLanguages";
+import type {
+  CaptionPayload,
+  CaptionPatchInput,
+  TranscribeOptions,
+  TranscribeSource,
+} from "../types";
 import type { FormState } from "./JobForm";
 import { CaptionWordTimeline } from "./CaptionWordTimeline";
 
@@ -13,7 +19,7 @@ interface CaptionPanelProps {
   transcribing?: boolean;
   onPatchForm: (partial: Partial<FormState>) => void;
   onPatchCaption: (payload: CaptionPatchInput) => Promise<void>;
-  onTranscribe: () => Promise<void>;
+  onTranscribe: (source: TranscribeSource, options: TranscribeOptions, file?: File) => Promise<void>;
 }
 
 function StyleFields({
@@ -128,6 +134,27 @@ export function CaptionPanel({
   onTranscribe,
 }: CaptionPanelProps) {
   const [timingSlotId, setTimingSlotId] = useState<string | null>(null);
+  const [transcribeSource, setTranscribeSource] = useState<TranscribeSource>("audio_track");
+  const [customMediaFile, setCustomMediaFile] = useState<File | null>(null);
+  const [transcribeLanguage, setTranscribeLanguage] = useState("auto");
+  const [transcribeTranslate, setTranscribeTranslate] = useState(false);
+  const [scriptDraft, setScriptDraft] = useState(caption?.script_text ?? "");
+  const [lastSyncedScript, setLastSyncedScript] = useState(caption?.script_text ?? "");
+  const [allocating, setAllocating] = useState(false);
+
+  if (caption && caption.script_text !== lastSyncedScript) {
+    setScriptDraft(caption.script_text);
+    setLastSyncedScript(caption.script_text);
+  }
+
+  const handleAutoAllocate = useCallback(async () => {
+    setAllocating(true);
+    try {
+      await onPatchCaption({ script_text: scriptDraft, auto_allocate: true });
+    } finally {
+      setAllocating(false);
+    }
+  }, [onPatchCaption, scriptDraft]);
 
   const wpsOptions = useMemo(
     () => caption?.wps_presets ?? [{ words_per_second: 5, label: "Recommended" }],
@@ -211,30 +238,121 @@ export function CaptionPanel({
           <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-scope-trace">
             Body captions
           </h3>
-          <button
-            type="button"
-            className="btn-ghost font-mono text-[10px]"
-            disabled={transcribing || saving || !caption?.transcribe_available}
-            title={
-              caption?.transcribe_available
-                ? "Transcribe audio into caption script"
-                : "Install faster-whisper on the server to enable"
-            }
-            onClick={() => void onTranscribe()}
-          >
-            {transcribing ? "Transcribing…" : "Auto-transcribe"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="field-select font-mono text-[10px]"
+              value={transcribeSource}
+              disabled={transcribing || saving}
+              onChange={(e) => {
+                const next = e.target.value as TranscribeSource;
+                setTranscribeSource(next);
+                if (next !== "custom") {
+                  setCustomMediaFile(null);
+                }
+              }}
+            >
+              <option value="audio_track">Transcribe from Audio Track</option>
+              <option value="clips">Transcribe from Clips</option>
+              <option value="custom">Transcribe from Custom Upload</option>
+            </select>
+            <button
+              type="button"
+              className="btn-ghost font-mono text-[10px]"
+              disabled={
+                transcribing ||
+                saving ||
+                !caption?.transcribe_available ||
+                (transcribeSource === "custom" && !customMediaFile)
+              }
+              title={
+                caption?.transcribe_available
+                  ? "Transcribe audio into caption script"
+                  : "Install faster-whisper on the server to enable"
+              }
+              onClick={() =>
+                void onTranscribe(
+                  transcribeSource,
+                  {
+                    language: transcribeLanguage,
+                    translate: transcribeTranslate,
+                  },
+                  transcribeSource === "custom" ? customMediaFile ?? undefined : undefined,
+                )
+              }
+            >
+              {transcribing ? "Transcribing…" : "Auto-transcribe"}
+            </button>
+          </div>
+        </div>
+
+        {transcribeSource === "custom" && (
+          <label className="block">
+            <span className="field-label">Custom audio or video</span>
+            <input
+              type="file"
+              accept="audio/*,video/*"
+              className="field-input mt-1 w-full text-xs"
+              disabled={transcribing || saving}
+              onChange={(e) => setCustomMediaFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        )}
+
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block min-w-[10rem] flex-1">
+            <span className="field-label">Transcribe language</span>
+            <select
+              className="field-select mt-1 w-full font-mono text-[10px]"
+              value={transcribeLanguage}
+              disabled={transcribing || saving}
+              onChange={(e) => setTranscribeLanguage(e.target.value)}
+            >
+              {WHISPER_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.code} value={option.code}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 pb-1">
+            <input
+              type="checkbox"
+              checked={transcribeTranslate}
+              disabled={transcribing || saving}
+              onChange={(e) => setTranscribeTranslate(e.target.checked)}
+            />
+            <span className="text-xs text-monitor-muted">Translate to English</span>
+          </label>
         </div>
 
         <label className="block">
-          <span className="field-label">Script</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="field-label">Script</span>
+            <button
+              type="button"
+              className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase text-scope-trace"
+              disabled={allocating || saving || !scriptDraft.trim()}
+              title="Normalize the script text (quotes, whitespace, spacing) and re-split it across clip slots by reading speed"
+              onClick={() => void handleAutoAllocate()}
+            >
+              {allocating ? "Allocating…" : "Clean up & auto-allocate"}
+            </button>
+          </div>
           <textarea
             className="field-input mt-1 min-h-[96px] w-full resize-y"
-            defaultValue={caption?.script_text ?? ""}
-            key={caption?.script_text ?? "empty"}
+            value={scriptDraft}
             placeholder="Write your full caption script here…"
-            onBlur={(e) => void onPatchCaption({ script_text: e.target.value })}
+            onChange={(e) => setScriptDraft(e.target.value)}
+            onBlur={(e) => {
+              if (e.target.value === lastSyncedScript) return;
+              setLastSyncedScript(e.target.value);
+              void onPatchCaption({ script_text: e.target.value });
+            }}
           />
+          <p className="mt-1 text-[10px] text-monitor-muted">
+            Editing saves the raw text only. Use “Clean up &amp; auto-allocate” to split it across
+            clips.
+          </p>
         </label>
 
         <label className="block">

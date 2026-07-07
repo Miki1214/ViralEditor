@@ -12,6 +12,8 @@ import type {
   StoryboardPayload,
   StoryboardSegmentsDebugPayload,
   TeaserSettings,
+  TranscribeOptions,
+  TranscribeSource,
   WaveformPayload,
 } from "../types";
 import { DEFAULT_TARGET_DURATION_S } from "../constants/durations";
@@ -342,12 +344,30 @@ export async function patchCaption(
   return res.json();
 }
 
-export async function transcribeCaption(jobId: string): Promise<{
+export async function transcribeCaption(
+  jobId: string,
+  source: TranscribeSource,
+  options: TranscribeOptions,
+  mediaFile?: File,
+): Promise<{
   script_text: string;
   words: CaptionPayload["slot_budgets"][0]["chunks"][0]["words"];
+  slot_overrides: Record<string, string>;
+  word_timing_overrides: Record<string, Array<{ text: string; start_s: number; end_s: number }>>;
+  source: TranscribeSource;
+  language: string | null;
+  translate: boolean;
+  skipped_clip_ids: string[];
   transcribe_available: boolean;
 }> {
-  const res = await fetch(`/api/jobs/${jobId}/caption/transcribe`, { method: "POST" });
+  const form = new FormData();
+  form.append("source", source);
+  form.append("language", options.language);
+  form.append("translate", options.translate ? "true" : "false");
+  if (mediaFile) {
+    form.append("media", mediaFile);
+  }
+  const res = await fetch(`/api/jobs/${jobId}/caption/transcribe`, { method: "POST", body: form });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

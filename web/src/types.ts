@@ -387,4 +387,12 @@ export interface CaptionPatchInput {
   caption_style?: Partial<CaptionStylePayload>;
   slot_overrides?: Record<string, string>;
   karaoke_enabled?: boolean;
+  auto_allocate?: boolean;
+}
+
+export type TranscribeSource = "audio_track" | "clips" | "custom";
+
+export interface TranscribeOptions {
+  language: string;
+  translate: boolean;
 }

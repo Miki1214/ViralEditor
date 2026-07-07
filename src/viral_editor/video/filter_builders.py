@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from viral_editor.models import CaptionChunk, CaptionStyle, FxEvent, SpeedRampPlan, SpeedSegment, TeaserSpec
-from viral_editor.utils.ffmpeg import resolve_drawtext_fontfile
+from viral_editor.utils.ffmpeg import escape_drawtext_text, resolve_drawtext_fontfile
 from viral_editor.utils.fonts import resolve_font_for_ffmpeg
 from viral_editor.video.spatial_fx import rotate_direction
 
 DEFAULT_COMPOSITE_FPS = 30
+CAPTION_MAX_LINES = 2
 MIN_ROTATE_DECAY_S = 0.15
 MIN_PAN_DECAY_S = 0.15
 PAN_HEADROOM = 0.15
@@ -253,15 +254,6 @@ def segment_filter_chains(
     return parts, f"[{label_prefix}]"
 
 
-def _escape_drawtext(text: str) -> str:
-    text = text.replace("\\", "\\\\")
-    text = text.replace("%", "%%")
-    text = text.replace(":", "\\:")
-    # Inside drawtext's single-quoted text= value, double the apostrophe.
-    text = text.replace("'", "''")
-    return text
-
-
 def _enable_between_expr(start_s: float, end_s: float) -> str:
     """Return an enable= expression with commas escaped for filter_complex."""
     return f"between(t\\,{start_s:.6f}\\,{end_s:.6f})"
@@ -331,6 +323,7 @@ def _caption_block_y_base_px(
     num_lines: int,
     line_spacing: int,
 ) -> float:
+    """Return y for the first line in a fixed-height caption block."""
     block_h = fontsize + max(0, num_lines - 1) * line_spacing
     padding = style.safe_padding_pct / 100.0
     if style.position == "top":
@@ -366,7 +359,7 @@ def styled_drawtext(
     if not resolved_font or not text.strip():
         return input_ref
 
-    escaped = _escape_drawtext(text)
+    escaped = escape_drawtext_text(text)
     fontsize = fontsize_override or _base_font_size(style, height)
     fontcolor = _ffmpeg_fontcolor(fontcolor_override or style.fill_color)
     y = y_expr or _caption_y_expression(style)
@@ -390,7 +383,8 @@ def styled_drawtext(
 
     parts.append(
         f"{input_ref}drawtext=text='{escaped}':fontfile='{resolved_font}'"
-        f":fontsize={fontsize}:fontcolor={fontcolor}:x={x}:y={y}{border}{box}{bounds}{enable}[{label}]"
+        f":fontsize={fontsize}:fontcolor={fontcolor}:x={x}:y={y}{border}{box}{bounds}"
+        f":expansion=none{enable}[{label}]"
     )
     return f"[{label}]"
 
@@ -486,7 +480,7 @@ def build_caption_filter_chain(
                     font_path=font_path,
                     base_font_size=fontsize,
                     max_width_px=max_width_px,
-                    max_lines=2,
+                    max_lines=CAPTION_MAX_LINES,
                 )
 
             line_spacing = _caption_line_spacing_px(fontsize)
@@ -494,7 +488,7 @@ def build_caption_filter_chain(
                 style,
                 height=height,
                 fontsize=fontsize,
-                num_lines=max(1, len(layouts)),
+                num_lines=CAPTION_MAX_LINES,
                 line_spacing=line_spacing,
             )
 

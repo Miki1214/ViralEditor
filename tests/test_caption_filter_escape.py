@@ -6,23 +6,41 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from viral_editor.models import CaptionChunk, CaptionStyle, CaptionWord, SpeedSegment
-from viral_editor.utils.ffmpeg import ffmpeg_available, resolve_ffmpeg_binary, run_ffmpeg
+from viral_editor.utils.ffmpeg import escape_drawtext_text, ffmpeg_available, resolve_ffmpeg_binary, run_ffmpeg
 from viral_editor.video.filter_builders import build_composite_filtergraph
 
 
-def test_caption_filtergraph_survives_apostrophe_in_phrase(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "viral_editor.video.filter_builders.resolve_font_for_ffmpeg",
-        lambda family: "C\\:/Windows/Fonts/arial.ttf",
-    )
-    style = CaptionStyle(karaoke_enabled=False)
+@pytest.mark.parametrize(
+    ("text", "escaped"),
+    [
+        ("don't", "don''t"),
+        ("50% off", "50% off"),
+        ("100%", "100%"),
+        ("a:b", "a\\:b"),
+        ("one, two; [ok]", "one, two; [ok]"),
+        ("back\\slash", "back\\\\slash"),
+        ("#hash @user $100", "#hash @user $100"),
+        ("%{pts}", "%{pts}"),
+    ],
+)
+def test_escape_drawtext_text_handles_special_characters(text: str, escaped: str) -> None:
+    assert escape_drawtext_text(text) == escaped
+
+
+def _composite_graph_for_phrase(phrase: str, *, karaoke: bool = False) -> str:
+    style = CaptionStyle(karaoke_enabled=karaoke)
     chunks = {
         "slot0": [
             CaptionChunk(
-                words=[CaptionWord(text="don't", start_s=0.0, end_s=0.5)],
+                words=[
+                    CaptionWord(text=word, start_s=index * 0.25, end_s=(index + 1) * 0.25)
+                    for index, word in enumerate(phrase.split())
+                ],
                 start_s=0.0,
-                end_s=0.5,
+                end_s=max(0.5, 0.25 * len(phrase.split())),
             )
         ]
     }
@@ -36,7 +54,7 @@ def test_caption_filtergraph_survives_apostrophe_in_phrase(monkeypatch) -> None:
             source_id="clip_a",
         )
     ]
-    graph = build_composite_filtergraph(
+    return build_composite_filtergraph(
         segments,
         ["cut"],
         clip_input_index={"clip_a": 0},
@@ -45,13 +63,37 @@ def test_caption_filtergraph_survives_apostrophe_in_phrase(monkeypatch) -> None:
         caption_style=style,
         slot_ids=["slot0"],
     )
+
+
+def test_caption_filtergraph_survives_apostrophe_in_phrase(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "viral_editor.video.filter_builders.resolve_font_for_ffmpeg",
+        lambda family: "C\\:/Windows/Fonts/arial.ttf",
+    )
+    graph = _composite_graph_for_phrase("don't")
     assert "don''t" in graph
+    assert "expansion=none" in graph
     assert "enable='between(t\\," in graph
 
 
-def test_caption_filtergraph_renders_with_apostrophe() -> None:
+def test_caption_filtergraph_survives_percent_and_colon(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "viral_editor.video.filter_builders.resolve_font_for_ffmpeg",
+        lambda family: "C\\:/Windows/Fonts/arial.ttf",
+    )
+    graph = _composite_graph_for_phrase("don't: 50% off")
+    assert "don''t\\: 50% off" in graph
+    assert "expansion=none" in graph
+
+
+def test_caption_filtergraph_renders_special_characters(monkeypatch) -> None:
     if not ffmpeg_available():
-        return
+        pytest.skip("ffmpeg not available")
+
+    monkeypatch.setattr(
+        "viral_editor.video.filter_builders.resolve_font_for_ffmpeg",
+        lambda family: "C\\:/Windows/Fonts/arial.ttf",
+    )
 
     tmpdir = Path(tempfile.mkdtemp())
     clip = tmpdir / "clip.mp4"
@@ -72,35 +114,7 @@ def test_caption_filtergraph_renders_with_apostrophe() -> None:
         ]
     )
 
-    style = CaptionStyle(karaoke_enabled=False)
-    chunks = {
-        "slot0": [
-            CaptionChunk(
-                words=[CaptionWord(text="don't", start_s=0.0, end_s=1.0)],
-                start_s=0.0,
-                end_s=1.0,
-            )
-        ]
-    }
-    segments = [
-        SpeedSegment(
-            out_start_s=0.0,
-            out_end_s=2.0,
-            src_start_s=0.0,
-            src_end_s=2.0,
-            speed_factor=1.0,
-            source_id="clip_a",
-        )
-    ]
-    graph = build_composite_filtergraph(
-        segments,
-        ["cut"],
-        clip_input_index={"clip_a": 0},
-        clip_durations={"clip_a": 10.0},
-        caption_chunks_by_slot=chunks,
-        caption_style=style,
-        slot_ids=["slot0"],
-    )
+    graph = _composite_graph_for_phrase("don't: 50% off")
     ffmpeg = resolve_ffmpeg_binary("ffmpeg")
     assert ffmpeg is not None
     result = subprocess.run(

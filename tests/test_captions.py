@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from viral_editor.audio.captions import (
     WPS_PRESETS,
+    assign_transcribed_words_to_slot_overrides,
+    assign_transcribed_words_with_timing_to_slots,
+    distribute_script_to_slot_overrides,
     suggested_word_count,
     split_script_into_chunks,
+    transcribed_script_in_window,
 )
-from viral_editor.models import StorySlot
+from viral_editor.models import CaptionWord, StorySlot
 
 
 def _slot(slot_id: str, order: int, duration: float) -> StorySlot:
@@ -75,6 +79,111 @@ def test_split_script_honors_slot_override_text() -> None:
     words_b = " ".join(w.text for chunk in chunks_by_slot["b"] for w in chunk.words)
     assert "custom" in words_b
     assert "override" in words_b
+
+
+def test_assign_transcribed_words_to_slot_overrides_maps_by_storyboard_time() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    words = [
+        CaptionWord(text="hello", start_s=10.5, end_s=10.8),
+        CaptionWord(text="hook", start_s=11.0, end_s=11.3),
+        CaptionWord(text="middle", start_s=13.2, end_s=13.5),
+        CaptionWord(text="clip", start_s=13.8, end_s=14.1),
+        CaptionWord(text="tail", start_s=14.6, end_s=14.9),
+    ]
+    overrides = assign_transcribed_words_to_slot_overrides(
+        words,
+        slots,
+        music_start_s=10.0,
+        music_end_s=15.0,
+    )
+    assert overrides["a"] == "hello hook"
+    assert overrides["b"] == "middle clip tail"
+
+
+def test_assign_transcribed_words_with_timing_to_slots_rebases_to_slot_local_time() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    words = [
+        CaptionWord(text="hello", start_s=10.5, end_s=10.8),
+        CaptionWord(text="hook", start_s=11.0, end_s=11.3),
+        CaptionWord(text="middle", start_s=13.2, end_s=13.5),
+        CaptionWord(text="clip", start_s=13.8, end_s=14.1),
+        CaptionWord(text="tail", start_s=14.6, end_s=14.9),
+    ]
+    timed = assign_transcribed_words_with_timing_to_slots(
+        words,
+        slots,
+        music_start_s=10.0,
+        music_end_s=15.0,
+    )
+    assert timed["a"][0].start_s >= 0.0
+    assert timed["a"][0].end_s <= 3.0
+    assert timed["b"][0].start_s >= 0.0
+    assert timed["b"][-1].end_s <= 2.0
+
+
+def test_split_script_into_chunks_prefers_valid_word_timing_override() -> None:
+    slots = [_slot("a", 0, 3.0)]
+    timing = [
+        {"text": "one", "start_s": 0.1, "end_s": 0.4},
+        {"text": "two", "start_s": 0.9, "end_s": 1.2},
+        {"text": "three", "start_s": 1.8, "end_s": 2.1},
+    ]
+    chunks_by_slot = split_script_into_chunks(
+        "",
+        slots,
+        slot_overrides={"a": "one two three"},
+        word_timing_overrides={"a": timing},
+    )
+    words = [word for chunk in chunks_by_slot["a"] for word in chunk.words]
+    assert words[0].start_s == 0.1
+    assert words[1].start_s == 0.9
+    assert words[2].start_s == 1.8
+
+
+def test_split_script_into_chunks_falls_back_when_timing_override_is_stale() -> None:
+    slots = [_slot("a", 0, 3.0)]
+    timing = [
+        {"text": "old", "start_s": 0.1, "end_s": 0.4},
+        {"text": "text", "start_s": 0.9, "end_s": 1.2},
+    ]
+    chunks_by_slot = split_script_into_chunks(
+        "",
+        slots,
+        slot_overrides={"a": "new edited text"},
+        word_timing_overrides={"a": timing},
+    )
+    words = [word for chunk in chunks_by_slot["a"] for word in chunk.words]
+    assert words[0].start_s == 0.0
+
+
+def test_transcribed_script_in_window_filters_outside_music_block() -> None:
+    words = [
+        CaptionWord(text="before", start_s=1.0, end_s=1.2),
+        CaptionWord(text="inside", start_s=10.5, end_s=10.8),
+        CaptionWord(text="after", start_s=20.5, end_s=20.8),
+    ]
+    script = transcribed_script_in_window(words, music_start_s=10.0, music_end_s=15.0)
+    assert script == "inside"
+
+
+def test_distribute_script_to_slot_overrides_matches_reading_speed_budgets() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    script = " ".join(f"word{i}" for i in range(25))
+    overrides = distribute_script_to_slot_overrides(script, slots, words_per_second=5.0)
+    assert overrides["a"] == " ".join(f"word{i}" for i in range(15))
+    assert overrides["b"] == " ".join(f"word{i}" for i in range(15, 25))
+
+
+def test_distribute_script_to_slot_overrides_does_not_drop_overflow_words() -> None:
+    # Budgets (a=15, b=10) sum to 25, but the script has 60 words. Every word
+    # must still land somewhere instead of being truncated at the budget sum.
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    script = " ".join(f"word{i}" for i in range(60))
+    overrides = distribute_script_to_slot_overrides(script, slots, words_per_second=5.0)
+    total_words = sum(len(text.split()) for text in overrides.values())
+    assert total_words == 60
+    assert overrides["a"].split()[0] == "word0"
+    assert overrides["b"].split()[-1] == "word59"
 
 
 def test_build_caption_filter_chain_emits_timed_drawtext(monkeypatch) -> None:
@@ -331,3 +440,83 @@ def test_hook_title_overlay_after_spatial_fx_for_steady_text(monkeypatch) -> Non
     assert "slot0titled" not in graph
     assert "enable='between(t\\,0.000000\\,2.500000)'" in graph
     assert hook_idx == -1
+
+
+def test_single_line_caption_uses_top_line_slot_in_two_line_block() -> None:
+    from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, SpeedSegment
+    from viral_editor.utils.fonts import resolve_font_path
+    from viral_editor.video.filter_builders import (
+        CAPTION_MAX_LINES,
+        _caption_block_y_base_px,
+        _caption_line_spacing_px,
+        _base_font_size,
+        build_caption_filter_chain,
+    )
+
+    if resolve_font_path("Montserrat Black") is None:
+        pytest.skip("No font available for layout test")
+
+    style = CaptionStyle(fill_color="#FFFFFF", position="bottom", size_scale=1.2)
+    short_words = [
+        CaptionWord(text="short", start_s=0.0, end_s=0.5),
+        CaptionWord(text="line", start_s=0.5, end_s=1.0),
+    ]
+    long_words = [
+        CaptionWord(text=w, start_s=i * 0.2, end_s=(i + 1) * 0.2)
+        for i, w in enumerate(["this", "is", "a", "much", "longer", "phrase"])
+    ]
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        )
+    ]
+    fontsize = _base_font_size(style, 640)
+    line_spacing = _caption_line_spacing_px(fontsize)
+    expected_top_y = _caption_block_y_base_px(
+        style,
+        height=640,
+        fontsize=fontsize,
+        num_lines=CAPTION_MAX_LINES,
+        line_spacing=line_spacing,
+    )
+
+    parts: list[str] = []
+    build_caption_filter_chain(
+        parts,
+        "[slot0norm]",
+        chunks_by_slot={
+            "slot0": [CaptionChunk(words=short_words, start_s=0.0, end_s=1.0)],
+        },
+        segments=segments,
+        slot_ids=["slot0"],
+        style=style,
+        label_prefix="cap",
+        width=360,
+        height=640,
+    )
+    short_graph = ";".join(parts)
+    assert f":y={expected_top_y:.2f}" in short_graph
+
+    parts = []
+    build_caption_filter_chain(
+        parts,
+        "[slot0norm]",
+        chunks_by_slot={
+            "slot0": [CaptionChunk(words=long_words, start_s=0.0, end_s=1.2)],
+        },
+        segments=segments,
+        slot_ids=["slot0"],
+        style=style,
+        label_prefix="cap",
+        width=360,
+        height=640,
+    )
+    long_graph = ";".join(parts)
+    assert "cap0l0" in long_graph
+    assert "cap0l1" in long_graph
+    assert f"cap0l0" in long_graph and f":y={expected_top_y:.2f}" in long_graph.split("cap0l0", 1)[1]

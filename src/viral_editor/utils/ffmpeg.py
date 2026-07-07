@@ -98,6 +98,18 @@ def escape_filter_path(path: Path) -> str:
     return resolved.replace(":", "\\:")
 
 
+def escape_drawtext_text(text: str) -> str:
+    """Escape caption text for drawtext ``text=`` inside single quotes.
+
+    Pair with ``expansion=none`` on drawtext so ``%``, braces, and ``\\n`` are
+    rendered literally instead of being interpreted as expansion sequences.
+    """
+    text = text.replace("\\", "\\\\")
+    text = text.replace("'", "''")
+    text = text.replace(":", "\\:")
+    return text
+
+
 def resolve_drawtext_fontfile() -> str | None:
     """Return an ffmpeg-safe fontfile= path, or None if no bundled/system font exists."""
     from viral_editor.utils.fonts import DEFAULT_FONT_FAMILY, resolve_font_for_ffmpeg

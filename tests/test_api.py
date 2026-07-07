@@ -616,6 +616,8 @@ def test_get_and_patch_caption(
     assert len(body["wps_presets"]) >= 1
     assert len(body["slot_budgets"]) == len(storyboard.slots)
 
+    # A plain script_text patch (e.g. on textarea blur) saves the raw text but
+    # must NOT split it across slots implicitly.
     patch_response = client.patch(
         f"/api/jobs/{job.id}/caption",
         json={
@@ -626,5 +628,505 @@ def test_get_and_patch_caption(
     assert patch_response.status_code == 200
     patched = patch_response.json()
     assert patched["script_text"].startswith("one two three")
-    assert patched["slot_budgets"][0]["actual_words"] > 0
+    assert patched["slot_overrides"] == {}
+
+    # Explicit auto_allocate (the "Clean up & auto-allocate" button) performs the split.
+    allocate_response = client.patch(
+        f"/api/jobs/{job.id}/caption",
+        json={
+            "script_text": "one two  three four five six seven eight nine ten ",
+            "words_per_second": 5.0,
+            "auto_allocate": True,
+        },
+    )
+    assert allocate_response.status_code == 200
+    allocated = allocate_response.json()
+    assert allocated["script_text"] == "one two three four five six seven eight nine ten"
+    assert allocated["slot_budgets"][0]["actual_words"] > 0
+    assert allocated["slot_overrides"]
+    assert sum(len(text.split()) for text in allocated["slot_overrides"].values()) == 10
+
+
+def test_transcribe_caption_persists_script_and_slot_overrides(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import CaptionWord, MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    audio_path = workspace / "input" / "track.mp3"
+    audio_path.write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="My hook title",
+        emphasis_words=["hook"],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=10.0,
+        end_s=16.0,
+        duration_s=6.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+
+    words = [
+        CaptionWord(text="hello", start_s=10.5, end_s=10.8),
+        CaptionWord(text="world", start_s=11.0, end_s=11.3),
+        CaptionWord(text="again", start_s=13.2, end_s=13.5),
+        CaptionWord(text="now", start_s=13.8, end_s=14.1),
+    ]
+
+    def fake_transcribe_audio(path, *, options=None):
+        assert path == audio_path
+        return "hello world again now", words
+
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.transcribe_audio",
+        fake_transcribe_audio,
+    )
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "audio_track"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["script_text"] == "hello world again now"
+    assert body["source"] == "audio_track"
+    assert body["slot_overrides"]
+    assert sum(len(text.split()) for text in body["slot_overrides"].values()) == 4
+    assert body["word_timing_overrides"]
+
+    get_response = client.get(f"/api/jobs/{job.id}/caption")
+    assert get_response.status_code == 200
+    persisted = get_response.json()
+    assert persisted["script_text"] == "hello world again now"
+    assert persisted["slot_overrides"] == body["slot_overrides"]
+    assert persisted["slot_budgets"][0]["actual_words"] > 0
+    first_slot_words = persisted["slot_budgets"][0]["chunks"][0]["words"]
+    assert first_slot_words[0]["start_s"] < 1.0
+
+
+def test_transcribe_caption_from_clips_builds_per_slot_overrides(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import assign_slot_clip, persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import CaptionWord, MediaInfo, MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe_clips"
+    workspace.mkdir()
+    input_dir = workspace / "input"
+    input_dir.mkdir()
+    audio_path = input_dir / "track.mp3"
+    audio_path.write_bytes(b"fake")
+    clip_a = input_dir / "clip_a.mp4"
+    clip_b = input_dir / "clip_b.mp4"
+    clip_a.write_bytes(b"fake")
+    clip_b.write_bytes(b"fake")
+
+    from viral_editor.models import ClipInput
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[
+            ClipInput(id="clip_a", path=clip_a.resolve(), order=0),
+            ClipInput(id="clip_b", path=clip_b.resolve(), order=1),
+        ],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=10.0,
+        duration_s=10.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    media_a = MediaInfo(path=clip_a, duration_s=5.0, has_video=True, has_audio=True)
+    media_b = MediaInfo(path=clip_b, duration_s=5.0, has_video=True, has_audio=True)
+    storyboard = assign_slot_clip(
+        storyboard,
+        storyboard.slots[0].id,
+        clip_id="clip_a",
+        filename="clip_a.mp4",
+        crop_start_s=0.0,
+        crop_end_s=5.0,
+        media=media_a,
+    )
+    storyboard = assign_slot_clip(
+        storyboard,
+        storyboard.slots[1].id,
+        clip_id="clip_b",
+        filename="clip_b.mp4",
+        crop_start_s=0.0,
+        crop_end_s=5.0,
+        media=media_b,
+    )
+    persist_storyboard(workspace / "temp", storyboard)
+
+    calls: list[Path] = []
+
+    def fake_transcribe_audio(path, *, options=None):
+        calls.append(path)
+        if "clip_a" in path.name or calls.index(path) == 0:
+            return "first clip words", [
+                CaptionWord(text="first", start_s=0.1, end_s=0.4),
+                CaptionWord(text="clip", start_s=0.5, end_s=0.8),
+            ]
+        return "second clip words", [
+            CaptionWord(text="second", start_s=0.2, end_s=0.5),
+            CaptionWord(text="clip", start_s=0.6, end_s=0.9),
+        ]
+
+    def fake_extract_audio_track(source, dest, *, start_s=None, end_s=None):
+        dest.write_bytes(b"wav")
+        return dest
+
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.clip_media_for_storyboard",
+        lambda config, storyboard: {
+            "clip_a": media_a,
+            "clip_b": media_b,
+        },
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.transcribe_audio",
+        fake_transcribe_audio,
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.extract_audio_track",
+        fake_extract_audio_track,
+    )
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "clips"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "clips"
+    assert len(body["slot_overrides"]) >= 2
+    assert body["word_timing_overrides"]
+
+
+def test_transcribe_caption_from_clips_skips_silent_clips(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import assign_slot_clip, persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import CaptionWord, MediaInfo, MusicBlock, ClipInput
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe_silent"
+    workspace.mkdir()
+    input_dir = workspace / "input"
+    input_dir.mkdir()
+    (input_dir / "track.mp3").write_bytes(b"fake")
+    silent_clip = input_dir / "silent.mp4"
+    silent_clip.write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[ClipInput(id="silent", path=silent_clip.resolve(), order=0)],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=6.0,
+        duration_s=6.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    storyboard = assign_slot_clip(
+        storyboard,
+        storyboard.slots[0].id,
+        clip_id="silent",
+        filename="silent.mp4",
+        crop_start_s=0.0,
+        crop_end_s=3.0,
+        media=MediaInfo(path=silent_clip, duration_s=3.0, has_video=True, has_audio=False),
+    )
+    persist_storyboard(workspace / "temp", storyboard)
+
+    silent_media = MediaInfo(path=silent_clip, duration_s=3.0, has_video=True, has_audio=False)
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.clip_media_for_storyboard",
+        lambda config, storyboard: {"silent": silent_media},
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.extract_audio_track",
+        lambda *args, **kwargs: args[1],
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.transcribe_audio",
+        lambda path, *, options=None: ("", []),
+    )
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "clips"},
+    )
+    assert response.status_code == 200
+    assert "silent" in response.json()["skipped_clip_ids"]
+
+
+def test_transcribe_caption_custom_upload_distributes_by_reading_speed(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import CaptionWord, MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe_custom"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    (workspace / "input" / "track.mp3").write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=10.0,
+        duration_s=10.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+
+    words = [CaptionWord(text=f"word{i}", start_s=i * 0.4, end_s=i * 0.4 + 0.3) for i in range(10)]
+
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.probe_media",
+        lambda path: type("M", (), {"has_audio": True})(),
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.extract_audio_track",
+        lambda source, dest, **kwargs: dest,
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.transcribe_audio",
+        lambda path, *, options=None: (" ".join(word.text for word in words), words),
+    )
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "custom"},
+        files={"media": ("voice.wav", b"fake-audio", "audio/wav")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "custom"
+    assert body["slot_overrides"]
+    assert body["word_timing_overrides"]
+    assert sum(len(text.split()) for text in body["slot_overrides"].values()) == 10
+
+
+def test_transcribe_caption_rejects_missing_custom_file(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe_missing"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    (workspace / "input" / "track.mp3").write_bytes(b"fake")
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "custom"},
+    )
+    assert response.status_code == 400
+
+
+def test_transcribe_caption_accepts_language_and_translate(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.audio.transcribe import TranscribeOptions
+    from viral_editor.models import CaptionWord, MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe_lang"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    audio_path = workspace / "input" / "track.mp3"
+    audio_path.write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=10.0,
+        duration_s=10.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    persist_storyboard(workspace / "temp", plan_storyboard(block, features=None, transients=[]))
+
+    captured: dict[str, TranscribeOptions | None] = {}
+
+    def fake_transcribe_from_audio_track(config, storyboard, *, options=None):
+        captured["options"] = options
+        return type(
+            "R",
+            (),
+            {
+                "script_text": "cześć",
+                "slot_overrides": {},
+                "word_timing_overrides": {},
+                "words": [CaptionWord(text="cześć", start_s=0.1, end_s=0.4)],
+                "skipped_clip_ids": [],
+            },
+        )()
+
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.transcribe_from_audio_track",
+        fake_transcribe_from_audio_track,
+    )
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "audio_track", "language": "pl", "translate": "true"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["language"] == "pl"
+    assert body["translate"] is True
+    assert captured["options"] == TranscribeOptions(language="pl", translate=True)
+
+
+def test_transcribe_caption_rejects_unknown_language(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_transcribe_bad_lang"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    (workspace / "input" / "track.mp3").write_bytes(b"fake")
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+
+    response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "audio_track", "language": "xx"},
+    )
+    assert response.status_code == 400
 
