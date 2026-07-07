@@ -197,9 +197,35 @@ def test_split_script_into_chunks_prefers_valid_word_timing_override() -> None:
         word_timing_overrides={"a": timing},
     )
     words = [word for chunk in chunks_by_slot["a"] for word in chunk.words]
+    assert len(chunks_by_slot["a"]) == 1
     assert words[0].start_s == 0.1
     assert words[1].start_s == 0.9
     assert words[2].start_s == 1.8
+
+
+def test_words_to_chunks_split_at_large_timing_gap() -> None:
+    slots = [_slot("a", 0, 10.0)]
+    timing = [
+        {"text": "one", "start_s": 0.0, "end_s": 0.15},
+        {"text": "two", "start_s": 0.15, "end_s": 0.30},
+        {"text": "three", "start_s": 0.30, "end_s": 0.45},
+        {"text": "four", "start_s": 0.45, "end_s": 0.70},
+        {"text": "five", "start_s": 5.70, "end_s": 5.90},
+    ]
+    chunks_by_slot = split_script_into_chunks(
+        "",
+        slots,
+        slot_overrides={"a": "one two three four five"},
+        word_timing_overrides={"a": timing},
+    )
+    chunks = chunks_by_slot["a"]
+    assert len(chunks) == 2
+    assert len(chunks[0].words) == 4
+    assert len(chunks[1].words) == 1
+    assert chunks[0].start_s == 0.0
+    assert chunks[0].end_s == 0.70
+    assert chunks[1].start_s == 5.70
+    assert chunks[1].end_s == 5.90
 
 
 def test_reconcile_word_timing_preserves_timestamps_on_typo() -> None:

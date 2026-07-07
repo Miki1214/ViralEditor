@@ -29,6 +29,7 @@ WPS_PRESETS: tuple[WpsPreset, ...] = (
 DEFAULT_WORDS_PER_SECOND = 5.0
 PHRASE_MIN_WORDS = 2
 PHRASE_MAX_WORDS = 4
+PHRASE_TIMING_GAP_S = 1.0
 
 # Floor on per-chunk on-screen duration. Bounds how many drawtext overlays a
 # single slot can ever produce, independent of how the words got there
@@ -796,26 +797,56 @@ def _words_from_timing_override(
     return words
 
 
+def _split_words_at_timing_gaps(
+    words: list[CaptionWord],
+    *,
+    max_gap_s: float = PHRASE_TIMING_GAP_S,
+) -> list[list[CaptionWord]]:
+    """Split timed words when silence between consecutive words exceeds max_gap_s."""
+    if not words:
+        return []
+
+    segments: list[list[CaptionWord]] = [[words[0]]]
+    for previous, current in zip(words, words[1:]):
+        gap_s = current.start_s - previous.end_s
+        if gap_s > max_gap_s:
+            segments.append([current])
+        else:
+            segments[-1].append(current)
+    return segments
+
+
 def _words_to_chunks_with_timing(words: list[CaptionWord]) -> list[CaptionChunk]:
     if not words:
         return []
 
-    texts = [word.text for word in words]
-    phrase_groups = _group_into_phrases(texts)
     chunks: list[CaptionChunk] = []
-    cursor = 0
-    for group in phrase_groups:
-        group_words = words[cursor : cursor + len(group)]
-        cursor += len(group)
-        if not group_words:
-            continue
-        chunks.append(
-            CaptionChunk(
-                words=group_words,
-                start_s=group_words[0].start_s,
-                end_s=group_words[-1].end_s,
+    for segment in _split_words_at_timing_gaps(words):
+        if len(segment) <= PHRASE_MAX_WORDS:
+            chunks.append(
+                CaptionChunk(
+                    words=segment,
+                    start_s=segment[0].start_s,
+                    end_s=segment[-1].end_s,
+                )
             )
-        )
+            continue
+
+        texts = [word.text for word in segment]
+        phrase_groups = _group_into_phrases(texts)
+        cursor = 0
+        for group in phrase_groups:
+            group_words = segment[cursor : cursor + len(group)]
+            cursor += len(group)
+            if not group_words:
+                continue
+            chunks.append(
+                CaptionChunk(
+                    words=group_words,
+                    start_s=group_words[0].start_s,
+                    end_s=group_words[-1].end_s,
+                )
+            )
     return chunks
 
 
