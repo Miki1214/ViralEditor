@@ -654,6 +654,7 @@ def test_build_caption_filter_chain_karaoke_uses_per_line_offsets() -> None:
     )
     graph = ";".join(parts)
     line0_width = layouts[0].line_width_px
+    assert f":x=(w-{line0_width:.2f})/2:" in graph
     assert f"(w-{line0_width:.2f})/2+" in graph
     assert "fontcolor=0xFFFF00" in graph or "fontcolor=#FFFF00" in graph
 

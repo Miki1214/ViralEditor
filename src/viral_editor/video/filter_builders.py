@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from viral_editor.models import CaptionChunk, CaptionStyle, FxEvent, SpeedRampPlan, SpeedSegment, TeaserSpec
-from viral_editor.utils.ffmpeg import escape_drawtext_text, resolve_drawtext_fontfile
+from viral_editor.utils.ffmpeg import escape_drawtext_text, ffmpeg_available, resolve_drawtext_fontfile, resolve_ffmpeg_binary
 from viral_editor.utils.fonts import resolve_font_for_ffmpeg
 from viral_editor.video.spatial_fx import rotate_direction
 
@@ -441,6 +441,98 @@ def build_hook_title_overlay(
     )
 
 
+def _ink_rgb_from_color(color: str) -> tuple[int, int, int]:
+    if color.startswith("#") and len(color) in (4, 7):
+        body = color[1:]
+        if len(body) == 3:
+            body = "".join(ch * 2 for ch in body)
+        return (int(body[0:2], 16), int(body[2:4], 16), int(body[4:6], 16))
+    if color.startswith("0x") and len(color) in (5, 8):
+        value = int(color[2:], 16)
+        return ((value >> 16) & 255, (value >> 8) & 255, value & 255)
+    return (255, 255, 255)
+
+
+def _pixel_matches_ink(rgb: tuple[int, int, int], ink_rgb: tuple[int, int, int]) -> bool:
+    if sum(rgb) < 120:
+        return False
+    return all(abs(rgb[index] - ink_rgb[index]) <= 90 for index in range(3))
+
+
+def _measure_karaoke_word_y_tops_px(
+    phrase: str,
+    word_offsets: list,
+    *,
+    fontfile: str,
+    fontsize: int,
+    border_px: int,
+    line_y: float,
+    line_width_px: float,
+    frame_width: int,
+    frame_height: int,
+    fill_color: str = "#FFFFFF",
+) -> list[float]:
+    """Return absolute drawtext y per word so karaoke ink matches the phrase line."""
+    if not word_offsets or not ffmpeg_available():
+        return [line_y] * len(word_offsets)
+
+    try:
+        import subprocess
+        import tempfile
+        from pathlib import Path
+
+        from PIL import Image
+
+        escaped = escape_drawtext_text(phrase)
+        x_expr = f"(w-{line_width_px:.2f})/2"
+        border = (
+            f":borderw={border_px}:bordercolor=0x000000"
+            if border_px > 0
+            else ""
+        )
+        fontcolor = _ffmpeg_fontcolor(fill_color)
+        vf = (
+            f"drawtext=text='{escaped}':fontfile='{fontfile}'"
+            f":fontsize={fontsize}:fontcolor={fontcolor}:x={x_expr}:y={line_y:.2f}{border}"
+            f":fix_bounds=1:expansion=none"
+        )
+        ink_rgb = _ink_rgb_from_color(fill_color if fill_color.startswith("#") else fontcolor)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            out_path = tmp.name
+        command = [
+            resolve_ffmpeg_binary("ffmpeg"),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=black:s={frame_width}x{frame_height}",
+            "-vf",
+            vf,
+            "-frames:v",
+            "1",
+            out_path,
+        ]
+        subprocess.run(command, check=True, capture_output=True)
+        image = Image.open(out_path).convert("RGB")
+        pixels = image.load()
+        left_pad = (frame_width - line_width_px) / 2.0
+        tops: list[float] = []
+        for offset in word_offsets:
+            x0 = int(left_pad + offset.x_px)
+            x1 = int(x0 + offset.width_px)
+            ink_ys = [
+                y
+                for y in range(frame_height)
+                for x in range(max(0, x0), min(frame_width, x1))
+                if _pixel_matches_ink(pixels[x, y], ink_rgb)
+            ]
+            tops.append(float(min(ink_ys)) if ink_ys else line_y)
+        Path(out_path).unlink(missing_ok=True)
+        return tops
+    except Exception:
+        return [line_y] * len(word_offsets)
+
+
 def build_caption_filter_chain(
     parts: list[str],
     input_ref: str,
@@ -504,6 +596,7 @@ def build_caption_filter_chain(
                     phrase = " ".join(layout.words)
                     label = f"{label_prefix}{chunk_index}l{line_index}"
                     y_px = block_y + line_index * line_spacing
+                    line_x_expr = f"(w-{layout.line_width_px:.2f})/2"
                     current = styled_drawtext(
                         parts,
                         current,
@@ -514,6 +607,7 @@ def build_caption_filter_chain(
                         height=height,
                         enable_expr=enable_expr,
                         font_path=ffmpeg_font,
+                        x_expr=line_x_expr,
                         y_expr=f"{y_px:.2f}",
                         fontsize_override=fontsize,
                     )
@@ -535,14 +629,29 @@ def build_caption_filter_chain(
 
             if style.karaoke_enabled and layouts:
                 word_cursor = 0
+                border_px = max(2, fontsize // 14) if style.outline_enabled else 0
                 for line_index, layout in enumerate(layouts):
                     y_px = block_y + line_index * line_spacing
-                    for offset in layout.word_offsets:
+                    phrase = " ".join(layout.words)
+                    word_y_tops = _measure_karaoke_word_y_tops_px(
+                        phrase,
+                        layout.word_offsets,
+                        fontfile=ffmpeg_font or "",
+                        fontsize=fontsize,
+                        border_px=border_px,
+                        line_y=y_px,
+                        line_width_px=layout.line_width_px,
+                        frame_width=width,
+                        frame_height=height,
+                        fill_color=style.fill_color,
+                    )
+                    for offset_index, offset in enumerate(layout.word_offsets):
                         if word_cursor >= len(chunk.words):
                             break
                         word = chunk.words[word_cursor]
                         word_cursor += 1
                         x_expr = f"(w-{layout.line_width_px:.2f})/2+{offset.x_px:.2f}"
+                        karaoke_y = word_y_tops[offset_index]
                         word_start = slot_offset + word.start_s
                         word_end = slot_offset + word.end_s
                         karaoke_label = (
@@ -559,7 +668,7 @@ def build_caption_filter_chain(
                             enable_expr=_enable_between_expr(word_start, word_end),
                             font_path=ffmpeg_font,
                             x_expr=x_expr,
-                            y_expr=f"{y_px:.2f}",
+                            y_expr=f"{karaoke_y:.2f}",
                             fontcolor_override=style.emphasis_color,
                             fontsize_override=fontsize,
                         )

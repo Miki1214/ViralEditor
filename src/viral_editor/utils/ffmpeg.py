@@ -366,44 +366,6 @@ def run_ffmpeg(
         command = [ffmpeg, *args]
         logger.debug("Running: %s", " ".join(command))
 
-        # #region agent log
-        try:
-            _cmd_chars = sum(len(str(a)) + 1 for a in command)
-            _fc_idx = next(
-                (i for i, a in enumerate(args) if a in ("-filter_complex", "-filter_complex_script")),
-                None,
-            )
-            _fc_mode = args[_fc_idx] if _fc_idx is not None else None
-            _fc_chars = (
-                len(str(args[_fc_idx + 1]))
-                if _fc_idx is not None and _fc_mode == "-filter_complex_script"
-                else (len(str(args[_fc_idx + 1])) if _fc_idx is not None else 0)
-            )
-            _payload = {
-                "sessionId": "471a04",
-                "runId": "post-fix",
-                "hypothesisId": "H1",
-                "location": "ffmpeg.py:run_ffmpeg",
-                "message": "run_ffmpeg command length before subprocess",
-                "data": {
-                    "command_chars": _cmd_chars,
-                    "filter_complex_chars": _fc_chars,
-                    "filter_complex_mode": _fc_mode,
-                    "spilled_to_script": bool(spill_paths),
-                    "arg_count": len(command),
-                    "win_cmd_limit": 32767,
-                    "exceeds_win_limit": _cmd_chars > 32767,
-                },
-                "timestamp": int(time.time() * 1000),
-            }
-            with open(
-                r"c:\Sources\ViralAutomation\debug-471a04.log", "a", encoding="utf-8"
-            ) as _dbg:
-                _dbg.write(json.dumps(_payload) + "\n")
-        except Exception:
-            pass
-        # #endregion
-
         result = subprocess.run(
             command,
             capture_output=True,

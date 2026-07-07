@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783445865.4208276,
-    "ast_hash": "3e3f5300601f88f56a0484b88b55bc3e",
+    "mtime": 1783457695.1958706,
+    "ast_hash": "3747fff452dbcbd08b57dd17e03382dd",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "tests/test_captions.py": {
-    "mtime": 1783455586.852873,
-    "ast_hash": "9e9f2d77d0d45c8043e8194dc155e0d2",
+    "mtime": 1783456557.5776157,
+    "ast_hash": "75d41e0611622def249f99136a362dc9",
     "semantic_hash": ""
   },
   "tests/test_fonts.py": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783455577.6444929,
-    "ast_hash": "c29f200b32bc168b977cf1dc1c8faa9a",
+    "mtime": 1783455672.5024903,
+    "ast_hash": "923375eabb679230c59a03262e8b30c0",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {
@@ -1142,6 +1142,11 @@
   "web/src/constants/whisperLanguages.ts": {
     "mtime": 1783438733.2682817,
     "ast_hash": "b794faa9e632bd0f13dd509446bbb266",
+    "semantic_hash": ""
+  },
+  "tests/test_karaoke_word_y.py": {
+    "mtime": 1783457641.1075506,
+    "ast_hash": "3c4e414b604c4ad036f504c749a54937",
     "semantic_hash": ""
   }
 }

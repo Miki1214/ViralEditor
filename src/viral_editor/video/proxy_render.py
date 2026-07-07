@@ -146,43 +146,6 @@ def render_composite(
             str(out_path),
         ]
     )
-    # #region agent log
-    try:
-        import json as _json
-        import time as _time
-
-        _cmd_chars = sum(len(str(a)) + 1 for a in command)
-        _path_chars = sum(len(str(p)) for p in video_inputs) + len(str(audio_path))
-        _payload = {
-            "sessionId": "471a04",
-            "runId": "post-fix",
-            "hypothesisId": "H1",
-            "location": "proxy_render.py:render_composite",
-            "message": "composite preview ffmpeg command metrics",
-            "data": {
-                "filtergraph_chars": len(filtergraph),
-                "drawtext_count": filtergraph.count("drawtext="),
-                "filter_parts": filtergraph.count(";") + 1,
-                "command_chars": _cmd_chars,
-                "input_path_chars": _path_chars,
-                "video_input_count": len(video_inputs),
-                "karaoke_enabled": bool(caption_style and caption_style.karaoke_enabled),
-                "caption_slot_count": len(caption_chunks_by_slot or {}),
-                "caption_chunk_count": sum(
-                    len(v) for v in (caption_chunks_by_slot or {}).values()
-                ),
-                "win_cmd_limit": 32767,
-                "exceeds_win_limit": _cmd_chars > 32767,
-            },
-            "timestamp": int(_time.time() * 1000),
-        }
-        with open(
-            r"c:\Sources\ViralAutomation\debug-471a04.log", "a", encoding="utf-8"
-        ) as _dbg:
-            _dbg.write(_json.dumps(_payload) + "\n")
-    except Exception:
-        pass
-    # #endregion
     try:
         run_ffmpeg(command)
     except FFmpegError as exc:
