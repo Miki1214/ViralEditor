@@ -13,6 +13,23 @@ MIN_ROTATE_DECAY_S = 0.15
 MIN_PAN_DECAY_S = 0.15
 PAN_HEADROOM = 0.15
 PAN_MAX_FRACTION = 0.95
+PAN_EXPR_BATCH_SIZE = 90
+
+
+def pan_batch_time_envelope(
+    translate_events: list[FxEvent],
+    *,
+    fps: float,
+) -> tuple[float, float]:
+    """Inclusive active window covering every impulse in a pan batch."""
+    t_start = min(event.timestamp_s for event in translate_events)
+    t_end = max(
+        event.timestamp_s + pan_event_duration(event, fps)
+        for event in translate_events
+    )
+    return t_start, t_end
+
+
 DEFAULT_ROTATE_GAIN = 3.0
 DEFAULT_PAN_GAIN = 1.5
 
@@ -59,6 +76,14 @@ def combined_pan_x_expression(
     if not terms:
         return "(iw-ow)/2"
     return f"(iw-ow)/2+({'+' .join(terms)})"
+
+
+def pan_batch_blend_expression(translate_events: list[FxEvent], *, fps: float) -> str:
+    """Blend panned frames only while the batch envelope is active."""
+    if not translate_events:
+        return "A"
+    t_start, t_end = pan_batch_time_envelope(translate_events, fps=fps)
+    return f"if(between(T,{t_start:.6f},{t_end:.6f}),B,A)"
 
 
 def normalize_segment_timeline(
@@ -743,7 +768,6 @@ def apply_spatial_fx_chain(
     fps: float,
     seed: int,
     intensity: float,
-    max_events: int = 24,
     rotate_gain: float = DEFAULT_ROTATE_GAIN,
     pan_gain: float = DEFAULT_PAN_GAIN,
     output_label: str = "outv",
@@ -757,13 +781,11 @@ def apply_spatial_fx_chain(
     if current.startswith("["):
         current = input_ref.strip("[]")
 
-    capped = fx_events[:max_events]
-    translate_events = [event for event in capped if event.kind == "translate"]
+    motion_events = [event for event in fx_events if event.kind != "translate"]
+    translate_events = [event for event in fx_events if event.kind == "translate"]
     fx_index = 0
 
-    for event in capped:
-        if event.kind == "translate":
-            continue
+    for event in motion_events:
         t0 = event.timestamp_s
         if event.kind == "rotate":
             dur = max(
@@ -802,18 +824,62 @@ def apply_spatial_fx_chain(
 
     if translate_events:
         headroom = 1.0 + PAN_HEADROOM
-        x_expr = combined_pan_x_expression(
-            translate_events,
-            fps=fps,
-            intensity=intensity,
-            pan_gain=pan_gain,
-        )
-        out_label = f"fx{fx_index}"
-        parts.append(
-            f"[{current}]scale=w='trunc(iw*{headroom:.6f})':h='trunc(ih*{headroom:.6f})',"
-            f"crop={width}:{height}:x='{x_expr}':y='(ih-oh)/2'[{out_label}]"
-        )
-        current = out_label
+        batches = [
+            translate_events[index : index + PAN_EXPR_BATCH_SIZE]
+            for index in range(0, len(translate_events), PAN_EXPR_BATCH_SIZE)
+        ]
+        if len(batches) == 1:
+            x_expr = combined_pan_x_expression(
+                batches[0],
+                fps=fps,
+                intensity=intensity,
+                pan_gain=pan_gain,
+            )
+            out_label = f"fx{fx_index}"
+            fx_index += 1
+            parts.append(
+                f"[{current}]scale=w='trunc(iw*{headroom:.6f})':h='trunc(ih*{headroom:.6f})',"
+                f"crop={width}:{height}:x='{x_expr}':y='(ih-oh)/2'[{out_label}]"
+            )
+            current = out_label
+        else:
+            pass_label = f"fxp{fx_index}"
+            hs_in_label = f"fxs{fx_index}"
+            hs_label = f"fxh{fx_index}"
+            fx_index += 1
+            parts.append(f"[{current}]split=2[{pass_label}][{hs_in_label}]")
+            parts.append(
+                f"[{hs_in_label}]scale=w='trunc(iw*{headroom:.6f})':h='trunc(ih*{headroom:.6f})'"
+                f"[{hs_label}]"
+            )
+            hs_taps = "".join(f"[hs{i}]" for i in range(len(batches)))
+            parts.append(f"[{hs_label}]split={len(batches)}{hs_taps}")
+            panned_labels: list[str] = []
+            for batch_index, batch in enumerate(batches):
+                x_expr = combined_pan_x_expression(
+                    batch,
+                    fps=fps,
+                    intensity=intensity,
+                    pan_gain=pan_gain,
+                )
+                panned_label = f"fp{batch_index}"
+                parts.append(
+                    f"[hs{batch_index}]crop={width}:{height}:x='{x_expr}':y='(ih-oh)/2'"
+                    f"[{panned_label}]"
+                )
+                panned_labels.append(panned_label)
+            acc_label = pass_label
+            for batch_index, (batch, panned_label) in enumerate(
+                zip(batches, panned_labels, strict=True),
+            ):
+                out_label = f"fx{fx_index}"
+                fx_index += 1
+                blend_expr = pan_batch_blend_expression(batch, fps=fps)
+                parts.append(
+                    f"[{acc_label}][{panned_label}]blend=all_expr='{blend_expr}'[{out_label}]"
+                )
+                acc_label = out_label
+            current = acc_label
 
     parts.append(f"[{current}]copy[{output_label}]")
     return f"[{output_label}]"

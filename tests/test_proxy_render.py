@@ -195,7 +195,7 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
     assert "drawtext" in graph
     assert "slot0titled" not in graph
     assert "copy[motionv]" in graph
-    assert "scale=w='trunc(iw*(" in graph
+    assert "w='trunc(iw*(" in graph
     assert "rotate=enable='between(t," in graph
     assert "eval=frame" in graph
     assert re.search(r"rotate=[^\]]*eval=frame", graph) is None
@@ -238,6 +238,142 @@ def test_build_composite_filtergraph_translate_pan() -> None:
     assert graph.count("trunc(iw*1.150000)") == 1
     assert "rotate=" not in graph
     assert "[outv]" in graph
+
+
+def test_apply_spatial_fx_chain_applies_all_events() -> None:
+    from viral_editor.models import FxEvent
+    from viral_editor.video.filter_builders import apply_spatial_fx_chain
+
+    fx_events = [
+        FxEvent(timestamp_s=index * 0.5, kind="translate", magnitude=0.9, decay_frames=6, direction=1)
+        for index in range(30)
+    ] + [
+        FxEvent(timestamp_s=20.0, kind="zoom", magnitude=1.07, decay_frames=4),
+    ]
+    parts: list[str] = []
+    apply_spatial_fx_chain(
+        parts,
+        "[bodyv]",
+        fx_events,
+        width=360,
+        height=640,
+        fps=30,
+        seed=7,
+        intensity=1.0,
+    )
+    graph = ";".join(parts)
+    assert graph.count("if(between(t,") >= 30
+    assert "w='trunc(iw*(" in graph
+    assert "blend=" not in graph
+
+
+@pytest.mark.skipif(not ffmpeg_available(), reason="ffmpeg not available")
+def test_apply_spatial_fx_chain_tail_batch_pan_has_headroom() -> None:
+    import tempfile
+    from pathlib import Path
+
+    from viral_editor.models import FxEvent
+    from viral_editor.utils.ffmpeg import run_ffmpeg
+    from viral_editor.video.filter_builders import (
+        PAN_EXPR_BATCH_SIZE,
+        apply_spatial_fx_chain,
+    )
+
+    early = [
+        FxEvent(timestamp_s=1.0 + index * 0.5, kind="translate", magnitude=0.9, decay_frames=6, direction=1)
+        for index in range(PAN_EXPR_BATCH_SIZE)
+    ]
+    tail = [
+        FxEvent(timestamp_s=45.0 + index * 0.5, kind="translate", magnitude=0.9, decay_frames=6, direction=-1)
+        for index in range(4)
+    ]
+    parts = ["nullsrc=s=360x640:d=50,format=yuv420p[bodyv]"]
+    apply_spatial_fx_chain(
+        parts,
+        "[bodyv]",
+        early + tail,
+        width=360,
+        height=640,
+        fps=30,
+        seed=7,
+        intensity=1.0,
+        output_label="outv",
+    )
+    graph = ";".join(parts)
+    assert graph.count("blend=all_expr='if(") >= 1
+    assert graph.count("trunc(iw*1.150000)") == 1
+    out_path = Path(tempfile.gettempdir()) / "spatial_fx_tail_batch_pan.mp4"
+    run_ffmpeg(
+        [
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=50:size=360x640:rate=30",
+            "-filter_complex",
+            graph,
+            "-map",
+            "[outv]",
+            "-t",
+            "50",
+            str(out_path),
+        ]
+    )
+    assert out_path.is_file()
+    assert out_path.stat().st_size > 0
+
+
+@pytest.mark.skipif(not ffmpeg_available(), reason="ffmpeg not available")
+def test_apply_spatial_fx_chain_large_translate_batch_ffmpeg() -> None:
+    import tempfile
+    from pathlib import Path
+
+    from viral_editor.models import FxEvent
+    from viral_editor.utils.ffmpeg import run_ffmpeg
+    from viral_editor.video.filter_builders import apply_spatial_fx_chain
+
+    fx_events = [
+        FxEvent(
+            timestamp_s=index * 0.5 + 1.0,
+            kind="translate",
+            magnitude=0.9,
+            decay_frames=6,
+            direction=1 if index % 2 == 0 else -1,
+        )
+        for index in range(101)
+    ]
+    parts = ["nullsrc=s=360x640:d=20,format=yuv420p[bodyv]"]
+    apply_spatial_fx_chain(
+        parts,
+        "[bodyv]",
+        fx_events,
+        width=360,
+        height=640,
+        fps=30,
+        seed=7,
+        intensity=1.0,
+        output_label="outv",
+    )
+    filtergraph = ";".join(parts)
+    out_path = Path(tempfile.gettempdir()) / "spatial_fx_large_translate.mp4"
+    run_ffmpeg(
+        [
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=360x640:d=20",
+            "-filter_complex",
+            filtergraph,
+            "-map",
+            "[outv]",
+            "-t",
+            "3",
+            str(out_path),
+        ]
+    )
+    assert out_path.is_file()
+    assert out_path.stat().st_size > 0
 
 
 def test_build_composite_filtergraph_translate_pan_many_beats() -> None:

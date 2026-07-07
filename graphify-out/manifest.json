@@ -55,7 +55,7 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/effects.py": {
-    "mtime": 1783349958.7198718,
+    "mtime": 1783460275.928469,
     "ast_hash": "8961282226358aa13169c912825474e1",
     "semantic_hash": ""
   },
@@ -145,7 +145,7 @@
     "semantic_hash": ""
   },
   "src/viral_editor/audio/storyboard.py": {
-    "mtime": 1783366865.1572993,
+    "mtime": 1783460272.2276115,
     "ast_hash": "26c67b05da9424761d5cacabea7155a4",
     "semantic_hash": ""
   },
@@ -225,8 +225,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/utils/ffmpeg.py": {
-    "mtime": 1783448968.4266937,
-    "ast_hash": "bef033699f20b337ee71006e46e32864",
+    "mtime": 1783458533.260633,
+    "ast_hash": "eb42364c3c56544a6d409ce0af1308a1",
     "semantic_hash": ""
   },
   "src/viral_editor/utils/logging.py": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/proxy_render.py": {
-    "mtime": 1783448972.9807746,
-    "ast_hash": "6a081f269c0fe5a73ae1e052cb86bbe2",
+    "mtime": 1783458530.8176768,
+    "ast_hash": "9b9266d5f8540e295b319d402a073855",
     "semantic_hash": ""
   },
   "src/viral_editor/video/spatial_fx.py": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "tests/test_proxy_render.py": {
-    "mtime": 1783445298.4537377,
-    "ast_hash": "a3276d1f6dd32c790eee954229c74516",
+    "mtime": 1783461525.0905595,
+    "ast_hash": "379fcefb781804d3bae0830e9cf08158",
     "semantic_hash": ""
   },
   "tests/test_retention_policy.py": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783457695.1958706,
-    "ast_hash": "3747fff452dbcbd08b57dd17e03382dd",
+    "mtime": 1783461499.4347384,
+    "ast_hash": "baed490c57c5cef6c8e300cc5d1c2d24",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
@@ -1147,6 +1147,11 @@
   "tests/test_karaoke_word_y.py": {
     "mtime": 1783457641.1075506,
     "ast_hash": "3c4e414b604c4ad036f504c749a54937",
+    "semantic_hash": ""
+  },
+  "blendtest.mp4": {
+    "mtime": 1783460819.9234042,
+    "ast_hash": "fc4af1ebc0ec4ab07021e2ef44e58917",
     "semantic_hash": ""
   }
 }
