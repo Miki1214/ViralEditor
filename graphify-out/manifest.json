@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "tests/test_proxy_render.py": {
-    "mtime": 1783373967.3675058,
-    "ast_hash": "47e6e3353e44c32c1ccab7ca609a7ff4",
+    "mtime": 1783435013.79501,
+    "ast_hash": "45fe81069f206d3ce78582f44f372dea",
     "semantic_hash": ""
   },
   "tests/test_retention_policy.py": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783375201.9223533,
-    "ast_hash": "37aa1120c9951f8190d5e80b2615d77e",
+    "mtime": 1783435005.9376748,
+    "ast_hash": "bd176e70a1c5da836e4d56f167075eb9",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
@@ -1075,13 +1075,13 @@
     "semantic_hash": ""
   },
   "src/viral_editor/utils/text_metrics.py": {
-    "mtime": 1783373867.28072,
-    "ast_hash": "dbf11004ab158d0823df2e7e8c7c404f",
+    "mtime": 1783434476.2438202,
+    "ast_hash": "cee929f365faff57bdcccba225c21653",
     "semantic_hash": ""
   },
   "tests/test_captions.py": {
-    "mtime": 1783375201.7728076,
-    "ast_hash": "563bdbaf051a99e258fb3932ebcf490c",
+    "mtime": 1783435018.3571799,
+    "ast_hash": "09a787a6baae23de815607ec69be9df3",
     "semantic_hash": ""
   },
   "tests/test_fonts.py": {
@@ -1117,6 +1117,11 @@
   "tests/test_caption_filter_escape.py": {
     "mtime": 1783375206.9742877,
     "ast_hash": "1024175d93d3816ebc4b64c337942858",
+    "semantic_hash": ""
+  },
+  "tests/test_text_layout.py": {
+    "mtime": 1783434396.876536,
+    "ast_hash": "6080928f0df0d8e2c9e9b4352025511e",
     "semantic_hash": ""
   }
 }

@@ -267,6 +267,25 @@ def _enable_between_expr(start_s: float, end_s: float) -> str:
     return f"between(t\\,{start_s:.6f}\\,{end_s:.6f})"
 
 
+def _enable_union_expr(windows: list[tuple[float, float]]) -> str | None:
+    if not windows:
+        return None
+    parts = [_enable_between_expr(start_s, end_s) for start_s, end_s in windows]
+    return parts[0] if len(parts) == 1 else "+".join(parts)
+
+
+def _hook_title_windows(
+    segments: list[SpeedSegment],
+    segment_roles: list[str] | None,
+) -> list[tuple[float, float]]:
+    windows: list[tuple[float, float]] = []
+    for index, segment in enumerate(segments):
+        role = segment_roles[index] if segment_roles and index < len(segment_roles) else None
+        if role in ("hook", "hook_start") or (role is None and index == 0):
+            windows.append((segment.out_start_s, segment.out_end_s))
+    return windows
+
+
 def _ffmpeg_fontcolor(color: str) -> str:
     if color.startswith("#") and len(color) in (4, 7):
         hex_body = color[1:]
@@ -295,6 +314,32 @@ def _caption_y_expression(style: CaptionStyle) -> str:
     return f"h*(1-{padding:.4f})-text_h"
 
 
+def _max_caption_width_px(width: int, style: CaptionStyle) -> float:
+    padding = style.safe_padding_pct / 100.0
+    return width * max(0.5, 1.0 - (2.0 * padding))
+
+
+def _caption_line_spacing_px(fontsize: int) -> int:
+    return max(fontsize + 4, int(fontsize * 1.25))
+
+
+def _caption_block_y_base_px(
+    style: CaptionStyle,
+    *,
+    height: int,
+    fontsize: int,
+    num_lines: int,
+    line_spacing: int,
+) -> float:
+    block_h = fontsize + max(0, num_lines - 1) * line_spacing
+    padding = style.safe_padding_pct / 100.0
+    if style.position == "top":
+        return height * padding
+    if style.position == "center":
+        return (height - block_h) / 2.0
+    return height * (1.0 - padding) - block_h
+
+
 def _base_font_size(style: CaptionStyle, height: int) -> int:
     return max(12, int(height * 0.045 * style.size_scale))
 
@@ -311,7 +356,10 @@ def styled_drawtext(
     enable_expr: str | None = None,
     font_path: str | None = None,
     x_expr: str | None = None,
+    y_expr: str | None = None,
     fontcolor_override: str | None = None,
+    fontsize_override: int | None = None,
+    fix_bounds: bool = True,
 ) -> str:
     """Append a styled drawtext filter and return the output label ref."""
     resolved_font = font_path or resolve_font_for_ffmpeg(style.font_family)
@@ -319,11 +367,12 @@ def styled_drawtext(
         return input_ref
 
     escaped = _escape_drawtext(text)
-    fontsize = _base_font_size(style, height)
+    fontsize = fontsize_override or _base_font_size(style, height)
     fontcolor = _ffmpeg_fontcolor(fontcolor_override or style.fill_color)
-    y_expr = _caption_y_expression(style)
+    y = y_expr or _caption_y_expression(style)
     x = x_expr or "(w-text_w)/2"
     enable = f":enable='{enable_expr}'" if enable_expr else ""
+    bounds = ":fix_bounds=1" if fix_bounds else ""
 
     border = ""
     if style.outline_enabled:
@@ -341,7 +390,7 @@ def styled_drawtext(
 
     parts.append(
         f"{input_ref}drawtext=text='{escaped}':fontfile='{resolved_font}'"
-        f":fontsize={fontsize}:fontcolor={fontcolor}:x={x}:y={y_expr}{border}{box}{enable}[{label}]"
+        f":fontsize={fontsize}:fontcolor={fontcolor}:x={x}:y={y}{border}{box}{bounds}{enable}[{label}]"
     )
     return f"[{label}]"
 
@@ -355,6 +404,7 @@ def drawtext_hook_overlay(
     style: CaptionStyle | None = None,
     width: int = 360,
     height: int = 640,
+    enable_expr: str | None = None,
 ) -> str:
     caption_style = style or CaptionStyle(position="top")
     return styled_drawtext(
@@ -365,6 +415,35 @@ def drawtext_hook_overlay(
         label,
         width=width,
         height=height,
+        enable_expr=enable_expr,
+    )
+
+
+def build_hook_title_overlay(
+    parts: list[str],
+    input_ref: str,
+    hook_text: str,
+    *,
+    style: CaptionStyle | None = None,
+    segments: list[SpeedSegment],
+    segment_roles: list[str] | None = None,
+    width: int,
+    height: int,
+    label: str = "hooktitle",
+) -> str:
+    """Overlay hook title on a motion-stabilized frame with slot-timed visibility."""
+    windows = _hook_title_windows(segments, segment_roles)
+    if not hook_text or not hook_text.strip() or not windows:
+        return input_ref
+    return drawtext_hook_overlay(
+        parts,
+        input_ref,
+        hook_text,
+        label,
+        style=style,
+        width=width,
+        height=height,
+        enable_expr=_enable_union_expr(windows),
     )
 
 
@@ -381,49 +460,93 @@ def build_caption_filter_chain(
     height: int,
 ) -> str:
     """Overlay timed phrase captions on a composed segment reference."""
+    from viral_editor.utils.fonts import resolve_font_path
+    from viral_editor.utils.text_metrics import layout_caption_chunk
+
     current = input_ref
     chunk_index = 0
+    max_width_px = _max_caption_width_px(width, style)
+    ffmpeg_font = resolve_font_for_ffmpeg(style.font_family)
+    font_path = resolve_font_path(style.font_family)
 
     for segment_index, segment in enumerate(segments):
         slot_id = slot_ids[segment_index] if segment_index < len(slot_ids) else f"slot{segment_index}"
         slot_offset = segment.out_start_s
         for chunk in chunks_by_slot.get(slot_id, []):
-            phrase = " ".join(word.text for word in chunk.words)
             abs_start = slot_offset + chunk.start_s
             abs_end = slot_offset + chunk.end_s
-            label = f"{label_prefix}{chunk_index}"
-            chunk_index += 1
-            current = styled_drawtext(
-                parts,
-                current,
-                phrase,
+            enable_expr = _enable_between_expr(abs_start, abs_end)
+            words = [word.text for word in chunk.words]
+
+            layouts: list = []
+            fontsize = _base_font_size(style, height)
+            if font_path is not None and words:
+                layouts, fontsize = layout_caption_chunk(
+                    words,
+                    font_path=font_path,
+                    base_font_size=fontsize,
+                    max_width_px=max_width_px,
+                    max_lines=2,
+                )
+
+            line_spacing = _caption_line_spacing_px(fontsize)
+            block_y = _caption_block_y_base_px(
                 style,
-                label,
-                width=width,
                 height=height,
-                enable_expr=_enable_between_expr(abs_start, abs_end),
+                fontsize=fontsize,
+                num_lines=max(1, len(layouts)),
+                line_spacing=line_spacing,
             )
 
-            if style.karaoke_enabled:
-                from viral_editor.utils.fonts import resolve_font_path
-                from viral_editor.utils.text_metrics import measure_phrase_word_offsets
-
-                font_path = resolve_font_path(style.font_family)
-                if font_path is not None:
-                    words = [word.text for word in chunk.words]
-                    fontsize = _base_font_size(style, height)
-                    offsets = measure_phrase_word_offsets(
-                        words,
-                        font_path=font_path,
-                        font_size_px=fontsize,
+            if layouts:
+                for line_index, layout in enumerate(layouts):
+                    phrase = " ".join(layout.words)
+                    label = f"{label_prefix}{chunk_index}l{line_index}"
+                    y_px = block_y + line_index * line_spacing
+                    current = styled_drawtext(
+                        parts,
+                        current,
+                        phrase,
+                        style,
+                        label,
+                        width=width,
+                        height=height,
+                        enable_expr=enable_expr,
+                        font_path=ffmpeg_font,
+                        y_expr=f"{y_px:.2f}",
+                        fontsize_override=fontsize,
                     )
-                    phrase_width = offsets[-1].x_px + offsets[-1].width_px if offsets else 0.0
-                    for word_index, word in enumerate(chunk.words):
-                        offset = offsets[word_index]
-                        x_expr = f"(w-{phrase_width:.2f})/2+{offset.x_px:.2f}"
+            else:
+                phrase = " ".join(words)
+                label = f"{label_prefix}{chunk_index}"
+                current = styled_drawtext(
+                    parts,
+                    current,
+                    phrase,
+                    style,
+                    label,
+                    width=width,
+                    height=height,
+                    enable_expr=enable_expr,
+                    font_path=ffmpeg_font,
+                    fontsize_override=fontsize,
+                )
+
+            if style.karaoke_enabled and layouts:
+                word_cursor = 0
+                for line_index, layout in enumerate(layouts):
+                    y_px = block_y + line_index * line_spacing
+                    for offset in layout.word_offsets:
+                        if word_cursor >= len(chunk.words):
+                            break
+                        word = chunk.words[word_cursor]
+                        word_cursor += 1
+                        x_expr = f"(w-{layout.line_width_px:.2f})/2+{offset.x_px:.2f}"
                         word_start = slot_offset + word.start_s
                         word_end = slot_offset + word.end_s
-                        karaoke_label = f"{label_prefix}k{chunk_index - 1}w{word_index}"
+                        karaoke_label = (
+                            f"{label_prefix}k{chunk_index}l{line_index}w{word_cursor - 1}"
+                        )
                         current = styled_drawtext(
                             parts,
                             current,
@@ -433,9 +556,14 @@ def build_caption_filter_chain(
                             width=width,
                             height=height,
                             enable_expr=_enable_between_expr(word_start, word_end),
+                            font_path=ffmpeg_font,
                             x_expr=x_expr,
+                            y_expr=f"{y_px:.2f}",
                             fontcolor_override=style.emphasis_color,
+                            fontsize_override=fontsize,
                         )
+
+            chunk_index += 1
 
     return current
 
@@ -508,11 +636,12 @@ def apply_spatial_fx_chain(
     max_events: int = 24,
     rotate_gain: float = DEFAULT_ROTATE_GAIN,
     pan_gain: float = DEFAULT_PAN_GAIN,
+    output_label: str = "outv",
 ) -> str:
     """Apply beat-synced zoom/rotate/pan impulses."""
     if not fx_events or intensity <= 0:
-        parts.append(f"{input_ref}copy[outv]")
-        return "[outv]"
+        parts.append(f"{input_ref}copy[{output_label}]")
+        return f"[{output_label}]"
 
     current = input_ref.lstrip("[").rstrip("]")
     if current.startswith("["):
@@ -576,8 +705,8 @@ def apply_spatial_fx_chain(
         )
         current = out_label
 
-    parts.append(f"[{current}]copy[outv]")
-    return "[outv]"
+    parts.append(f"[{current}]copy[{output_label}]")
+    return f"[{output_label}]"
 
 
 def build_proxy_filtergraph(
@@ -692,19 +821,6 @@ def build_composite_filtergraph(
             masked = f"{label}masked"
             parts.append(f"{concat_ref}{teaser_mask_filter(hook_start_mask)}[{masked}]")
             concat_ref = f"[{masked}]"
-        show_hook_title = hook_text and (
-            role in ("hook", "hook_start") or (role is None and index == 0)
-        )
-        if show_hook_title:
-            concat_ref = drawtext_hook_overlay(
-                parts,
-                concat_ref,
-                hook_text,
-                f"{label}titled",
-                style=hook_style,
-                width=width,
-                height=height,
-            )
         segment_labels.append(concat_ref)
 
     if segment_labels:
@@ -745,7 +861,40 @@ def build_composite_filtergraph(
         parts.append(f"nullsrc=s={width}x{height}:d=0.1,format=yuv420p[bodyv]")
         composed_ref = "[bodyv]"
 
-    if caption_chunks_by_slot and caption_style and any(caption_chunks_by_slot.values()):
+    hook_windows = _hook_title_windows(segments, segment_roles) if hook_text else []
+    has_hook_title = bool(hook_text and hook_text.strip() and hook_windows)
+    has_captions = bool(
+        caption_chunks_by_slot and caption_style and any(caption_chunks_by_slot.values())
+    )
+    has_steady_overlays = has_hook_title or has_captions
+    motion_label = "motionv" if has_steady_overlays else "outv"
+    composed_ref = apply_spatial_fx_chain(
+        parts,
+        composed_ref,
+        fx_events or [],
+        width=width,
+        height=height,
+        fps=fps,
+        seed=fx_seed,
+        intensity=fx_intensity,
+        rotate_gain=rotate_gain,
+        pan_gain=pan_gain,
+        output_label=motion_label,
+    )
+
+    if has_hook_title:
+        composed_ref = build_hook_title_overlay(
+            parts,
+            composed_ref,
+            hook_text,
+            style=hook_style,
+            segments=segments,
+            segment_roles=segment_roles,
+            width=width,
+            height=height,
+        )
+
+    if has_captions:
         ids = slot_ids or [f"slot{index}" for index in range(len(segments))]
         composed_ref = build_caption_filter_chain(
             parts,
@@ -759,18 +908,8 @@ def build_composite_filtergraph(
             height=height,
         )
 
-    apply_spatial_fx_chain(
-        parts,
-        composed_ref,
-        fx_events or [],
-        width=width,
-        height=height,
-        fps=fps,
-        seed=fx_seed,
-        intensity=fx_intensity,
-        rotate_gain=rotate_gain,
-        pan_gain=pan_gain,
-    )
+    if has_steady_overlays:
+        parts.append(f"{composed_ref}copy[outv]")
     return ";".join(parts)
 
 

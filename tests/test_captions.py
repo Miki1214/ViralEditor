@@ -124,3 +124,210 @@ def test_build_caption_filter_chain_emits_timed_drawtext(monkeypatch) -> None:
     assert "drawtext" in graph
     assert "enable='between(t\\," in graph
     assert "hello world" in graph or "hello\\\\ world" in graph or "hello world" in graph.replace("\\", "")
+
+
+def test_build_caption_filter_chain_wraps_long_phrase_to_two_lines() -> None:
+    from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, SpeedSegment
+    from viral_editor.utils.fonts import resolve_font_path
+    from viral_editor.video.filter_builders import build_caption_filter_chain
+
+    if resolve_font_path("Montserrat Black") is None:
+        pytest.skip("No font available for layout test")
+
+    style = CaptionStyle(fill_color="#FFFFFF", position="bottom", size_scale=1.6)
+    chunk_words = [
+        CaptionWord(text=w, start_s=i * 0.25, end_s=(i + 1) * 0.25)
+        for i, w in enumerate(["this", "is", "a", "very", "long", "caption"])
+    ]
+    chunks = {
+        "slot0": [
+            CaptionChunk(words=chunk_words, start_s=0.0, end_s=1.5),
+        ]
+    }
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        )
+    ]
+    parts: list[str] = []
+    build_caption_filter_chain(
+        parts,
+        "[slot0norm]",
+        chunks_by_slot=chunks,
+        segments=segments,
+        slot_ids=["slot0"],
+        style=style,
+        label_prefix="cap",
+        width=360,
+        height=640,
+    )
+    graph = ";".join(parts)
+    assert "cap0l0" in graph
+    assert "cap0l1" in graph
+    assert "fix_bounds=1" in graph
+
+
+def test_build_caption_filter_chain_karaoke_uses_per_line_offsets() -> None:
+    from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, SpeedSegment
+    from viral_editor.utils.fonts import resolve_font_path
+    from viral_editor.utils.text_metrics import layout_caption_chunk
+    from viral_editor.video.filter_builders import (
+        _max_caption_width_px,
+        build_caption_filter_chain,
+    )
+
+    font_path = resolve_font_path("Montserrat Black")
+    if font_path is None:
+        pytest.skip("No font available for layout test")
+
+    style = CaptionStyle(
+        fill_color="#FFFFFF",
+        emphasis_color="#FFFF00",
+        position="bottom",
+        karaoke_enabled=True,
+        size_scale=1.6,
+    )
+    word_texts = ["this", "is", "a", "very", "long", "caption"]
+    chunk_words = [
+        CaptionWord(text=w, start_s=i * 0.25, end_s=(i + 1) * 0.25)
+        for i, w in enumerate(word_texts)
+    ]
+    layouts, _ = layout_caption_chunk(
+        word_texts,
+        font_path=font_path,
+        base_font_size=46,
+        max_width_px=_max_caption_width_px(360, style),
+        max_lines=2,
+    )
+    assert len(layouts) >= 2
+
+    chunks = {"slot0": [CaptionChunk(words=chunk_words, start_s=0.0, end_s=1.5)]}
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        )
+    ]
+    parts: list[str] = []
+    build_caption_filter_chain(
+        parts,
+        "[slot0norm]",
+        chunks_by_slot=chunks,
+        segments=segments,
+        slot_ids=["slot0"],
+        style=style,
+        label_prefix="cap",
+        width=360,
+        height=640,
+    )
+    graph = ";".join(parts)
+    line0_width = layouts[0].line_width_px
+    assert f"(w-{line0_width:.2f})/2+" in graph
+    assert "fontcolor=0xFFFF00" in graph or "fontcolor=#FFFF00" in graph
+
+
+def test_captions_overlay_after_spatial_fx_for_steady_text() -> None:
+    from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, FxEvent, SpeedSegment
+    from viral_editor.video.filter_builders import build_composite_filtergraph
+
+    style = CaptionStyle(karaoke_enabled=False)
+    chunks = {
+        "slot0": [
+            CaptionChunk(
+                words=[CaptionWord(text="steady", start_s=0.0, end_s=0.5)],
+                start_s=0.0,
+                end_s=0.5,
+            )
+        ]
+    }
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        )
+    ]
+    fx_events = [
+        FxEvent(timestamp_s=0.5, kind="zoom", magnitude=1.1, decay_frames=4),
+        FxEvent(timestamp_s=1.0, kind="translate", magnitude=0.8, decay_frames=4, direction=1),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        caption_chunks_by_slot=chunks,
+        caption_style=style,
+        slot_ids=["slot0"],
+        fx_events=fx_events,
+    )
+    motion_idx = graph.find("copy[motionv]")
+    caption_idx = graph.find("[motionv]")
+    cap_drawtext_idx = graph.find("cap0")
+    assert motion_idx != -1
+    assert cap_drawtext_idx != -1
+    assert motion_idx < cap_drawtext_idx
+    assert caption_idx < cap_drawtext_idx
+    assert graph.endswith("copy[outv]")
+
+
+def test_hook_title_overlay_after_spatial_fx_for_steady_text(monkeypatch) -> None:
+    from viral_editor.models import CaptionStyle, FxEvent, SpeedSegment
+    from viral_editor.video.filter_builders import build_composite_filtergraph
+
+    monkeypatch.setattr(
+        "viral_editor.video.filter_builders.resolve_font_for_ffmpeg",
+        lambda family: "C\\:/Windows/Fonts/arial.ttf",
+    )
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.5,
+            src_start_s=0.0,
+            src_end_s=2.5,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=2.5,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=2.5,
+            speed_factor=1.0,
+            source_id="clip_b",
+        ),
+    ]
+    fx_events = [
+        FxEvent(timestamp_s=1.0, kind="zoom", magnitude=1.1, decay_frames=4),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut", "cut"],
+        clip_input_index={"clip_a": 0, "clip_b": 1},
+        clip_durations={"clip_a": 10.0, "clip_b": 10.0},
+        hook_text="Steady Hook",
+        hook_style=CaptionStyle(position="top"),
+        segment_roles=["hook_start", "clip"],
+        fx_events=fx_events,
+    )
+    motion_idx = graph.find("copy[motionv]")
+    hook_idx = graph.find("Hello hook")
+    hook_drawtext_idx = graph.find("Steady Hook")
+    assert motion_idx != -1
+    assert hook_drawtext_idx != -1
+    assert motion_idx < hook_drawtext_idx
+    assert "slot0titled" not in graph
+    assert "enable='between(t\\,0.000000\\,2.500000)'" in graph
+    assert hook_idx == -1

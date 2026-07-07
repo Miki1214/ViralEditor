@@ -113,6 +113,9 @@ def test_build_composite_filtergraph_xfade_and_drawtext(monkeypatch) -> None:
     )
     assert "drawtext" in graph
     assert "fontfile='C\\:/Windows/Fonts/arial.ttf'" in graph
+    assert "slot0titled" not in graph
+    assert "copy[motionv]" in graph
+    assert "enable='between(t\\,0.000000\\,2.000000)'" in graph
     assert "xfade=transition=fade" in graph
     assert "fps=30" in graph
     assert "[outv]" in graph
@@ -190,11 +193,13 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
     assert "vignette=angle=PI/5" in graph
     assert "concat=n=2:v=1:a=0[composed]" not in graph
     assert "drawtext" in graph
+    assert "slot0titled" not in graph
+    assert "copy[motionv]" in graph
     assert "scale=w='trunc(iw*(" in graph
     assert "rotate=enable='between(t," in graph
     assert "eval=frame" in graph
     assert re.search(r"rotate=[^\]]*eval=frame", graph) is None
-    assert "between(t\\," not in graph
+    assert "rotate=enable='between(t," in graph
     assert "[outv]" in graph
 
 
