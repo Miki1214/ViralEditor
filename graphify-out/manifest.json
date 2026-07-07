@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783454476.5222566,
-    "ast_hash": "b6aeec95cc473c040f4a0c177f46e96e",
+    "mtime": 1783455579.75088,
+    "ast_hash": "ae782cb6198c2bc99875b4858e44b837",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "tests/test_api.py": {
-    "mtime": 1783454596.7069652,
-    "ast_hash": "2d817b908a35f148f2502d1442d09e40",
+    "mtime": 1783455581.9236493,
+    "ast_hash": "ea4c0fb1acdc016c40a92ea9223f9f91",
     "semantic_hash": ""
   },
   "tests/test_audio_fixtures.py": {
@@ -1060,8 +1060,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/audio/captions.py": {
-    "mtime": 1783455256.3030326,
-    "ast_hash": "3919a121a94f9eeec5278a171b23e661",
+    "mtime": 1783455576.4388206,
+    "ast_hash": "8f68e79e6e06009d0a8db497208393e4",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/transcribe.py": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "tests/test_captions.py": {
-    "mtime": 1783455194.8793411,
-    "ast_hash": "5ee6fe4d4da17b8c45d96bc7de9aa0e7",
+    "mtime": 1783455586.852873,
+    "ast_hash": "9e9f2d77d0d45c8043e8194dc155e0d2",
     "semantic_hash": ""
   },
   "tests/test_fonts.py": {
@@ -1090,13 +1090,13 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783454662.734908,
-    "ast_hash": "61d413bfcc6f0a9f619a9185551179c2",
+    "mtime": 1783455577.6444929,
+    "ast_hash": "c29f200b32bc168b977cf1dc1c8faa9a",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {
-    "mtime": 1783454633.2583048,
-    "ast_hash": "76f352bb006fe560afae72d87ab30583",
+    "mtime": 1783455509.7781043,
+    "ast_hash": "901826822ced28d12794c5903a188b8f",
     "semantic_hash": ""
   },
   "web/src/components/SafeZoneOverlay.tsx": {

@@ -1302,12 +1302,22 @@ def patch_caption(
         explicit_timing_slots: set[str] = set()
 
         if payload.word_timing_overrides is not None:
-            new_timing.update(payload.word_timing_overrides)
+            for slot_id, timing in payload.word_timing_overrides.items():
+                if timing:
+                    new_timing[slot_id] = timing
+                else:
+                    new_timing.pop(slot_id, None)
+                    new_slot_overrides[slot_id] = ""
             explicit_timing_slots = set(payload.word_timing_overrides.keys())
 
         if payload.slot_overrides is not None:
             for slot_id, new_text in payload.slot_overrides.items():
-                new_slot_overrides[slot_id] = new_text
+                if new_text.strip():
+                    new_slot_overrides[slot_id] = new_text
+                else:
+                    new_slot_overrides[slot_id] = ""
+                    new_timing.pop(slot_id, None)
+                    continue
                 if slot_id in explicit_timing_slots:
                     continue
                 old_text = caption.slot_overrides.get(slot_id, "")

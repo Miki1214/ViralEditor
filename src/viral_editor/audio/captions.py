@@ -146,7 +146,8 @@ def split_script_into_chunks(
         return {}
 
     override_slot_ids = {slot_id for slot_id, text in overrides.items() if text.strip()}
-    auto_slots = [slot for slot in ordered if slot.id not in override_slot_ids]
+    explicit_override_slot_ids = set(overrides.keys())
+    auto_slots = [slot for slot in ordered if slot.id not in explicit_override_slot_ids]
     auto_budgets = {
         slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
         for slot in auto_slots
@@ -170,8 +171,13 @@ def split_script_into_chunks(
             result[slot.id] = []
 
     for slot in ordered:
+        if slot.id not in explicit_override_slot_ids:
+            continue
+        override_text = overrides[slot.id]
+        if not override_text.strip():
+            result[slot.id] = []
+            continue
         if slot.id in override_slot_ids:
-            override_text = overrides[slot.id]
             stored_timing = timing_overrides.get(slot.id)
             if stored_timing and _timing_override_matches_text(stored_timing, override_text):
                 timed_words = _words_from_timing_override(stored_timing, emphasis)

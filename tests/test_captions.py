@@ -298,6 +298,17 @@ def test_split_script_into_chunks_uses_reconciled_timing() -> None:
     assert words[1].start_s == 0.9
 
 
+def test_split_script_into_chunks_honors_explicit_empty_override() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    chunks_by_slot = split_script_into_chunks(
+        "hello world again",
+        slots,
+        slot_overrides={"a": ""},
+    )
+    assert chunks_by_slot["a"] == []
+    assert sum(len(chunk.words) for chunk in chunks_by_slot["b"]) == 3
+
+
 def test_split_script_into_chunks_falls_back_when_timing_override_is_stale() -> None:
     slots = [_slot("a", 0, 3.0)]
     timing = [

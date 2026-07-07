@@ -1070,6 +1070,182 @@ def test_patch_word_timing_overrides_updates_single_word(
     assert emperor_word["start_s"] == updated_timing[emperor_index]["start_s"]
 
 
+def test_patch_word_timing_overrides_removing_last_word_clears_slot(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.captions import (
+        assign_transcribed_words_to_slot_overrides,
+        assign_transcribed_words_with_timing_to_slots,
+        serialize_word_timing,
+    )
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.audio.transcribe_sources import TranscribeSourceResult
+    from viral_editor.models import CaptionWord, MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_word_remove_clear"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    audio_path = workspace / "input" / "track.mp3"
+    audio_path.write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=10.0,
+        end_s=16.0,
+        duration_s=6.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+
+    words = [CaptionWord(text="only", start_s=10.5, end_s=10.8)]
+
+    def fake_transcribe_from_audio_track(config, storyboard, *, workspace=None, options=None):
+        slot_overrides = assign_transcribed_words_to_slot_overrides(
+            words,
+            storyboard.slots,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+        timed_by_slot = assign_transcribed_words_with_timing_to_slots(
+            words,
+            storyboard.slots,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+        return TranscribeSourceResult(
+            script_text="only",
+            slot_overrides=slot_overrides,
+            word_timing_overrides={
+                slot_id: serialize_word_timing(slot_words)
+                for slot_id, slot_words in timed_by_slot.items()
+            },
+            words=words,
+        )
+
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.transcribe_from_audio_track",
+        fake_transcribe_from_audio_track,
+    )
+
+    transcribe_response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "audio_track"},
+    )
+    assert transcribe_response.status_code == 200
+    transcribed = transcribe_response.json()
+    slot_id = next(iter(transcribed["word_timing_overrides"]))
+
+    patch_response = client.patch(
+        f"/api/jobs/{job.id}/caption",
+        json={
+            "word_timing_overrides": {slot_id: []},
+            "slot_overrides": {
+                **transcribed["slot_overrides"],
+                slot_id: "",
+            },
+        },
+    )
+    assert patch_response.status_code == 200
+    patched = patch_response.json()
+    assert patched["slot_overrides"].get(slot_id, "") == ""
+    cleared_budget = next(
+        budget for budget in patched["slot_budgets"] if budget["slot_id"] == slot_id
+    )
+    assert cleared_budget["has_asr_timing"] is False
+    assert cleared_budget["actual_words"] == 0
+
+
+def test_patch_word_timing_overrides_removing_single_word_updates_slot(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_word_remove_partial"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    audio_path = workspace / "input" / "track.mp3"
+    audio_path.write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=10.0,
+        end_s=16.0,
+        duration_s=6.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+    slot_id = storyboard.slots[0].id
+    timing = [
+        {"text": "one", "start_s": 0.1, "end_s": 0.4},
+        {"text": "two", "start_s": 0.5, "end_s": 0.8},
+        {"text": "three", "start_s": 0.9, "end_s": 1.2},
+    ]
+
+    patch_response = client.patch(
+        f"/api/jobs/{job.id}/caption",
+        json={
+            "word_timing_overrides": {slot_id: [timing[0], timing[2]]},
+            "slot_overrides": {slot_id: "one three"},
+        },
+    )
+    assert patch_response.status_code == 200
+    patched = patch_response.json()
+    slot_budget = next(
+        budget for budget in patched["slot_budgets"] if budget["slot_id"] == slot_id
+    )
+    patched_words = [
+        word for chunk in slot_budget["chunks"] for word in chunk["words"]
+    ]
+    assert [word["text"] for word in patched_words] == ["one", "three"]
+    assert patched_words[0]["start_s"] == 0.1
+    assert patched_words[1]["start_s"] == 0.9
+
+
 def test_transcribe_caption_from_clips_builds_per_slot_overrides(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

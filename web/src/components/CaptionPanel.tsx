@@ -171,12 +171,36 @@ export function CaptionPanel({
     ) => {
       if (!caption) return;
       const timing = chunksToWordTiming(chunks);
-      timing[wordIndex] = { ...timing[wordIndex], text: newText };
+
+      if (!newText.trim()) {
+        const nextTiming = timing.filter((_, index) => index !== wordIndex);
+        if (nextTiming.length === 0) {
+          await onPatchCaption({
+            word_timing_overrides: { [slotId]: [] },
+            slot_overrides: {
+              ...caption.slot_overrides,
+              [slotId]: "",
+            },
+          });
+          return;
+        }
+        await onPatchCaption({
+          word_timing_overrides: { [slotId]: nextTiming },
+          slot_overrides: {
+            ...caption.slot_overrides,
+            [slotId]: nextTiming.map((word) => word.text).join(" "),
+          },
+        });
+        return;
+      }
+
+      const nextTiming = [...timing];
+      nextTiming[wordIndex] = { ...nextTiming[wordIndex], text: newText };
       await onPatchCaption({
-        word_timing_overrides: { [slotId]: timing },
+        word_timing_overrides: { [slotId]: nextTiming },
         slot_overrides: {
           ...caption.slot_overrides,
-          [slotId]: timing.map((word) => word.text).join(" "),
+          [slotId]: nextTiming.map((word) => word.text).join(" "),
         },
       });
     },

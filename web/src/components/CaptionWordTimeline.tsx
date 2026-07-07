@@ -50,7 +50,7 @@ export function CaptionWordTimeline({
     }
     const trimmed = editValue.trim();
     const current = words[editingWordIndex];
-    if (trimmed && trimmed !== current.text) {
+    if (trimmed !== current.text) {
       onWordTextChange(editingWordIndex, trimmed);
     }
     setEditingWordIndex(null);
@@ -126,7 +126,7 @@ export function CaptionWordTimeline({
       </div>
       <p className="text-[10px] text-monitor-muted">
         {hasAsrTiming
-          ? "ASR word timings — double-click a word to fix typos"
+          ? "ASR word timings — double-click a word to fix typos or clear it to remove"
           : "Drag handles coming soon — timings are auto-split evenly within each phrase chunk."}
       </p>
     </div>
