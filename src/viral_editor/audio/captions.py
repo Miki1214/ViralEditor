@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 
 from viral_editor.models import CaptionChunk, CaptionWord, StorySlot
 
@@ -676,6 +677,105 @@ def _timing_override_matches_text(
 ) -> bool:
     stored_text = " ".join(str(word["text"]) for word in timing)
     return stored_text.strip() == override_text.strip()
+
+
+def reconcile_word_timing_override(
+    old_timing: list[dict[str, float | str]] | None,
+    old_text: str,
+    new_text: str,
+    *,
+    min_match_ratio: float = 0.5,
+) -> list[dict[str, float | str]] | None:
+    """Align stored ASR word timings with edited override text.
+
+  Returns updated timing entries when the edit is a minor change (typo fix,
+  small insert/delete). Returns ``None`` when the rewrite is too large to
+  preserve timings safely.
+    """
+    if not old_timing:
+        return None
+
+    old_tokens = [str(word["text"]) for word in old_timing]
+    new_tokens = tokenize_script(new_text)
+    if not new_tokens:
+        return None
+
+    text_tokens = tokenize_script(old_text)
+    if text_tokens == old_tokens:
+        source_tokens = old_tokens
+    else:
+        source_tokens = text_tokens if text_tokens else old_tokens
+
+    matcher = SequenceMatcher(None, source_tokens, new_tokens)
+    if matcher.ratio() < min_match_ratio:
+        return None
+
+    if len(source_tokens) == len(new_tokens) == len(old_timing):
+        return [
+            {
+                "text": new_token,
+                "start_s": old_timing[index]["start_s"],
+                "end_s": old_timing[index]["end_s"],
+            }
+            for index, new_token in enumerate(new_tokens)
+        ]
+
+    result: list[dict[str, float | str]] = []
+    timing_index = 0
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(i2 - i1):
+                entry = dict(old_timing[timing_index + offset])
+                entry["text"] = new_tokens[j1 + offset]
+                result.append(entry)
+            timing_index = i2
+        elif tag == "replace":
+            old_len = i2 - i1
+            new_len = j2 - j1
+            if old_len != new_len:
+                return None
+            for offset in range(old_len):
+                entry = dict(old_timing[timing_index + offset])
+                entry["text"] = new_tokens[j1 + offset]
+                result.append(entry)
+            timing_index = i2
+        elif tag == "delete":
+            timing_index = i2
+        elif tag == "insert":
+            prev_end = float(result[-1]["end_s"]) if result else 0.0
+            next_start = (
+                float(old_timing[timing_index]["start_s"])
+                if timing_index < len(old_timing)
+                else prev_end + 0.1
+            )
+            gap = max(0.05, next_start - prev_end)
+            insert_count = j2 - j1
+            slot_duration = gap / insert_count if insert_count else 0.05
+            cursor = prev_end
+            for offset in range(insert_count):
+                start_s = round(cursor, 4)
+                end_s = round(min(next_start, cursor + slot_duration), 4)
+                result.append(
+                    {
+                        "text": new_tokens[j1 + offset],
+                        "start_s": start_s,
+                        "end_s": end_s,
+                    }
+                )
+                cursor = end_s
+
+    if not result:
+        return None
+
+    for index, entry in enumerate(result):
+        if float(entry["end_s"]) <= float(entry["start_s"]):
+            result[index] = {
+                **entry,
+                "end_s": round(float(entry["start_s"]) + 0.05, 4),
+            }
+
+    return result
 
 
 def _words_from_timing_override(

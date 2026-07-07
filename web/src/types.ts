@@ -357,6 +357,7 @@ export interface SlotCaptionBudget {
   duration_s: number;
   suggested_words: number;
   actual_words: number;
+  has_asr_timing: boolean;
   chunks: CaptionChunkPayload[];
 }
 
@@ -387,6 +388,10 @@ export interface CaptionPatchInput {
   hook_style?: Partial<CaptionStylePayload>;
   caption_style?: Partial<CaptionStylePayload>;
   slot_overrides?: Record<string, string>;
+  word_timing_overrides?: Record<
+    string,
+    Array<{ text: string; start_s: number; end_s: number }>
+  >;
   karaoke_enabled?: boolean;
   cleanup?: boolean;
   auto_allocate?: boolean;

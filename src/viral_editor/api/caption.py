@@ -62,6 +62,7 @@ def build_caption_response(config: JobConfig, storyboard: Storyboard | None) -> 
                     config.caption.words_per_second,
                 ),
                 actual_words=actual_words,
+                has_asr_timing=bool(config.caption.word_timing_overrides.get(slot.id)),
                 chunks=[
                     CaptionChunkResponse(
                         words=[

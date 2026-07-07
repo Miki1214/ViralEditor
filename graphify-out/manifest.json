@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783453263.7919075,
-    "ast_hash": "1ca8cf7563f1e9a534ede562748718c6",
+    "mtime": 1783454476.5222566,
+    "ast_hash": "b6aeec95cc473c040f4a0c177f46e96e",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/schemas.py": {
-    "mtime": 1783447719.0942683,
-    "ast_hash": "08c6c343a68236205f9a590db38b6d0a",
+    "mtime": 1783454469.7385044,
+    "ast_hash": "bc836b9f79477ab2d94ff81f4a381d9e",
     "semantic_hash": ""
   },
   "src/viral_editor/api/speed.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "tests/test_api.py": {
-    "mtime": 1783453489.7581143,
-    "ast_hash": "43fb7bc0697bb1cb61a8b4d39a6f07ef",
+    "mtime": 1783454596.7069652,
+    "ast_hash": "2d817b908a35f148f2502d1442d09e40",
     "semantic_hash": ""
   },
   "tests/test_audio_fixtures.py": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "web/src/types.ts": {
-    "mtime": 1783447733.0296025,
-    "ast_hash": "5de90ac13b08b8a3956b0a3fbee64ac6",
+    "mtime": 1783454622.20335,
+    "ast_hash": "0679796f38713358d7f166cd2f163cc9",
     "semantic_hash": ""
   },
   "web/src/utils/compositePlayhead.ts": {
@@ -1055,18 +1055,18 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/caption.py": {
-    "mtime": 1783448598.83575,
-    "ast_hash": "184320b0e907f5da4e0c39ae165b1b9d",
+    "mtime": 1783454472.6562326,
+    "ast_hash": "18e38a1b0ef0affeba2e2913340093c5",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/captions.py": {
-    "mtime": 1783452246.4142325,
-    "ast_hash": "7b5d6a9a7cafc0ee4c4348502c58b983",
+    "mtime": 1783454432.61955,
+    "ast_hash": "76ed32892165f7edfd51af12491c499d",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/transcribe.py": {
-    "mtime": 1783453451.08771,
-    "ast_hash": "2403fb37eb037d6d65b44fda58df1534",
+    "mtime": 1783453700.5377645,
+    "ast_hash": "bae28212ab2d10e4cba309c31860a055",
     "semantic_hash": ""
   },
   "src/viral_editor/utils/fonts.py": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "tests/test_captions.py": {
-    "mtime": 1783452246.45094,
-    "ast_hash": "24abf2a113dc8b042225da095363cab3",
+    "mtime": 1783454422.2302885,
+    "ast_hash": "19b2c6ded30a8cad6ae66998c53cdab0",
     "semantic_hash": ""
   },
   "tests/test_fonts.py": {
@@ -1090,13 +1090,13 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783448480.4397864,
-    "ast_hash": "bdbd173e568cabc80d7dec7f32046823",
+    "mtime": 1783454662.734908,
+    "ast_hash": "61d413bfcc6f0a9f619a9185551179c2",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {
-    "mtime": 1783374156.7674763,
-    "ast_hash": "6859957aa91629c0b832c1b5a53fd7a6",
+    "mtime": 1783454633.2583048,
+    "ast_hash": "76f352bb006fe560afae72d87ab30583",
     "semantic_hash": ""
   },
   "web/src/components/SafeZoneOverlay.tsx": {
@@ -1125,8 +1125,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/audio/transcribe_sources.py": {
-    "mtime": 1783453473.5197582,
-    "ast_hash": "64db48c6214c8a6107b55678850c918e",
+    "mtime": 1783453708.6768558,
+    "ast_hash": "a70bc467337afba05cdd2c232e2f7965",
     "semantic_hash": ""
   },
   ".cursor/plans/extend_auto-transcribe_modes_7f8a1124.plan.md": {
@@ -1135,8 +1135,8 @@
     "semantic_hash": ""
   },
   "tests/test_transcribe.py": {
-    "mtime": 1783453506.968504,
-    "ast_hash": "5d5412c28d0d94cc032357808fc87160",
+    "mtime": 1783453712.4684522,
+    "ast_hash": "27944132f3b9abe157f81a7d496453b3",
     "semantic_hash": ""
   },
   "web/src/constants/whisperLanguages.ts": {

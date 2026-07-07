@@ -3,6 +3,7 @@ import { CAPTION_STYLE_PRESETS } from "../constants/captionPresets";
 import { HOOK_FONT_OPTIONS } from "../constants/fonts";
 import { WHISPER_LANGUAGE_OPTIONS } from "../constants/whisperLanguages";
 import type {
+  CaptionChunkPayload,
   CaptionPayload,
   CaptionPatchInput,
   TranscribeOptions,
@@ -20,6 +21,16 @@ interface CaptionPanelProps {
   onPatchForm: (partial: Partial<FormState>) => void;
   onPatchCaption: (payload: CaptionPatchInput) => Promise<CaptionPayload>;
   onTranscribe: (source: TranscribeSource, options: TranscribeOptions, file?: File) => Promise<void>;
+}
+
+function chunksToWordTiming(chunks: CaptionChunkPayload[]) {
+  return chunks.flatMap((chunk) =>
+    chunk.words.map((word) => ({
+      text: word.text,
+      start_s: word.start_s,
+      end_s: word.end_s,
+    })),
+  );
 }
 
 function StyleFields({
@@ -134,6 +145,7 @@ export function CaptionPanel({
   onTranscribe,
 }: CaptionPanelProps) {
   const [timingSlotId, setTimingSlotId] = useState<string | null>(null);
+  const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({});
   const [transcribeSource, setTranscribeSource] = useState<TranscribeSource>("audio_track");
   const [customMediaFile, setCustomMediaFile] = useState<File | null>(null);
   const [transcribeLanguage, setTranscribeLanguage] = useState("auto");
@@ -146,8 +158,30 @@ export function CaptionPanel({
   useEffect(() => {
     if (caption) {
       setScriptDraft(caption.script_text);
+      setSlotDrafts(caption.slot_overrides);
     }
-  }, [caption?.script_text]);
+  }, [caption]);
+
+  const handleWordTextChange = useCallback(
+    async (
+      slotId: string,
+      chunks: CaptionChunkPayload[],
+      wordIndex: number,
+      newText: string,
+    ) => {
+      if (!caption) return;
+      const timing = chunksToWordTiming(chunks);
+      timing[wordIndex] = { ...timing[wordIndex], text: newText };
+      await onPatchCaption({
+        word_timing_overrides: { [slotId]: timing },
+        slot_overrides: {
+          ...caption.slot_overrides,
+          [slotId]: timing.map((word) => word.text).join(" "),
+        },
+      });
+    },
+    [caption, onPatchCaption],
+  );
 
   const handleCleanup = useCallback(async () => {
     if (!caption) return;
@@ -466,30 +500,7 @@ export function CaptionPanel({
               const over = slot.actual_words > slot.suggested_words;
               const under =
                 slot.actual_words < slot.suggested_words && slot.suggested_words > 0;
-              const overrideText = caption.slot_overrides[slot.slot_id] ?? "";
-              // #region agent log
-              fetch("http://127.0.0.1:7654/ingest/6a47800d-278b-46bc-8661-efdc1e1c84d8", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "X-Debug-Session-Id": "5521a3",
-                },
-                body: JSON.stringify({
-                  sessionId: "5521a3",
-                  hypothesisId: "H1-H4",
-                  location: "CaptionPanel.tsx:slot_budgets.map",
-                  message: "textarea bind values",
-                  data: {
-                    slot_id: slot.slot_id,
-                    override_len: overrideText.length,
-                    actual_words: slot.actual_words,
-                    chunk_count: slot.chunks.length,
-                    shows_placeholder: overrideText.length === 0 && slot.actual_words > 0,
-                  },
-                  timestamp: Date.now(),
-                }),
-              }).catch(() => {});
-              // #endregion
+              const overrideText = slotDrafts[slot.slot_id] ?? caption.slot_overrides[slot.slot_id] ?? "";
               return (
                 <div
                   key={slot.slot_id}
@@ -511,31 +522,58 @@ export function CaptionPanel({
                       {slot.actual_words}/{slot.suggested_words} words
                     </p>
                   </div>
-                  <textarea
-                    className="field-input mt-2 min-h-[48px] w-full text-xs"
-                    placeholder="Override text for this clip (optional)"
-                    value={overrideText}
-                    onChange={(e) =>
-                      void onPatchCaption({
-                        slot_overrides: {
-                          ...caption.slot_overrides,
-                          [slot.slot_id]: e.target.value,
-                        },
-                      })
-                    }
-                  />
-                  {slot.chunks.length > 0 && (
-                    <button
-                      type="button"
-                      className="btn-ghost mt-2 font-mono text-[10px]"
-                      onClick={() =>
-                        setTimingSlotId((current) =>
-                          current === slot.slot_id ? null : slot.slot_id,
-                        )
-                      }
-                    >
-                      {timingSlotId === slot.slot_id ? "Hide timing" : "Fine-tune timing"}
-                    </button>
+                  {slot.has_asr_timing ? (
+                    slot.chunks.length > 0 && (
+                      <div className="mt-2">
+                        <CaptionWordTimeline
+                          slotLabel={slot.label}
+                          durationS={slot.duration_s}
+                          chunks={slot.chunks}
+                          editable
+                          hasAsrTiming
+                          onWordTextChange={(wordIndex, newText) =>
+                            void handleWordTextChange(slot.slot_id, slot.chunks, wordIndex, newText)
+                          }
+                        />
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      <textarea
+                        className="field-input mt-2 min-h-[48px] w-full text-xs"
+                        placeholder="Override text for this clip (optional)"
+                        value={overrideText}
+                        onChange={(e) =>
+                          setSlotDrafts((current) => ({
+                            ...current,
+                            [slot.slot_id]: e.target.value,
+                          }))
+                        }
+                        onBlur={(e) => {
+                          const nextValue = e.target.value;
+                          if (nextValue === (caption.slot_overrides[slot.slot_id] ?? "")) return;
+                          void onPatchCaption({
+                            slot_overrides: {
+                              ...caption.slot_overrides,
+                              [slot.slot_id]: nextValue,
+                            },
+                          });
+                        }}
+                      />
+                      {slot.chunks.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-ghost mt-2 font-mono text-[10px]"
+                          onClick={() =>
+                            setTimingSlotId((current) =>
+                              current === slot.slot_id ? null : slot.slot_id,
+                            )
+                          }
+                        >
+                          {timingSlotId === slot.slot_id ? "Hide timing" : "Fine-tune timing"}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -544,7 +582,9 @@ export function CaptionPanel({
         </section>
       )}
 
-      {selectedBudget && timingSlotId === selectedBudget.slot_id && (
+      {selectedBudget &&
+        timingSlotId === selectedBudget.slot_id &&
+        !selectedBudget.has_asr_timing && (
         <CaptionWordTimeline
           slotLabel={selectedBudget.label}
           durationS={selectedBudget.duration_s}

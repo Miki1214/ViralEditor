@@ -324,6 +324,7 @@ class SlotCaptionBudgetResponse(BaseModel):
     duration_s: float
     suggested_words: int
     actual_words: int
+    has_asr_timing: bool = False
     chunks: list[CaptionChunkResponse] = Field(default_factory=list)
 
 
@@ -349,6 +350,7 @@ class CaptionPatchRequest(BaseModel):
     hook_style: CaptionStylePatch | None = None
     caption_style: CaptionStylePatch | None = None
     slot_overrides: dict[str, str] | None = None
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] | None = None
     karaoke_enabled: bool | None = None
     cleanup: bool = False
     auto_allocate: bool = False

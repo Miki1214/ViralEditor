@@ -1290,12 +1290,44 @@ def patch_caption(
     if payload.words_per_second is not None:
         caption = caption.model_copy(update={"words_per_second": payload.words_per_second})
     if (
-        payload.slot_overrides is not None
+        (payload.slot_overrides is not None or payload.word_timing_overrides is not None)
         and not payload.cleanup
         and not payload.auto_allocate
         and not payload.audio_sync
     ):
-        caption = caption.model_copy(update={"slot_overrides": payload.slot_overrides})
+        from viral_editor.audio.captions import reconcile_word_timing_override
+
+        new_slot_overrides = dict(caption.slot_overrides)
+        new_timing = dict(caption.word_timing_overrides)
+        explicit_timing_slots: set[str] = set()
+
+        if payload.word_timing_overrides is not None:
+            new_timing.update(payload.word_timing_overrides)
+            explicit_timing_slots = set(payload.word_timing_overrides.keys())
+
+        if payload.slot_overrides is not None:
+            for slot_id, new_text in payload.slot_overrides.items():
+                new_slot_overrides[slot_id] = new_text
+                if slot_id in explicit_timing_slots:
+                    continue
+                old_text = caption.slot_overrides.get(slot_id, "")
+                if new_text.strip() == old_text.strip():
+                    continue
+                old_timing = caption.word_timing_overrides.get(slot_id)
+                if not old_timing:
+                    continue
+                reconciled = reconcile_word_timing_override(old_timing, old_text, new_text)
+                if reconciled is not None:
+                    new_timing[slot_id] = reconciled
+                else:
+                    new_timing.pop(slot_id, None)
+
+        caption = caption.model_copy(
+            update={
+                "slot_overrides": new_slot_overrides,
+                "word_timing_overrides": new_timing,
+            }
+        )
 
     if payload.auto_allocate:
         from viral_editor.audio.captions import distribute_script_to_slot_overrides

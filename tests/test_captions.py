@@ -9,6 +9,7 @@ from viral_editor.audio.captions import (
     cleanup_slot_overrides,
     distribute_script_to_slot_overrides,
     distribute_script_with_timing_to_slots,
+    reconcile_word_timing_override,
     suggested_word_count,
     split_script_into_chunks,
     sync_captions_to_asr,
@@ -199,6 +200,76 @@ def test_split_script_into_chunks_prefers_valid_word_timing_override() -> None:
     assert words[0].start_s == 0.1
     assert words[1].start_s == 0.9
     assert words[2].start_s == 1.8
+
+
+def test_reconcile_word_timing_preserves_timestamps_on_typo() -> None:
+    timing = [
+        {"text": "trust", "start_s": 0.1, "end_s": 0.4},
+        {"text": "the", "start_s": 0.42, "end_s": 0.8},
+        {"text": "Emperor", "start_s": 0.9, "end_s": 1.2},
+    ]
+    reconciled = reconcile_word_timing_override(
+        timing,
+        "trust the Emperor",
+        "trust the Emperer",
+    )
+    assert reconciled is not None
+    assert reconciled[0]["start_s"] == 0.1
+    assert reconciled[1]["start_s"] == 0.42
+    assert reconciled[2]["text"] == "Emperer"
+    assert reconciled[2]["start_s"] == 0.9
+
+
+def test_reconcile_word_timing_handles_single_word_insert() -> None:
+    timing = [
+        {"text": "hello", "start_s": 0.1, "end_s": 0.4},
+        {"text": "world", "start_s": 0.9, "end_s": 1.2},
+    ]
+    reconciled = reconcile_word_timing_override(
+        timing,
+        "hello world",
+        "hello big world",
+    )
+    assert reconciled is not None
+    assert len(reconciled) == 3
+    assert reconciled[0]["start_s"] == 0.1
+    assert reconciled[2]["start_s"] == 0.9
+    assert reconciled[1]["text"] == "big"
+    assert float(reconciled[1]["start_s"]) >= float(reconciled[0]["end_s"])
+    assert float(reconciled[1]["end_s"]) <= float(reconciled[2]["start_s"])
+
+
+def test_reconcile_word_timing_returns_none_on_major_rewrite() -> None:
+    timing = [
+        {"text": "old", "start_s": 0.1, "end_s": 0.4},
+        {"text": "text", "start_s": 0.9, "end_s": 1.2},
+    ]
+    reconciled = reconcile_word_timing_override(
+        timing,
+        "old text",
+        "completely different words now",
+    )
+    assert reconciled is None
+
+
+def test_split_script_into_chunks_uses_reconciled_timing() -> None:
+    slots = [_slot("a", 0, 3.0)]
+    timing = [
+        {"text": "one", "start_s": 0.1, "end_s": 0.4},
+        {"text": "two", "start_s": 0.9, "end_s": 1.2},
+        {"text": "three", "start_s": 1.8, "end_s": 2.1},
+    ]
+    reconciled = reconcile_word_timing_override(timing, "one two three", "one too three")
+    assert reconciled is not None
+    chunks_by_slot = split_script_into_chunks(
+        "",
+        slots,
+        slot_overrides={"a": "one too three"},
+        word_timing_overrides={"a": reconciled},
+    )
+    words = [word for chunk in chunks_by_slot["a"] for word in chunk.words]
+    assert words[1].text == "too"
+    assert words[1].start_s == 0.9
 
 
 def test_split_script_into_chunks_falls_back_when_timing_override_is_stale() -> None:
