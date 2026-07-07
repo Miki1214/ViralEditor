@@ -1,16 +1,16 @@
 # Graph Report - ViralAutomation  (2026-07-07)
 
 ## Corpus Check
-- 223 files · ~147,170 words
+- 222 files · ~146,779 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2911 nodes · 8907 edges · 153 communities (143 shown, 10 thin omitted)
-- Extraction: 61% EXTRACTED · 39% INFERRED · 0% AMBIGUOUS · INFERRED: 3496 edges (avg confidence: 0.56)
+- 2907 nodes · 8901 edges · 154 communities (145 shown, 9 thin omitted)
+- Extraction: 61% EXTRACTED · 39% INFERRED · 0% AMBIGUOUS · INFERRED: 3493 edges (avg confidence: 0.56)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d0b14c8d`
+- Built from commit: `c125acaf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -155,6 +155,7 @@
 - [[_COMMUNITY_Community 150|Community 150]]
 - [[_COMMUNITY_Community 151|Community 151]]
 - [[_COMMUNITY_Community 152|Community 152]]
+- [[_COMMUNITY_Community 153|Community 153]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `JobConfig` - 130 edges
@@ -169,12 +170,12 @@
 10. `StorySlot` - 70 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `BeatTrackResult` --uses--> `BeatTrackResult`  [INFERRED]
-  tests/test_features.py → src/viral_editor/audio/beat_tracker.py
-- `ndarray` --uses--> `BeatTrackResult`  [INFERRED]
-  tests/test_features.py → src/viral_editor/audio/beat_tracker.py
-- `test_target_duration_bounds_use_non_overlapping_buckets()` --calls--> `target_duration_bounds()`  [INFERRED]
-  tests/test_loop_planner.py → src/viral_editor/audio/loop_planner.py
+- `AudioDspConfig` --uses--> `AudioDspConfig`  [INFERRED]
+  tests/conftest.py → src/viral_editor/audio/beat_detector.py
+- `MonkeyPatch` --uses--> `AudioDspConfig`  [INFERRED]
+  tests/conftest.py → src/viral_editor/audio/beat_detector.py
+- `Path` --uses--> `AudioDspConfig`  [INFERRED]
+  tests/conftest.py → src/viral_editor/audio/beat_detector.py
 - `test_resolve_whisper_runtime_config_cpu_fallback()` --calls--> `resolve_whisper_runtime_config()`  [INFERRED]
   tests/test_transcribe.py → src/viral_editor/audio/transcribe.py
 - `test_resolve_whisper_runtime_config_prefers_gpu_profile()` --calls--> `resolve_whisper_runtime_config()`  [INFERRED]
@@ -183,47 +184,47 @@
 ## Import Cycles
 - 1-file cycle: `src/viral_editor/api/main.py -> src/viral_editor/api/main.py`
 
-## Communities (153 total, 10 thin omitted)
+## Communities (154 total, 9 thin omitted)
 
 ### Community 0 - "Community 0"
-Cohesion: 0.08
-Nodes (185): AbstractEventLoop, apply_caption_style_patch(), build_caption_response(), _style_response(), build_render_plan(), Final render orchestration for API jobs., Render the final MP4 on a background thread., Build a ``RenderPlan`` and assembly metadata from a filled storyboard. (+177 more)
+Cohesion: 0.10
+Nodes (164): AbstractEventLoop, apply_caption_style_patch(), build_caption_response(), _style_response(), Render the final MP4 on a background thread., start_final_render(), CaptionChunkResponse, CaptionPatchRequest (+156 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.13
-Nodes (31): ReelEntry, ClipInput, ClipReel, MediaInfo, Path, SpeedRampConfig, SpeedSegment, _clip() (+23 more)
+Nodes (33): ReelEntry, ClipInput, ClipReel, MediaInfo, Path, SpeedRampConfig, SpeedSegment, _clip() (+25 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.11
-Nodes (60): BudgetPolicy, SpeedCurvePoint, SpeedPreset, JobConfig, MusicSection, AudioTimeline, BeatSyncFeatures, ClipReel (+52 more)
+Cohesion: 0.10
+Nodes (62): BudgetPolicy, SpeedCurvePoint, SpeedPreset, JobConfig, MusicSection, SpeedRampOptionSet, SpeedRampPlan, AudioTimeline (+54 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.13
 Nodes (35): RenderConfig, CaptionChunk, CaptionStyle, Path, RenderPlan, _generate_test_audio(), _generate_test_clip(), Path (+27 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.19
-Nodes (32): build_chroma_gram(), build_scope_lane_series(), build_waveform_payload(), downsample_envelope(), Waveform downsampling for the Audio Scope UI., Downsample an onset envelope to roughly ``max_points`` scope samples., ChromaGram, ScopeLaneSeries (+24 more)
+Cohesion: 0.18
+Nodes (33): build_chroma_gram(), build_scope_lane_series(), build_waveform_payload(), downsample_envelope(), Waveform downsampling for the Audio Scope UI., Downsample an onset envelope to roughly ``max_points`` scope samples., ChromaGram, ScopeLaneSeries (+25 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.18
-Nodes (24): apply_clip_updates(), build_reel_for_config(), clip_durations_map(), clip_info_payload(), load_clip_reel(), persist_clip_reel(), primary_video_media(), probe_clip_media() (+16 more)
+Cohesion: 0.12
+Nodes (36): apply_clip_updates(), build_reel_for_config(), clip_durations_map(), clip_info_payload(), load_clip_reel(), persist_clip_reel(), primary_video_media(), probe_clip_media() (+28 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.13
-Nodes (24): _clamp_boundary_count(), _collect_salient_candidates(), _compute_boundaries(), _downbeats_in_window(), _drop_counts_by_slot(), effective_output_duration(), _greedy_salient_cuts(), _nearest_time_in_range() (+16 more)
+Cohesion: 0.24
+Nodes (13): _clamp_boundary_count(), _collect_salient_candidates(), _compute_boundaries(), _greedy_salient_cuts(), _nearest_time_in_range(), Pick boundaries from salient audio events or fall back to even/downbeat splits., Soft slot-count band around the user's Slots chip., _salient_boundaries() (+5 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.08
 Nodes (61): _audio_content_sha256(), _calibrate_vocal_activity(), compute_vocal_activity(), _configure_torch_threads_for_demucs(), _default_demucs_workers(), demucs_device_label(), demucs_progress_label(), _global_vocal_stem_cache_dir() (+53 more)
 
 ### Community 8 - "Community 8"
-Cohesion: 0.17
-Nodes (38): _beat_index(), build_block_catalog(), _build_phrase_candidate(), _Candidate, _classify_candidate(), _correlation(), _duration_in_target_window(), _enumerate_all_phrase_candidates() (+30 more)
+Cohesion: 0.15
+Nodes (41): _beat_index(), build_block_catalog(), _build_phrase_candidate(), _Candidate, _classify_candidate(), _correlation(), _duration_in_target_window(), _enumerate_all_phrase_candidates() (+33 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.08
-Nodes (59): apply_block_selection(), _bar_period(), _beat_period(), _Candidate, _chroma_slice(), _classify_window(), _correlation_score(), _envelope_slice() (+51 more)
+Nodes (60): apply_block_selection(), _bar_period(), _beat_period(), _Candidate, _chroma_slice(), _classify_window(), _correlation_score(), _envelope_slice() (+52 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.08
@@ -235,19 +236,19 @@ Nodes (42): countFxCandidates(), EffectsPatchPayload, nearestPayoffIndex(), panP
 
 ### Community 12 - "Community 12"
 Cohesion: 0.06
-Nodes (72): _allocate_items(), _allocate_tokens(), assign_transcribed_words_to_slot_overrides(), assign_transcribed_words_with_timing_to_slots(), build_caption_chunks_for_slots(), cleanup_script_text(), _distribute_by_budget(), distribute_script_to_slot_overrides() (+64 more)
+Nodes (73): _allocate_items(), _allocate_tokens(), assign_transcribed_words_to_slot_overrides(), assign_transcribed_words_with_timing_to_slots(), build_caption_chunks_for_slots(), cleanup_script_text(), _distribute_by_budget(), distribute_script_to_slot_overrides() (+65 more)
 
 ### Community 13 - "Community 13"
 Cohesion: 0.16
-Nodes (27): hook_output_budget_s(), hook_unified_crop_range(), Return the contiguous source crop spanning hook / hook_start + hook_end., Build per-slot segment debug rows for UI / API inspection., storyboard_segments_debug_payload(), _assert_hook_speed_contract(), _block(), _clip_media() (+19 more)
+Nodes (28): hook_output_budget_s(), hook_unified_crop_range(), Return the contiguous source crop spanning hook / hook_start + hook_end., Build per-slot segment debug rows for UI / API inspection., storyboard_segments_debug_payload(), _assert_hook_speed_contract(), _block(), _clip_media() (+20 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.07
-Nodes (63): RetentionConfig, SpatialFxConfig, Path, AudioTimeline, FxEvent, MediaInfo, ndarray, _minimal_job_payload() (+55 more)
+Cohesion: 0.17
+Nodes (29): FxEvent, Transient, Tests for the spatial FX planner., test_bass_produces_rotate_event(), test_cap_limits_dense_events(), test_drop_produces_zoom_event(), test_magnitude_and_decay_scale_with_amplitude(), test_merge_keeps_opposite_direction_translations() (+21 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.12
-Nodes (42): classify_accents(), _ensure_hook_pan(), _ensure_slot_boundary_pans(), _ensure_tail_beat_pans(), find_energy_peaks(), find_flux_peaks(), _frame_to_time(), _lane_amplitude_at() (+34 more)
+Cohesion: 0.11
+Nodes (44): classify_accents(), _ensure_hook_pan(), _ensure_slot_boundary_pans(), _ensure_tail_beat_pans(), find_energy_peaks(), find_flux_peaks(), _frame_to_time(), _lane_amplitude_at() (+36 more)
 
 ### Community 16 - "Community 16"
 Cohesion: 0.07
@@ -266,8 +267,8 @@ Cohesion: 0.19
 Nodes (14): _downbeats_every(), _frame_at(), Synthetic scope lanes with local maxima at ``peak_times_s``., Cycle A: cuts land near injected drop/surge peaks., Cycle B: spans stay within viral floor/ceiling; large gaps subdivide., Cycle C: slot count stays inside chip soft band., Cycle D: salience-driven layout yields unequal slot durations., Cycle E: rationales reference energy/surge events, not generic downbeats. (+6 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.21
-Nodes (10): Path, Tests for font registry and text metrics., test_measure_phrase_word_offsets_returns_monotonic_x_positions(), test_resolve_font_path_returns_existing_file(), Font family registry and resolution for drawtext rendering., Resolve a font family label to an existing TTF/OTF path., Return an ffmpeg-safe escaped fontfile path., resolve_font_for_ffmpeg() (+2 more)
+Cohesion: 0.11
+Nodes (27): Path, CaptionChunk, StorySlot, test_build_caption_filter_chain_emits_timed_drawtext(), test_build_caption_filter_chain_karaoke_uses_per_line_offsets(), test_build_caption_filter_chain_wraps_long_phrase_to_two_lines(), test_caption_filter_chain_uses_storyboard_slot_offsets_not_packed_video_time(), test_captions_overlay_after_spatial_fx_for_steady_text() (+19 more)
 
 ### Community 21 - "Community 21"
 Cohesion: 0.07
@@ -275,31 +276,31 @@ Nodes (49): Path, Path, Path, Path, benchmark_pair(), count_tokens(), main(), pr
 
 ### Community 22 - "Community 22"
 Cohesion: 0.12
-Nodes (28): ClipInput, MediaInfo, TeaserSpec, MediaInfo, Tests for the frame-0 teaser planner., test_body_output_duration_after_teaser(), test_split_hook_crop_by_duration_head_and_tail(), test_split_hook_crop_by_output_ratio_equal_speed() (+20 more)
+Nodes (29): ClipInput, MediaInfo, TeaserSpec, TeaserConfig, MediaInfo, Tests for the frame-0 teaser planner., test_body_output_duration_after_teaser(), test_split_hook_crop_by_duration_head_and_tail() (+21 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.30
-Nodes (13): BeatTrackResult, _bpm_from_beats(), _estimate_downbeats_librosa(), _fold_bpm(), infer_beats(), _infer_beats_beat_this(), _infer_beats_librosa(), Beat and downbeat inference — beat-this neural tracker with librosa fallback. (+5 more)
+Cohesion: 0.11
+Nodes (32): BeatTrackResult, _bpm_from_beats(), _estimate_downbeats_librosa(), _fold_bpm(), infer_beats(), _infer_beats_beat_this(), _infer_beats_librosa(), Beat and downbeat inference — beat-this neural tracker with librosa fallback. (+24 more)
 
 ### Community 24 - "Community 24"
 Cohesion: 0.06
 Nodes (52): previewAudioUrl(), PhonePreview(), PhonePreviewProps, PreviewTransportRestore, renderHookLine(), RetentionFxPanelProps, SafeZoneOverlay(), SafeZoneOverlayProps (+44 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.14
-Nodes (26): _classify_transients(), _compute_pacing_density(), _compute_scope_lanes(), _compute_surge_lane(), _dedupe_onsets(), _estimate_tempo(), load_scope_lanes(), _low_band_energy_ratio() (+18 more)
+Cohesion: 0.13
+Nodes (31): analyze_audio_with_envelope(), AudioDspConfig, _classify_transients(), _compute_pacing_density(), _compute_scope_lanes(), _dedupe_onsets(), _estimate_tempo(), load_scope_lanes() (+23 more)
 
 ### Community 26 - "Community 26"
 Cohesion: 0.06
 Nodes (32): loopSeamPreviewUrl(), blockInstanceKey(), blockPoolFromWaveform(), durationPresetsWithBlocks(), isBlockInstanceSelected(), slotBlockCountsFromPool(), AudioScopePanel(), AudioScopePanelProps (+24 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.08
-Nodes (51): WpsPreset, Export retention policy symbols., AudioTimeline, MediaInfo, CaptionChunk, FxEvent, SpeedRampPlan, TeaserSpec (+43 more)
+Cohesion: 0.14
+Nodes (28): SpeedRampPlan, test_hook_title_overlay_after_spatial_fx_for_steady_text(), test_speed_segment_round_trip(), SpeedRampPlan, Tests for speed-ramp proxy filtergraph builder., _sample_plan(), test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(), test_build_composite_filtergraph_pads_video_to_storyboard_duration_for_captions() (+20 more)
 
 ### Community 28 - "Community 28"
-Cohesion: 0.18
-Nodes (34): _catalog_key(), collect_all_blocks_from_catalog(), ensure_music_block_catalog(), load_audio_timeline(), load_beat_features(), load_chroma(), load_music_block_catalog(), load_music_blocks() (+26 more)
+Cohesion: 0.19
+Nodes (32): _catalog_key(), collect_all_blocks_from_catalog(), ensure_music_block_catalog(), load_audio_timeline(), load_beat_features(), load_chroma(), load_music_block_catalog(), load_music_blocks() (+24 more)
 
 ### Community 29 - "Community 29"
 Cohesion: 0.14
@@ -314,24 +315,24 @@ Cohesion: 0.07
 Nodes (26): dependencies, @fontsource/jetbrains-mono, react, react-dom, devDependencies, autoprefixer, happy-dom, postcss (+18 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.24
-Nodes (21): plan_storyboard(), Map assigned slots to speed segments, roles, and parallel slot ids., Partition a music block into downbeat-aligned slots., storyboard_to_segments(), _block(), _features(), Tests for storyboard planner., test_apply_hook_inversion_layout_splits_hook_slots() (+13 more)
+Cohesion: 0.13
+Nodes (32): apply_hook_inversion_layout(), _drop_counts_by_slot(), plan_storyboard(), Map assigned slots to speed segments, roles, and parallel slot ids., Partition a music block into downbeat-aligned slots., Pick a slot count that fits the block without forcing extra clips on short track, Split the hook into start/end storyboard slots aligned to the music block., _recommended_slot_count() (+24 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.11
-Nodes (28): AudioAnalysisError, AudioDspConfig, Raised when audio DSP fails., Tunable parameters for onset and transient detection., IngestError, Raised when job media validation or probing fails., RuntimeError, StageAction (+20 more)
+Cohesion: 0.10
+Nodes (30): _on_event_factory(), Background pipeline execution for API jobs., Run a queued job on a background thread., start_job(), AudioAnalysisError, Raised when audio DSP fails., IngestError, Raised when job media validation or probing fails. (+22 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.30
-Nodes (13): job_workspace(), client(), _fake_video_probe(), MonkeyPatch, TestClient, Tests for waveform and music-selection API endpoints., Changing target duration must not fail when the prior block id is absent., _seed_analysis_artifacts() (+5 more)
+Cohesion: 0.14
+Nodes (26): create_app(), FastAPI application factory for the Control Room., job_workspace(), FastAPI, client(), _create_job_with_catalog(), MonkeyPatch, TestClient (+18 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.10
 Nodes (19): compilerOptions, allowImportingTsExtensions, isolatedModules, jsx, lib, module, moduleDetection, moduleResolution (+11 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.18
-Nodes (23): analyze_audio(), fold_tempo(), Fold half/double-tempo estimates into a musical BPM band., Analyze a music track and return beat/transient metadata., _load_manifest(), _matches_expected(), Verify committed audio fixtures match manifest ground truth., test_fixture_matches_manifest() (+15 more)
+Cohesion: 0.27
+Nodes (18): analyze_audio(), fold_tempo(), Fold half/double-tempo estimates into a musical BPM band., Analyze a music track and return beat/transient metadata., _click_track(), ndarray, Path, Tests for audio beat/transient detection. (+10 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.15
@@ -374,8 +375,8 @@ Cohesion: 0.32
 Nodes (13): add_bass_thump(), add_impulse(), analyzed_transients(), build_bass(), build_clicks(), build_drop(), build_mixed(), click_track() (+5 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.20
-Nodes (27): Suggest blocks using downbeats, phrase lengths, sections, and beat-sync loop qua, suggest_music_blocks_advanced(), _patch_candidate_enumeration(), MonkeyPatch, Tests for advanced loop planner., Short tracks may have no phrase-aligned loops; waveform must still serialize., Patch single-pass and per-target enumerators for tests that mock candidates., test_adjacent_targets_prefer_different_duration_windows() (+19 more)
+Cohesion: 0.19
+Nodes (28): Suggest blocks using downbeats, phrase lengths, sections, and beat-sync loop qua, suggest_music_blocks_advanced(), _patch_candidate_enumeration(), MonkeyPatch, Transient, Tests for advanced loop planner., Short tracks may have no phrase-aligned loops; waveform must still serialize., Patch single-pass and per-target enumerators for tests that mock candidates. (+20 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.15
@@ -394,12 +395,12 @@ Cohesion: 0.15
 Nodes (12): Control Room UI (Option A), Development, Development (two terminals), Docker (recommended for beat-this neural tracking), Phased implementation, Production-style (single server), Project layout, Requirements (+4 more)
 
 ### Community 52 - "Community 52"
-Cohesion: 0.09
-Nodes (47): CaptionStyle, SpeedSegment, test_build_caption_filter_chain_karaoke_uses_per_line_offsets(), test_single_line_caption_uses_top_line_slot_in_two_line_block(), test_build_composite_filtergraph_xfade_and_drawtext(), test_storyboard_mux_duration_ignores_xfade_overlap(), _base_font_size(), build_caption_filter_chain() (+39 more)
+Cohesion: 0.10
+Nodes (33): CaptionStyle, SpeedSegment, TeaserSpec, _base_font_size(), build_hook_title_overlay(), build_teaser_filter_chain(), _caption_y_expression(), drawtext_hook_overlay() (+25 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.22
-Nodes (26): build_job_config(), persist_storyboard(), MonkeyPatch, TestClient, API tests for the Control Room., Metadata at clips JSON index N must apply to the Nth uploaded video., test_auto_allocate_preserves_transcribed_word_timing(), test_create_audio_only_draft_job() (+18 more)
+Cohesion: 0.18
+Nodes (31): build_job_config(), persist_storyboard(), BeatFeaturesMeta, Serializable metadata for beat-synchronous features., client(), MonkeyPatch, TestClient, API tests for the Control Room. (+23 more)
 
 ### Community 55 - "Community 55"
 Cohesion: 0.11
@@ -407,11 +408,11 @@ Nodes (19): Acceptance criteria, Current state (what already exists), Dependenci
 
 ### Community 56 - "Community 56"
 Cohesion: 0.14
-Nodes (29): analyze_audio_with_envelope(), Analyze audio and return the timeline plus the onset strength envelope., _is_downbeat_time(), place_interrupts(), place_translations(), Beat-synced horizontal pan impulses with energy gating and hook boost., Place zoom/rotate interrupts on energy peaks with 3–5 s cadence and early hook., Path (+21 more)
+Nodes (28): _compute_surge_lane(), Windowed low→high RMS rise — peaks at steep surges that land loud., _is_downbeat_time(), place_interrupts(), place_translations(), Beat-synced horizontal pan impulses with energy gating and hook boost., Place zoom/rotate interrupts on energy peaks with 3–5 s cadence and early hook., Path (+20 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.08
-Nodes (76): AudioAnalysisResult, Timeline plus reusable DSP features for downstream planners., BeatSyncFeatures, Beat-synchronous matrices for structure and loop planning., assigned_storyboard_slots(), _BoundaryPlan, _composite_video_start_for_assigned_index(), merge_storyboard_updates() (+68 more)
+Cohesion: 0.07
+Nodes (88): AudioAnalysisResult, Timeline plus reusable DSP features for downstream planners., BeatSyncFeatures, Beat-synchronous matrices for structure and loop planning., _BoundaryPlan, Export retention policy symbols., IngestResult, Probed media metadata for both input streams. (+80 more)
 
 ### Community 58 - "Community 58"
 Cohesion: 0.18
@@ -434,12 +435,12 @@ Cohesion: 0.20
 Nodes (9): Architecture: one policy, every stage, Notes / decisions, Phase 1 - New high-value signals (moderate effort, reuse-friendly), Phase 2 - Central RetentionPolicy module, Phase 3 - Retarget each stage to the policy, Phase 4 - Rationale + config surface, Phase 5 - Tests + validation, Viral Editing Decision Engine (+1 more)
 
 ### Community 63 - "Community 63"
-Cohesion: 0.12
-Nodes (41): apply_storyboard_patch(), assign_slot_clip(), clear_slot_clip(), clip_media_for_storyboard(), _copy_slot_assignment(), hook_family_assigned_clip_id(), _is_hook_family_role(), load_storyboard_variants() (+33 more)
+Cohesion: 0.20
+Nodes (21): clip_media_for_storyboard(), load_storyboard_variants(), persist_storyboard_for_job(), persist_storyboard_variant(), Split or merge hook slots to match retention FX settings., Keep teaser.duration_s aligned with downbeat-snapped hook start slot., Reconcile hook inversion layout and downbeat alignment with current settings., Build teaser settings payload including valid payoff downbeat positions. (+13 more)
 
 ### Community 64 - "Community 64"
-Cohesion: 0.32
-Nodes (8): apply_spatial_fx_chain(), combined_pan_x_expression(), fx_decay_ramp(), pan_event_duration(), Linear 1→0 ramp; commas unescaped — used inside quoted ffmpeg expressions., Sum time-gated horizontal offsets; input is already headroom-scaled., Apply beat-synced zoom/rotate/pan impulses., zoom_scale_factor()
+Cohesion: 0.33
+Nodes (9): FxEvent, apply_spatial_fx_chain(), combined_pan_x_expression(), fx_decay_ramp(), pan_event_duration(), Linear 1→0 ramp; commas unescaped — used inside quoted ffmpeg expressions., Sum time-gated horizontal offsets; input is already headroom-scaled., Apply beat-synced zoom/rotate/pan impulses. (+1 more)
 
 ### Community 65 - "Community 65"
 Cohesion: 0.33
@@ -450,8 +451,8 @@ Cohesion: 0.33
 Nodes (6): Automated Retention Video Editor - Phased Implementation Plans, Guiding architectural principles, Locked decisions, Phase index, Pipeline overview, Shared domain models (the contract between phases)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.09
-Nodes (27): IngestResult, Probed media metadata for both input streams., T, Path, Round-trip serialization tests for shared domain models., test_audio_timeline_round_trip(), test_clip_models_round_trip(), test_domain_models_reject_unknown_fields() (+19 more)
+Cohesion: 0.25
+Nodes (9): Path, T, test_write_and_read_artifact(), Serialize a list of domain models to ``temp_dir/<name>.json``., Load a JSON list artifact into typed domain models., Load a domain model from a JSON artifact written by ``write_artifact``., read_artifact(), read_artifact_list() (+1 more)
 
 ### Community 68 - "Community 68"
 Cohesion: 0.07
@@ -462,8 +463,8 @@ Cohesion: 0.50
 Nodes (3): notes, samples, schema
 
 ### Community 70 - "Community 70"
-Cohesion: 0.20
-Nodes (14): BeatFeaturesMeta, compute_beat_sync_features(), _default_feature_workers(), estimate_key(), load_features(), _parallel_map(), Beat-synchronous feature extraction and persistence., Aggregate frame features to beat-synchronous matrices. (+6 more)
+Cohesion: 0.22
+Nodes (21): Path, _minimal_job_payload(), MonkeyPatch, Path, Tests for job configuration loading and validation., test_absolute_paths_in_job(), test_bad_color_rejected(), test_bad_teaser_mask_rejected() (+13 more)
 
 ### Community 89 - "Community 89"
 Cohesion: 0.06
@@ -474,8 +475,8 @@ Cohesion: 0.21
 Nodes (13): analyze_structure(), _energy_descriptor(), _format_section_duration(), Structural segmentation from beat-synchronous self-similarity., Segment track into labeled sections with repetition detection., _section_label(), _snap_time_to_downbeat(), Tests for structural segmentation. (+5 more)
 
 ### Community 91 - "Community 91"
-Cohesion: 0.21
-Nodes (11): Any, Path, agent_debug_log(), NDJSON debug logging for agent debug sessions., _append_looped_music_input(), Low-resolution speed-ramp proxy render for UI preview., Render a cached low-res proxy clip with trimmed music mux., Append a seamlessly looped music input (index = inputs already in command). (+3 more)
+Cohesion: 0.15
+Nodes (18): CaptionChunk, CaptionStyle, Path, SpeedRampPlan, SpeedSegment, test_render_plan_round_trip(), test_teaser_spec_round_trip(), _append_looped_music_input() (+10 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.18
@@ -486,8 +487,8 @@ Cohesion: 0.07
 Nodes (26): Architecture (unchanged from design), Cycle A — `blockFilter.ts`, Cycle B — Python model fields, Cycle C — `get_waveform` populates `all_blocks`, Cycle D — Frontend types, Cycle E — `AudioScopePanel` UI, Cycle F — `App.tsx` state, Forbidden during execution (+18 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.18
-Nodes (16): apply_effects_patch(), assigned_slot_boundary_times_abs(), effective_window_end_s(), hook_teaser_for_storyboard(), Retention FX helpers for composited preview., Merge partial teaser / spatial FX / retention settings from an API patch., Build teaser spec from the hook slot when enabled., Absolute audio times where assigned slots begin or end. (+8 more)
+Cohesion: 0.24
+Nodes (12): apply_effects_patch(), assigned_slot_boundary_times_abs(), effective_window_end_s(), hook_teaser_for_storyboard(), Retention FX helpers for composited preview., Merge partial teaser / spatial FX / retention settings from an API patch., Build teaser spec from the hook slot when enabled., Absolute audio times where assigned slots begin or end. (+4 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 0.09
@@ -498,16 +499,16 @@ Cohesion: 0.11
 Nodes (17): Architecture Overview, Backend Notes, Data Flow, File Changes Summary, Phase 1: Write failing test for filterBlocksBySlotCount utility (Red), Phase 2: Implement filterBlocksBySlotCount utility (Green), Phase 3: Add expected_slot_count to MusicBlock type in types.ts, Phase 4: Add SLOT_COUNT_PRESETS constant [1..10] to durations.ts (+9 more)
 
 ### Community 97 - "Community 97"
-Cohesion: 0.27
-Nodes (11): invalidate_speed_previews(), load_speed_ramp_options(), load_speed_segments(), Load speed-ramp artifacts and refresh style selection., Apply style/overrides, recompute options, and persist selected segments., refresh_speed_selection(), speed_proxy_cache_key(), _trim_sections() (+3 more)
+Cohesion: 0.17
+Nodes (20): apply_storyboard_patch(), assign_slot_clip(), clear_slot_clip(), _copy_slot_assignment(), hook_clip_id_for_slot(), hook_family_assigned_clip_id(), _is_hook_family_role(), Storyboard artifact helpers and refresh logic. (+12 more)
 
 ### Community 98 - "Community 98"
 Cohesion: 0.14
 Nodes (12): caveman-help, Example output, How to invoke, See also, What it does, Caveman Help, Configure Default Mode, Deactivate (+4 more)
 
 ### Community 99 - "Community 99"
-Cohesion: 0.14
-Nodes (29): _duration_from_probe(), _ensure_output_writable(), _log_vfr_warning(), _parse_duration(), parse_frame_rate(), _pick_stream(), probe_media(), Media validation and ffprobe-based ingestion. (+21 more)
+Cohesion: 0.25
+Nodes (17): Validate input files, probe media, and derive the output timeline., validate_job(), probe_media_from_payload(), JobConfig, MonkeyPatch, Path, Tests for media probing and job ingestion., Build MediaInfo without calling ffprobe (test helper). (+9 more)
 
 ### Community 100 - "Community 100"
 Cohesion: 0.15
@@ -534,8 +535,8 @@ Cohesion: 0.18
 Nodes (10): Execution Rules & State Transitions, Forbidden Behaviors, Frontend (ViralAutomation), Objective, Phase 1: Contextual Impact Mapping, Phase 2: The Red State (Write the Test), Phase 3: The Green State (Write Minimum Code), Phase 4: The Refactor State (Clean and Assert) (+2 more)
 
 ### Community 106 - "Community 106"
-Cohesion: 0.10
-Nodes (32): CompletedProcess, Path, test_caption_filtergraph_renders_special_characters(), test_escape_drawtext_text_handles_special_characters(), test_ensure_ffmpeg_succeeds_when_binaries_on_path(), _binary_version(), ensure_ffmpeg(), escape_drawtext_text() (+24 more)
+Cohesion: 0.09
+Nodes (36): CompletedProcess, Path, _composite_graph_for_phrase(), Regression tests for drawtext escaping in caption filters., test_caption_filtergraph_renders_special_characters(), test_caption_filtergraph_survives_apostrophe_in_phrase(), test_caption_filtergraph_survives_percent_and_colon(), test_escape_drawtext_text_handles_special_characters() (+28 more)
 
 ### Community 107 - "Community 107"
 Cohesion: 0.25
@@ -666,12 +667,12 @@ Cohesion: 0.15
 Nodes (23): FreeTypeFont, Path, font_path(), Tests for caption line wrapping and word offset layout., test_fit_caption_layout_scales_down_for_narrow_width(), test_measure_word_offsets_match_joined_phrase(), test_wrap_words_to_lines_splits_before_max_width(), CaptionLineLayout (+15 more)
 
 ### Community 141 - "Community 141"
-Cohesion: 0.19
-Nodes (15): Path, client(), _create_job_with_catalog(), MonkeyPatch, TestClient, Tests for all_blocks catalog exposure on waveform payload., _seed_music_block_catalog(), test_get_waveform_all_blocks_blocks_have_expected_slot_count() (+7 more)
+Cohesion: 0.26
+Nodes (12): _duration_from_probe(), _ensure_output_writable(), _log_vfr_warning(), _parse_duration(), parse_frame_rate(), _pick_stream(), probe_media(), Media validation and ffprobe-based ingestion. (+4 more)
 
 ### Community 142 - "Community 142"
-Cohesion: 0.15
-Nodes (18): _place_timeline_slot(), Place a slot on the output timeline without stretching past its boundary., Place slot windows on the music block grid instead of sequential packing., Recompute out_start_s/out_end_s from ordered target durations., relayout_beat_aligned_timeline(), relayout_slot_timeline(), _slot_from_boundary(), _snap_time_to_downbeat() (+10 more)
+Cohesion: 0.21
+Nodes (14): Place slot windows on the music block grid instead of sequential packing., relayout_beat_aligned_timeline(), _snap_time_to_downbeat(), _assert_slots_tile_timeline(), Short fixtures (e.g. validation_drop.wav) should not force three overlapping cli, Even when three slots are requested, relayout must not extend past the block., End-to-end: validation_drop.wav should plan a single non-overlapping hook slot., Slots partition the block: no overlap, no zero width, full coverage. (+6 more)
 
 ### Community 143 - "Community 143"
 Cohesion: 0.24
@@ -682,43 +683,51 @@ Cohesion: 0.19
 Nodes (14): build_loop_audition_filter(), build_loop_seam_only_filter(), Render-grade seamless loop seam helpers., Extract a loop audition clip with crossfade at the wrap point., Snap a cut time to the nearest zero crossing within a small window., FFmpeg filter graph: segment + equal-power crossfade loop audition., FFmpeg filter: ~4s tail→crossfade→head, then silence before the next cycle., Extract ~4s around the loop wrap plus a short gap before each repeat. (+6 more)
 
 ### Community 145 - "Community 145"
-Cohesion: 0.20
-Nodes (11): apply_hook_inversion_layout(), _full_hook_crop(), _hook_assigned_clip_id(), hook_payoff_downbeats_s(), _hook_source_range_for_split(), Valid hook-start durations on the music downbeat grid within hook budget., Snap a requested hook payoff to the nearest valid downbeat position., Contiguous hook source span for 1:1 payoff/build crop windows. (+3 more)
+Cohesion: 0.13
+Nodes (23): assigned_storyboard_slots(), _composite_video_start_for_assigned_index(), _full_hook_crop(), _hook_assigned_clip_id(), _hook_source_range_for_split(), merge_storyboard_updates(), _place_timeline_slot(), Storyboard planner — partition a music block into timed clip slots. (+15 more)
 
 ### Community 146 - "Community 146"
-Cohesion: 0.39
-Nodes (7): _beat_track(), BeatTrackResult, ndarray, Tests for beat-synchronous feature extraction., _synthetic_track(), test_beat_sync_features_shapes(), test_parallel_and_serial_beat_sync_features_match()
+Cohesion: 0.18
+Nodes (10): disable_demucs_vocal_separation(), AudioDspConfig, MonkeyPatch, Path, Shared pytest fixtures., Isolated directory for model artifact round-trip tests., AudioDspConfig with Demucs disabled for fast unit tests., Skip Demucs during analysis in the default test suite. (+2 more)
 
 ### Community 147 - "Community 147"
-Cohesion: 0.39
-Nodes (7): _fixture_payload(), Waveform payload lanes and chroma from analysis artifacts., test_build_scope_lane_series_empty_when_missing(), test_validation_bass_low_band_dominates(), test_validation_drop_has_high_band_spike_near_hit(), test_waveform_payload_includes_beats_lanes_and_chroma(), test_waveform_payload_includes_vocal_lane_when_present()
+Cohesion: 0.48
+Nodes (6): _fixture_payload(), Waveform payload lanes and chroma from analysis artifacts., test_validation_bass_low_band_dominates(), test_validation_drop_has_high_band_spike_near_hit(), test_waveform_payload_includes_beats_lanes_and_chroma(), test_waveform_payload_includes_vocal_lane_when_present()
+
+### Community 148 - "Community 148"
+Cohesion: 0.21
+Nodes (7): build_render_plan(), Final render orchestration for API jobs., Build a ``RenderPlan`` and assembly metadata from a filled storyboard., Encode the final MP4 for a storyboard with all slots assigned., render_storyboard_final(), _segment_transform_for_slot(), ValueError
 
 ### Community 149 - "Community 149"
-Cohesion: 0.50
-Nodes (4): create_app(), FastAPI application factory for the Control Room., FastAPI, client()
+Cohesion: 0.33
+Nodes (7): _downbeats_in_window(), hook_payoff_downbeats_s(), Valid hook-start durations on the music downbeat grid within hook budget., Snap a requested hook payoff to the nearest valid downbeat position., _relative_downbeats(), snap_hook_payoff_s(), test_hook_payoff_downbeats_s_lists_valid_positions()
 
 ### Community 150 - "Community 150"
-Cohesion: 0.50
-Nodes (5): is_phrase_aligned_plan(), loop_qualities_from_plans(), True when the plan offers at least one preset-length phrase loop (not full-track, Best loop quality per preset, excluding full-track fallback plans., MusicBlockPlan
+Cohesion: 0.40
+Nodes (6): is_phrase_aligned_plan(), loop_qualities_from_plans(), True when the plan offers at least one preset-length phrase loop (not full-track, Best loop quality per preset, excluding full-track fallback plans., MusicBlockPlan, TargetLoopQuality
 
 ### Community 152 - "Community 152"
-Cohesion: 0.50
-Nodes (4): Pick a slot count that fits the block without forcing extra clips on short track, _recommended_slot_count(), test_recommended_slot_count_respects_explicit_cap(), test_recommended_slot_count_scales_with_duration()
+Cohesion: 0.33
+Nodes (6): effective_output_duration(), True when every storyboard slot has an assigned clip., Total timeline compression from crossfade overlaps., storyboard_slots_complete(), xfade_overlap_s(), test_storyboard_slots_complete_requires_every_slot()
+
+### Community 153 - "Community 153"
+Cohesion: 0.47
+Nodes (5): _load_manifest(), _matches_expected(), Verify committed audio fixtures match manifest ground truth., test_fixture_matches_manifest(), test_fixture_onset_grid_for_clicks()
 
 ## Knowledge Gaps
-- **553 isolated node(s):** `schema`, `notes`, `samples`, `viral-editor`, `Any` (+548 more)
+- **552 isolated node(s):** `schema`, `notes`, `samples`, `viral-editor`, `Logger` (+547 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **9 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `DomainModel` connect `Community 57` to `Community 0`, `Community 33`, `Community 2`, `Community 67`, `Community 99`, `Community 3`, `Community 70`, `Community 4`, `Community 1`, `Community 14`, `Community 15`, `Community 18`, `Community 22`, `Community 25`, `Community 27`, `Community 28`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Why does `analyze_audio_with_envelope()` connect `Community 56` to `Community 33`, `Community 36`, `Community 70`, `Community 7`, `Community 142`, `Community 15`, `Community 147`, `Community 23`, `Community 25`, `Community 57`?**
+- **Why does `DomainModel` connect `Community 57` to `Community 0`, `Community 33`, `Community 2`, `Community 3`, `Community 4`, `Community 1`, `Community 70`, `Community 91`, `Community 141`, `Community 15`, `Community 18`, `Community 20`, `Community 53`, `Community 22`, `Community 23`, `Community 25`, `Community 27`, `Community 28`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `analyze_audio_with_envelope()` connect `Community 25` to `Community 33`, `Community 36`, `Community 7`, `Community 142`, `Community 15`, `Community 147`, `Community 23`, `Community 56`, `Community 57`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
-- **Why does `run_pipeline()` connect `Community 33` to `Community 1`, `Community 2`, `Community 99`, `Community 4`, `Community 9`, `Community 141`, `Community 14`, `Community 47`, `Community 148`, `Community 22`, `Community 56`, `Community 25`, `Community 90`, `Community 59`, `Community 28`, `Community 63`?**
-  _High betweenness centrality (0.023) - this node is a cross-community bridge._
+- **Why does `JobConfig` connect `Community 0` to `Community 33`, `Community 97`, `Community 2`, `Community 4`, `Community 5`, `Community 70`, `Community 99`, `Community 136`, `Community 12`, `Community 141`, `Community 53`, `Community 25`, `Community 57`, `Community 28`, `Community 94`, `Community 63`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **Are the 124 inferred relationships involving `JobConfig` (e.g. with `AbstractEventLoop` and `CaptionChunkResponse`) actually correct?**
   _`JobConfig` has 124 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 109 inferred relationships involving `CaptionStyle` (e.g. with `CaptionChunkResponse` and `CaptionPatchRequest`) actually correct?**

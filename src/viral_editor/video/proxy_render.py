@@ -100,33 +100,6 @@ def render_composite(
     )
 
     total_duration_s = storyboard_mux_duration_s(segments)
-    compressed_duration_s = composite_output_duration_s(
-        segments,
-        transitions=transitions,
-    )
-
-    # region agent log
-    from viral_editor.utils.agent_debug import agent_debug_log
-
-    agent_debug_log(
-        "proxy_render.py:render_composite",
-        "mux_duration",
-        {
-            "storyboard_mux_duration_s": round(total_duration_s, 6),
-            "compressed_video_duration_s": round(compressed_duration_s, 6),
-            "timeline_pad_s": round(max(0.0, total_duration_s - compressed_duration_s), 6),
-            "segment_count": len(segments),
-            "xfade_transition_count": sum(
-                1 for transition in transitions[1:] if transition == "xfade"
-            ),
-            "has_captions": bool(caption_chunks_by_slot and any(caption_chunks_by_slot.values())),
-            "spatial_fx_event_count": len(fx_events or []),
-            "last_segment_out_end_s": round(segments[-1].out_end_s, 6) if segments else 0.0,
-        },
-        hypothesis_id="A",
-        run_id="post-fix",
-    )
-    # endregion
 
     command: list[str] = ["-y"]
     for path in video_inputs:

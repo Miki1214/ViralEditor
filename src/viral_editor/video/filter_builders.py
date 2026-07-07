@@ -455,7 +455,6 @@ def build_caption_filter_chain(
     slot_offsets: dict[str, float] | None = None,
 ) -> str:
     """Overlay timed phrase captions on a composed segment reference."""
-    from viral_editor.utils.agent_debug import agent_debug_log
     from viral_editor.utils.fonts import resolve_font_path
     from viral_editor.utils.text_metrics import layout_caption_chunk
 
@@ -474,32 +473,9 @@ def build_caption_filter_chain(
             if slot_offsets is not None and slot_id in slot_offsets
             else segment.out_start_s
         )
-        slot_chunks = chunks_by_slot.get(slot_id, [])
-        for chunk_pos, chunk in enumerate(slot_chunks):
+        for chunk in chunks_by_slot.get(slot_id, []):
             abs_start = slot_offset + chunk.start_s
             abs_end = slot_offset + chunk.end_s
-            packed_start = segment.out_start_s + chunk.start_s
-            if chunk_pos == 0 or chunk_pos == len(slot_chunks) - 1:
-                # region agent log
-                agent_debug_log(
-                    "filter_builders.py:build_caption_filter_chain",
-                    "caption_enable_window",
-                    {
-                        "slot_id": slot_id,
-                        "segment_index": segment_index,
-                        "chunk_pos": chunk_pos,
-                        "chunk_index": chunk_index,
-                        "storyboard_abs_start": round(abs_start, 6),
-                        "storyboard_abs_end": round(abs_end, 6),
-                        "packed_abs_start": round(packed_start, 6),
-                        "storyboard_vs_packed_delta": round(abs_start - packed_start, 6),
-                        "slot_offset": round(slot_offset, 6),
-                        "segment_out_start_s": round(segment.out_start_s, 6),
-                    },
-                    hypothesis_id="C",
-                    run_id="post-fix",
-                )
-                # endregion
             enable_expr = _enable_between_expr(abs_start, abs_end)
             words = [word.text for word in chunk.words]
 

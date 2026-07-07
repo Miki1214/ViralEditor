@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783445287.1403904,
-    "ast_hash": "721f051566fa1ebf17a233b280d25635",
+    "mtime": 1783445865.4413722,
+    "ast_hash": "dfb6372eaec5dc4f51885017cc01b6b5",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/proxy_render.py": {
-    "mtime": 1783445275.739285,
-    "ast_hash": "f0a2cc61ec85fc8b0247c0502da01178",
+    "mtime": 1783445868.540059,
+    "ast_hash": "9b9266d5f8540e295b319d402a073855",
     "semantic_hash": ""
   },
   "src/viral_editor/video/spatial_fx.py": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783445286.5323148,
-    "ast_hash": "17144a2c9e2aa97087582c023ef4e3b7",
+    "mtime": 1783445865.4208276,
+    "ast_hash": "3e3f5300601f88f56a0484b88b55bc3e",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
@@ -1142,11 +1142,6 @@
   "web/src/constants/whisperLanguages.ts": {
     "mtime": 1783438733.2682817,
     "ast_hash": "b794faa9e632bd0f13dd509446bbb266",
-    "semantic_hash": ""
-  },
-  "src/viral_editor/utils/agent_debug.py": {
-    "mtime": 1783444756.703461,
-    "ast_hash": "f2272e2cae5622f051b6e46387bbb5ee",
     "semantic_hash": ""
   }
 }
