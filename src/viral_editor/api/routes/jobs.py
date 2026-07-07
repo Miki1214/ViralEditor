@@ -1404,6 +1404,7 @@ async def transcribe_caption(
             result = transcribe_from_audio_track(
                 job.config,
                 storyboard,
+                workspace=job.workspace,
                 options=transcribe_options,
             )
         elif normalized_source == "clips":

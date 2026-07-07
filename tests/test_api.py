@@ -1170,7 +1170,7 @@ def test_transcribe_caption_accepts_language_and_translate(
 
     captured: dict[str, TranscribeOptions | None] = {}
 
-    def fake_transcribe_from_audio_track(config, storyboard, *, options=None):
+    def fake_transcribe_from_audio_track(config, storyboard, *, workspace=None, options=None):
         captured["options"] = options
         return type(
             "R",

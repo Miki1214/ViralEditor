@@ -19,6 +19,7 @@ VIRAL_WHISPER_DEVICE_ENV = "VIRAL_WHISPER_DEVICE"
 VIRAL_WHISPER_COMPUTE_ENV = "VIRAL_WHISPER_COMPUTE_TYPE"
 VIRAL_WHISPER_BEAM_SIZE_ENV = "VIRAL_WHISPER_BEAM_SIZE"
 VIRAL_WHISPER_VAD_FILTER_ENV = "VIRAL_WHISPER_VAD_FILTER"
+VIRAL_WHISPER_VOCAL_STEM_ENV = "VIRAL_WHISPER_VOCAL_STEM"
 
 WHISPER_MODEL_CHOICES = (
     "tiny",
@@ -258,6 +259,8 @@ def transcribe_audio(
     *,
     options: TranscribeOptions | None = None,
     runtime: WhisperRuntimeConfig | None = None,
+    vad_filter: bool | None = None,
+    condition_on_previous_text: bool | None = None,
 ) -> tuple[str, list[CaptionWord]]:
     """Transcribe audio with word-level timestamps using faster-whisper."""
     if not path.is_file():
@@ -271,16 +274,19 @@ def transcribe_audio(
         "word_timestamps": True,
         "task": "translate" if opts.translate else "transcribe",
         "beam_size": config.beam_size,
-        "vad_filter": config.vad_filter,
-        "condition_on_previous_text": True,
+        "vad_filter": config.vad_filter if vad_filter is None else vad_filter,
+        "condition_on_previous_text": (
+            True if condition_on_previous_text is None else condition_on_previous_text
+        ),
     }
     if opts.language:
         transcribe_kwargs["language"] = opts.language
     segments, _ = model.transcribe(str(path), **transcribe_kwargs)
+    segments_list = list(segments)
 
     words: list[CaptionWord] = []
     script_parts: list[str] = []
-    for segment in segments:
+    for segment in segments_list:
         if segment.words:
             for word in segment.words:
                 text = (word.word or "").strip()

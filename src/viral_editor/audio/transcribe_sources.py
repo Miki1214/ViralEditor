@@ -16,7 +16,13 @@ from viral_editor.audio.captions import (
     transcribed_script_in_window,
 )
 from viral_editor.audio.storyboard import storyboard_to_segments
-from viral_editor.audio.transcribe import TranscribeOptions, extract_audio_track, transcribe_audio
+from viral_editor.audio.transcribe import (
+    TranscribeOptions,
+    VIRAL_WHISPER_VOCAL_STEM_ENV,
+    _parse_bool_env,
+    extract_audio_track,
+    transcribe_audio,
+)
 from viral_editor.config import JobConfig
 from viral_editor.ingest.loader import probe_media
 from viral_editor.models import CaptionWord, MediaInfo, Storyboard
@@ -46,9 +52,31 @@ def transcribe_from_audio_track(
     config: JobConfig,
     storyboard: Storyboard | None,
     *,
+    workspace: Path | None = None,
     options: TranscribeOptions | None = None,
 ) -> TranscribeSourceResult:
-    script_text, words = transcribe_audio(config.audio_path, options=options)
+    asr_path = config.audio_path
+    asr_source = "mix"
+
+    if _parse_bool_env(VIRAL_WHISPER_VOCAL_STEM_ENV, default=True) and workspace is not None:
+        from viral_editor.audio.vocal_separation import export_vocal_stem_wav_for_asr
+
+        vocal_wav = _scratch_dir(workspace) / "vocal_stem_asr.wav"
+        exported = export_vocal_stem_wav_for_asr(
+            config.audio_path,
+            vocal_wav,
+            job_cache_path=workspace / "temp" / "vocal_stem_demucs.npz",
+        )
+        if exported is not None:
+            asr_path, _vocal_share = exported
+            asr_source = "vocal_stem"
+
+    transcribe_kwargs: dict[str, object] = {}
+    if asr_source == "vocal_stem":
+        transcribe_kwargs["vad_filter"] = False
+        transcribe_kwargs["condition_on_previous_text"] = False
+
+    script_text, words = transcribe_audio(asr_path, options=options, **transcribe_kwargs)
     slot_overrides: dict[str, str] = {}
     word_timing_overrides: dict[str, list[dict[str, float | str]]] = {}
 

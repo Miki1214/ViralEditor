@@ -75,6 +75,96 @@ def test_transcribe_audio_passes_language_and_translate(monkeypatch, tmp_path) -
     assert captured["kwargs"]["condition_on_previous_text"] is True
 
 
+def test_transcribe_audio_honors_vad_and_condition_overrides(monkeypatch, tmp_path) -> None:
+    audio_path = tmp_path / "clip.wav"
+    audio_path.write_bytes(b"fake")
+    clear_whisper_model_cache()
+
+    captured: dict[str, object] = {}
+
+    class FakeSegment:
+        words = [
+            type("W", (), {"word": " hello", "start": 0.1, "end": 0.4})(),
+        ]
+        text = "hello"
+        start = 0.1
+        end = 0.4
+
+    class FakeModel:
+        def transcribe(self, path, **kwargs):
+            captured["kwargs"] = kwargs
+            return [FakeSegment()], None
+
+    monkeypatch.setattr("viral_editor.audio.transcribe.transcribe_available", lambda: True)
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe.get_whisper_model",
+        lambda runtime=None: FakeModel(),
+    )
+
+    transcribe_audio(
+        audio_path,
+        vad_filter=False,
+        condition_on_previous_text=False,
+    )
+
+    assert captured["kwargs"]["vad_filter"] is False
+    assert captured["kwargs"]["condition_on_previous_text"] is False
+
+
+def test_transcribe_from_audio_track_uses_vocal_stem_when_exported(
+    monkeypatch, tmp_path
+) -> None:
+    from viral_editor.audio.transcribe_sources import transcribe_from_audio_track
+    from viral_editor.config import JobConfig
+
+    workspace = tmp_path / "job"
+    (workspace / "input").mkdir(parents=True)
+    audio_path = workspace / "input" / "track.mp3"
+    audio_path.write_bytes(b"fake")
+    vocal_wav = workspace / "temp" / "transcribe_scratch" / "vocal_stem_asr.wav"
+
+    captured: dict[str, object] = {}
+
+    def fake_export(audio_path, dest_wav, **kwargs):
+        dest_wav.parent.mkdir(parents=True, exist_ok=True)
+        dest_wav.write_bytes(b"wav")
+        return dest_wav, 0.42
+
+    def fake_transcribe(path, *, options=None, **kwargs):
+        captured["path"] = path
+        captured.update(kwargs)
+        return "hello world", [CaptionWord(text="hello", start_s=0.1, end_s=0.4)]
+
+    monkeypatch.setattr(
+        "viral_editor.audio.vocal_separation.export_vocal_stem_wav_for_asr",
+        fake_export,
+    )
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.transcribe_audio",
+        fake_transcribe,
+    )
+
+    config = JobConfig.model_validate(
+        {
+            "audio_path": str(audio_path),
+            "output_path": str(workspace / "output.mp4"),
+            "clips": [],
+            "hook": {"text": "Hook"},
+        }
+    )
+    result = transcribe_from_audio_track(
+        config,
+        None,
+        workspace=workspace,
+    )
+
+    assert captured["path"] == vocal_wav
+    assert captured["vad_filter"] is False
+    assert captured["condition_on_previous_text"] is False
+    assert result.script_text == "hello world"
+    assert len(result.words) == 1
+
+
 def test_resolve_whisper_runtime_config_prefers_gpu_profile(monkeypatch) -> None:
     monkeypatch.delenv(VIRAL_WHISPER_MODEL_ENV, raising=False)
     monkeypatch.delenv(VIRAL_WHISPER_DEVICE_ENV, raising=False)
@@ -83,7 +173,7 @@ def test_resolve_whisper_runtime_config_prefers_gpu_profile(monkeypatch) -> None
 
     config = resolve_whisper_runtime_config()
 
-    assert config.model_size == "medium"
+    assert config.model_size == "large-v3"
     assert config.device == "cuda"
     assert config.compute_type == "float16"
     assert config.beam_size == 5

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import time
-
 from viral_editor.audio.captions import (
     WPS_PRESETS,
     build_caption_chunks_for_slots,
@@ -93,39 +90,6 @@ def build_caption_response(config: JobConfig, storyboard: Storyboard | None) -> 
         words = [word.text for chunk in chunks for word in chunk.words]
         if words:
             effective_overrides[slot.id] = " ".join(words)
-
-    # #region agent log
-    try:
-        with open("debug-5521a3.log", "a", encoding="utf-8") as _dbg:
-            for _slot in slots:
-                _chunks = chunks_by_slot.get(_slot.id, [])
-                _chunk_words = sum(len(c.words) for c in _chunks)
-                _stored = stored_overrides.get(_slot.id, "")
-                _effective = effective_overrides.get(_slot.id, "")
-                _dbg.write(
-                    json.dumps(
-                        {
-                            "sessionId": "5521a3",
-                            "runId": "post-fix",
-                            "hypothesisId": "H1-H2",
-                            "location": "caption.py:build_caption_response",
-                            "message": "slot override vs chunks",
-                            "data": {
-                                "slot_id": _slot.id,
-                                "stored_override_len": len(_stored.strip()),
-                                "effective_override_len": len(_effective.strip()),
-                                "chunk_word_count": _chunk_words,
-                                "has_stored": bool(_stored.strip()),
-                                "chunks_only": not _stored.strip() and _chunk_words > 0,
-                            },
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-    except OSError:
-        pass
-    # #endregion
 
     return CaptionResponse(
         script_text=config.caption.script_text,
