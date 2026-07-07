@@ -728,6 +728,81 @@ def test_transcribe_caption_persists_script_and_slot_overrides(
     assert first_slot_words[0]["start_s"] < 1.0
 
 
+def test_auto_allocate_preserves_transcribed_word_timing(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.transcribe_available", lambda: True)
+
+    from viral_editor.api.store import JobStore
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import CaptionWord, MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_allocate_timing"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    audio_path = workspace / "input" / "track.mp3"
+    audio_path.write_bytes(b"fake")
+
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=10.0,
+        end_s=16.0,
+        duration_s=6.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=2,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+
+    words = [
+        CaptionWord(text="hello", start_s=10.5, end_s=10.8),
+        CaptionWord(text="world", start_s=11.0, end_s=11.3),
+        CaptionWord(text="again", start_s=13.2, end_s=13.5),
+        CaptionWord(text="now", start_s=13.8, end_s=14.1),
+    ]
+
+    monkeypatch.setattr(
+        "viral_editor.audio.transcribe_sources.transcribe_audio",
+        lambda path, *, options=None: ("hello world again now", words),
+    )
+
+    transcribe_response = client.post(
+        f"/api/jobs/{job.id}/caption/transcribe",
+        data={"source": "audio_track"},
+    )
+    assert transcribe_response.status_code == 200
+
+    allocate_response = client.patch(
+        f"/api/jobs/{job.id}/caption",
+        json={
+            "script_text": "hello world again now",
+            "auto_allocate": True,
+        },
+    )
+    assert allocate_response.status_code == 200
+    allocated = allocate_response.json()
+    first_words = allocated["slot_budgets"][0]["chunks"][0]["words"]
+    assert first_words[0]["start_s"] < 1.0
+    assert first_words[0]["start_s"] != 0.0
+
+
 def test_transcribe_caption_from_clips_builds_per_slot_overrides(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,

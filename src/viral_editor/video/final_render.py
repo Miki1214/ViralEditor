@@ -9,7 +9,11 @@ from viral_editor.audio.preview import ensure_loop_seam_audio
 from viral_editor.config import RenderConfig
 from viral_editor.models import CaptionChunk, CaptionStyle, RenderPlan, TitleSpec
 from viral_editor.utils.ffmpeg import FFmpegError, escape_filter_path, run_ffmpeg_with_progress, run_ffprobe_json
-from viral_editor.video.filter_builders import build_composite_filtergraph, composite_output_duration_s
+from viral_editor.video.filter_builders import (
+    build_composite_filtergraph,
+    composite_output_duration_s,
+    storyboard_mux_duration_s,
+)
 
 
 def plan_output_duration_s(
@@ -19,11 +23,7 @@ def plan_output_duration_s(
     xfade_s: float = 0.25,
 ) -> float:
     """Estimate mux duration for a render plan (teaser + body)."""
-    body = composite_output_duration_s(
-        plan.speed_segments,
-        xfade_s=xfade_s,
-        transitions=transitions,
-    )
+    body = storyboard_mux_duration_s(plan.speed_segments)
     teaser_s = plan.teaser.out_duration_s if plan.teaser is not None else 0.0
     return teaser_s + body
 
@@ -149,6 +149,7 @@ def build_final_filtergraph(
     caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
     caption_style: CaptionStyle | None = None,
     slot_ids: list[str] | None = None,
+    slot_offsets: dict[str, float] | None = None,
     segment_roles: list[str] | None = None,
     hook_start_mask: str | None = None,
     title: TitleSpec | None = None,
@@ -174,6 +175,7 @@ def build_final_filtergraph(
         caption_chunks_by_slot=caption_chunks_by_slot,
         caption_style=caption_style,
         slot_ids=slot_ids,
+        slot_offsets=slot_offsets,
         segment_roles=segment_roles,
         hook_start_mask=hook_start_mask,
         fx_events=plan.fx_events,
@@ -205,6 +207,7 @@ def render_final(
     caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
     caption_style: CaptionStyle | None = None,
     slot_ids: list[str] | None = None,
+    slot_offsets: dict[str, float] | None = None,
     segment_roles: list[str] | None = None,
     hook_start_mask: str | None = None,
     title: TitleSpec | None = None,
@@ -236,6 +239,7 @@ def render_final(
         caption_chunks_by_slot=caption_chunks_by_slot,
         caption_style=caption_style,
         slot_ids=slot_ids,
+        slot_offsets=slot_offsets,
         segment_roles=segment_roles,
         hook_start_mask=hook_start_mask,
         title=title,

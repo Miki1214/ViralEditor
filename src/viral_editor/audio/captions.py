@@ -384,24 +384,94 @@ def distribute_script_to_slot_overrides(
     words_per_second: float = DEFAULT_WORDS_PER_SECOND,
 ) -> dict[str, str]:
     """Allocate a full script across slots using each slot's reading-speed budget."""
+    slot_overrides, _ = distribute_script_with_timing_to_slots(
+        script_text,
+        slots,
+        words_per_second=words_per_second,
+    )
+    return slot_overrides
+
+
+def flatten_word_timing_to_storyboard_words(
+    slots: list[StorySlot],
+    word_timing_overrides: dict[str, list[dict[str, float | str]]],
+) -> list[CaptionWord]:
+    """Lift per-slot local ASR timings onto the storyboard (audio) timeline."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    words: list[CaptionWord] = []
+    for slot in ordered:
+        timing = word_timing_overrides.get(slot.id)
+        if not timing:
+            continue
+        for entry in timing:
+            text = str(entry["text"])
+            words.append(
+                CaptionWord(
+                    text=text,
+                    start_s=round(float(entry["start_s"]) + slot.out_start_s, 4),
+                    end_s=round(float(entry["end_s"]) + slot.out_start_s, 4),
+                )
+            )
+    return words
+
+
+def distribute_script_with_timing_to_slots(
+    script_text: str,
+    slots: list[StorySlot],
+    *,
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] | None = None,
+) -> tuple[dict[str, str], dict[str, list[dict[str, float | str]]]]:
+    """Allocate script text across slots, preserving ASR word timing when still valid."""
     ordered = sorted(slots, key=lambda slot: slot.order)
     if not ordered:
-        return {}
+        return {}, {}
 
     tokens = tokenize_script(script_text)
     if not tokens:
-        return {}
+        return {}, {}
+
+    timing_overrides = word_timing_overrides or {}
+    if timing_overrides:
+        flattened = flatten_word_timing_to_storyboard_words(slots, timing_overrides)
+        flattened_tokens = [word.text for word in flattened]
+        if flattened_tokens == tokens:
+            budgets = {
+                slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
+                for slot in ordered
+            }
+            allocations = _allocate_items(flattened, ordered, budgets)
+            slot_overrides: dict[str, str] = {}
+            rebased_timing: dict[str, list[dict[str, float | str]]] = {}
+            for slot in ordered:
+                slot_words = allocations.get(slot.id, [])
+                if not slot_words:
+                    continue
+                rebased = [
+                    _rebase_word_to_slot_local(
+                        word,
+                        slot=slot,
+                        time_offset_s=slot.out_start_s,
+                    )
+                    for word in slot_words
+                ]
+                slot_overrides[slot.id] = " ".join(word.text for word in rebased)
+                rebased_timing[slot.id] = serialize_word_timing(rebased)
+            return slot_overrides, rebased_timing
 
     budgets = {
         slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
         for slot in ordered
     }
     allocations = _allocate_tokens(tokens, ordered, budgets)
-    return {
-        slot_id: " ".join(slot_tokens)
-        for slot_id, slot_tokens in allocations.items()
-        if slot_tokens
-    }
+    return (
+        {
+            slot_id: " ".join(slot_tokens)
+            for slot_id, slot_tokens in allocations.items()
+            if slot_tokens
+        },
+        {},
+    )
 
 
 def _tokens_to_chunks(

@@ -19,7 +19,7 @@ from viral_editor.models import RenderPlan, Storyboard
 from viral_editor.pipeline_events import PipelineEvent
 from viral_editor.utils.ffmpeg import FFmpegError, ensure_ffmpeg
 from viral_editor.utils.logging import get_logger
-from viral_editor.video.filter_builders import composite_output_duration_s
+from viral_editor.video.filter_builders import storyboard_mux_duration_s
 from viral_editor.video.final_render import render_final
 
 from viral_editor.api.storyboard import clip_media_for_storyboard, load_storyboard
@@ -72,7 +72,7 @@ def build_render_plan(
     fx_events = remap_fx_events_for_composite(fx_events, storyboard)
     teaser_spec, _ = hook_teaser_for_storyboard(config, storyboard, clip_media)
 
-    output_duration_s = composite_output_duration_s(segments, transitions=transitions)
+    output_duration_s = storyboard_mux_duration_s(segments)
     plan = RenderPlan(
         output_duration_s=output_duration_s,
         speed_segments=segments,
@@ -120,6 +120,7 @@ def render_storyboard_final(
         ordered_slots,
         emphasis_words=config.hook.emphasis_words,
     )
+    slot_offsets = {slot.id: slot.out_start_s for slot in ordered_slots}
 
     render_final(
         plan,
@@ -137,6 +138,7 @@ def render_storyboard_final(
         caption_chunks_by_slot=caption_chunks,
         caption_style=config.caption.style,
         slot_ids=segment_slot_ids,
+        slot_offsets=slot_offsets,
         segment_roles=segment_roles,
         hook_start_mask=config.teaser.mask if config.teaser.enabled else None,
         temp_dir=temp_dir,

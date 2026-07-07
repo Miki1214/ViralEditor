@@ -7,6 +7,7 @@ from viral_editor.audio.captions import (
     assign_transcribed_words_to_slot_overrides,
     assign_transcribed_words_with_timing_to_slots,
     distribute_script_to_slot_overrides,
+    distribute_script_with_timing_to_slots,
     suggested_word_count,
     split_script_into_chunks,
     transcribed_script_in_window,
@@ -184,6 +185,102 @@ def test_distribute_script_to_slot_overrides_does_not_drop_overflow_words() -> N
     assert total_words == 60
     assert overrides["a"].split()[0] == "word0"
     assert overrides["b"].split()[-1] == "word59"
+
+
+def test_distribute_script_with_timing_preserves_asr_times_on_auto_allocate() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    script = "hello hook middle clip tail"
+    word_timing = {
+        "a": [
+            {"text": "hello", "start_s": 0.1, "end_s": 0.4},
+            {"text": "hook", "start_s": 0.9, "end_s": 1.2},
+        ],
+        "b": [
+            {"text": "middle", "start_s": 0.2, "end_s": 0.5},
+            {"text": "clip", "start_s": 0.8, "end_s": 1.1},
+            {"text": "tail", "start_s": 1.5, "end_s": 1.8},
+        ],
+    }
+    overrides, timing = distribute_script_with_timing_to_slots(
+        script,
+        slots,
+        words_per_second=5.0,
+        word_timing_overrides=word_timing,
+    )
+    assert "hello" in overrides["a"]
+    assert "tail" in overrides["b"]
+    assert timing["a"][0]["start_s"] == 0.1
+    assert timing["a"][1]["start_s"] == 0.9
+    assert timing["b"][-1]["end_s"] == 1.8
+
+
+def test_distribute_script_with_timing_clears_stale_timing_when_script_edited() -> None:
+    slots = [_slot("a", 0, 3.0)]
+    overrides, timing = distribute_script_with_timing_to_slots(
+        "completely different words",
+        slots,
+        words_per_second=5.0,
+        word_timing_overrides={
+            "a": [{"text": "old", "start_s": 0.1, "end_s": 0.4}],
+        },
+    )
+    assert overrides["a"] == "completely different words"
+    assert timing == {}
+
+
+def test_caption_filter_chain_uses_storyboard_slot_offsets_not_packed_video_time(
+    monkeypatch,
+) -> None:
+    from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, SpeedSegment
+    from viral_editor.video.filter_builders import build_caption_filter_chain
+
+    monkeypatch.setattr(
+        "viral_editor.video.filter_builders.resolve_font_for_ffmpeg",
+        lambda family: "C\\:/Windows/Fonts/arial.ttf",
+    )
+    style = CaptionStyle(fill_color="#FFFFFF", position="bottom", karaoke_enabled=False)
+    chunks = {
+        "late_slot": [
+            CaptionChunk(
+                words=[CaptionWord(text="synced", start_s=0.2, end_s=0.8)],
+                start_s=0.2,
+                end_s=0.8,
+            )
+        ]
+    }
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=2.0,
+            out_end_s=4.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_b",
+        ),
+    ]
+    parts: list[str] = []
+    build_caption_filter_chain(
+        parts,
+        "[bodyv]",
+        chunks_by_slot=chunks,
+        segments=segments,
+        slot_ids=["early_slot", "late_slot"],
+        style=style,
+        label_prefix="cap",
+        width=360,
+        height=640,
+        slot_offsets={"early_slot": 0.0, "late_slot": 5.0},
+    )
+    graph = ";".join(parts)
+    assert "between(t\\,5.200000\\,5.800000)" in graph
 
 
 def test_build_caption_filter_chain_emits_timed_drawtext(monkeypatch) -> None:

@@ -148,7 +148,7 @@ def resolve_whisper_device(preference: str | None = None) -> str:
 
 
 def _default_model_for_device(device: str) -> str:
-    return "medium" if device == "cuda" else "small"
+    return "large-v3" if device == "cuda" else "small"
 
 
 def _default_compute_for_device(device: str) -> str:

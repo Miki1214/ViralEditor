@@ -105,6 +105,7 @@ from viral_editor.audio.storyboard import (
     remap_fx_events_for_composite,
     storyboard_filled_enough,
     storyboard_slots_complete,
+    storyboard_time_to_composite_time,
     storyboard_to_segments,
 )
 from viral_editor.pipeline import PIPELINE_STAGES
@@ -117,6 +118,10 @@ from viral_editor.audio.transcribe_sources import (
     transcribe_from_audio_track,
     transcribe_from_clips,
     transcribe_from_custom_upload,
+)
+from viral_editor.video.filter_builders import (
+    composite_output_duration_s,
+    storyboard_mux_duration_s,
 )
 from viral_editor.video.proxy_render import render_composite, render_speed_proxy
 
@@ -1274,17 +1279,20 @@ def patch_caption(
         # "Clean up & auto-allocate" button), not an implicit side effect of every
         # script_text patch (e.g. blur), so partial edits mid-typing don't reshuffle
         # per-slot overrides out from under the user.
-        from viral_editor.audio.captions import distribute_script_to_slot_overrides
+        from viral_editor.audio.captions import distribute_script_with_timing_to_slots
 
         storyboard = load_storyboard(job.workspace / "temp")
         if storyboard and storyboard.slots:
+            slot_overrides, word_timing_overrides = distribute_script_with_timing_to_slots(
+                caption.script_text,
+                storyboard.slots,
+                words_per_second=caption.words_per_second,
+                word_timing_overrides=caption.word_timing_overrides,
+            )
             caption = caption.model_copy(
                 update={
-                    "slot_overrides": distribute_script_to_slot_overrides(
-                        caption.script_text,
-                        storyboard.slots,
-                        words_per_second=caption.words_per_second,
-                    )
+                    "slot_overrides": slot_overrides,
+                    "word_timing_overrides": word_timing_overrides,
                 }
             )
     if payload.caption_style is not None:
@@ -1488,6 +1496,70 @@ def get_composite_preview(
         ordered_slots,
         emphasis_words=job.config.hook.emphasis_words,
     )
+    slot_offsets = {slot.id: slot.out_start_s for slot in ordered_slots}
+
+    from viral_editor.utils.agent_debug import agent_debug_log
+
+    storyboard_duration_s = storyboard_mux_duration_s(segments)
+    compressed_duration_s = composite_output_duration_s(segments, transitions=transitions)
+    # region agent log
+    caption_samples: list[dict[str, float | str]] = []
+    for seg_index, (seg, slot_id) in enumerate(zip(segments, segment_slot_ids, strict=True)):
+        slot = slots_by_id[slot_id]
+        composite_at_slot_start = storyboard_time_to_composite_time(
+            storyboard, slot.out_start_s
+        )
+        agent_debug_log(
+            "jobs.py:get_composite_preview",
+            "slot_boundary_timing",
+            {
+                "slot_id": slot_id,
+                "segment_index": seg_index,
+                "storyboard_out_start_s": round(slot.out_start_s, 6),
+                "packed_segment_out_start_s": round(seg.out_start_s, 6),
+                "boundary_drift_s": round(slot.out_start_s - seg.out_start_s, 6),
+                "composite_mapped_start_s": composite_at_slot_start,
+                "storyboard_vs_composite_delta_s": (
+                    round(slot.out_start_s - composite_at_slot_start, 6)
+                    if composite_at_slot_start is not None
+                    else None
+                ),
+                "segment_speed_factor": round(seg.speed_factor, 6),
+            },
+            hypothesis_id="B",
+            run_id="post-fix",
+        )
+        for chunk in caption_chunks.get(slot_id, [])[:1]:
+            abs_sb = slot.out_start_s + chunk.start_s
+            comp_t = storyboard_time_to_composite_time(storyboard, abs_sb)
+            caption_samples.append(
+                {
+                    "slot_id": slot_id,
+                    "storyboard_abs_s": round(abs_sb, 6),
+                    "composite_mapped_s": comp_t,
+                    "remap_delta_s": round(abs_sb - comp_t, 6) if comp_t is not None else None,
+                }
+            )
+    agent_debug_log(
+        "jobs.py:get_composite_preview",
+        "render_timeline_summary",
+        {
+            "storyboard_total_duration_s": round(storyboard.total_duration_s, 6),
+            "storyboard_mux_duration_s": round(storyboard_duration_s, 6),
+            "compressed_video_duration_s": round(compressed_duration_s, 6),
+            "timeline_pad_s": round(max(0.0, storyboard_duration_s - compressed_duration_s), 6),
+            "timeline_shortfall_s": round(storyboard.total_duration_s - storyboard_duration_s, 6),
+            "xfade_transition_count": sum(
+                1 for transition in transitions[1:] if transition == "xfade"
+            ),
+            "spatial_fx_event_count": len(fx_events),
+            "caption_sample_count": len(caption_samples),
+            "caption_samples": caption_samples,
+        },
+        hypothesis_id="A",
+        run_id="post-fix",
+    )
+    # endregion
 
     import hashlib
     import json
@@ -1524,6 +1596,7 @@ def get_composite_preview(
                 caption_chunks_by_slot=caption_chunks,
                 caption_style=job.config.caption.style,
                 slot_ids=segment_slot_ids,
+                slot_offsets=slot_offsets,
                 temp_dir=temp_dir,
                 segment_roles=segment_roles,
                 hook_start_mask=(

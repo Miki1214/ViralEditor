@@ -452,8 +452,10 @@ def build_caption_filter_chain(
     label_prefix: str,
     width: int,
     height: int,
+    slot_offsets: dict[str, float] | None = None,
 ) -> str:
     """Overlay timed phrase captions on a composed segment reference."""
+    from viral_editor.utils.agent_debug import agent_debug_log
     from viral_editor.utils.fonts import resolve_font_path
     from viral_editor.utils.text_metrics import layout_caption_chunk
 
@@ -465,10 +467,39 @@ def build_caption_filter_chain(
 
     for segment_index, segment in enumerate(segments):
         slot_id = slot_ids[segment_index] if segment_index < len(slot_ids) else f"slot{segment_index}"
-        slot_offset = segment.out_start_s
-        for chunk in chunks_by_slot.get(slot_id, []):
+        # Captions follow the muxed audio / storyboard timeline, not the packed
+        # composited video cursor (which can diverge when slots are unassigned).
+        slot_offset = (
+            slot_offsets[slot_id]
+            if slot_offsets is not None and slot_id in slot_offsets
+            else segment.out_start_s
+        )
+        slot_chunks = chunks_by_slot.get(slot_id, [])
+        for chunk_pos, chunk in enumerate(slot_chunks):
             abs_start = slot_offset + chunk.start_s
             abs_end = slot_offset + chunk.end_s
+            packed_start = segment.out_start_s + chunk.start_s
+            if chunk_pos == 0 or chunk_pos == len(slot_chunks) - 1:
+                # region agent log
+                agent_debug_log(
+                    "filter_builders.py:build_caption_filter_chain",
+                    "caption_enable_window",
+                    {
+                        "slot_id": slot_id,
+                        "segment_index": segment_index,
+                        "chunk_pos": chunk_pos,
+                        "chunk_index": chunk_index,
+                        "storyboard_abs_start": round(abs_start, 6),
+                        "storyboard_abs_end": round(abs_end, 6),
+                        "packed_abs_start": round(packed_start, 6),
+                        "storyboard_vs_packed_delta": round(abs_start - packed_start, 6),
+                        "slot_offset": round(slot_offset, 6),
+                        "segment_out_start_s": round(segment.out_start_s, 6),
+                    },
+                    hypothesis_id="C",
+                    run_id="post-fix",
+                )
+                # endregion
             enable_expr = _enable_between_expr(abs_start, abs_end)
             words = [word.text for word in chunk.words]
 
@@ -758,6 +789,7 @@ def build_composite_filtergraph(
     caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
     caption_style: CaptionStyle | None = None,
     slot_ids: list[str] | None = None,
+    slot_offsets: dict[str, float] | None = None,
     xfade_s: float = 0.25,
     segment_roles: list[str] | None = None,
     hook_start_mask: str | None = None,
@@ -876,6 +908,20 @@ def build_composite_filtergraph(
         output_label=motion_label,
     )
 
+    storyboard_dur = storyboard_mux_duration_s(segments)
+    compressed_dur = composite_output_duration_s(
+        segments,
+        transitions=transitions,
+        xfade_s=xfade_s,
+    )
+    pad_s = max(0.0, storyboard_dur - compressed_dur)
+    if pad_s > 1e-6:
+        pad_label = "storyboardpad"
+        parts.append(
+            f"{composed_ref}tpad=stop_mode=clone:stop_duration={pad_s:.6f}[{pad_label}]"
+        )
+        composed_ref = f"[{pad_label}]"
+
     if has_hook_title:
         composed_ref = build_hook_title_overlay(
             parts,
@@ -900,11 +946,17 @@ def build_composite_filtergraph(
             label_prefix="cap",
             width=width,
             height=height,
+            slot_offsets=slot_offsets,
         )
 
     if has_steady_overlays:
         parts.append(f"{composed_ref}copy[outv]")
     return ";".join(parts)
+
+
+def storyboard_mux_duration_s(segments: list[SpeedSegment]) -> float:
+    """Packed segment timeline length — matches storyboard/audio caption clock."""
+    return max(segments[-1].out_end_s if segments else 0.0, 0.1)
 
 
 def composite_output_duration_s(
@@ -913,7 +965,7 @@ def composite_output_duration_s(
     xfade_s: float = 0.25,
     transitions: list[str] | None = None,
 ) -> float:
-    """Estimate composited video length for preview mux."""
+    """Estimate xfade-compressed composited video body length before storyboard pad."""
     body = segments[-1].out_end_s if segments else 0.0
     if segments and transitions:
         for index in range(1, len(segments)):

@@ -305,6 +305,80 @@ def test_composite_output_duration_uses_segment_timeline() -> None:
     assert composite_output_duration_s(segments) == pytest.approx(5.0)
 
 
+def test_storyboard_mux_duration_ignores_xfade_overlap() -> None:
+    from viral_editor.video.filter_builders import (
+        composite_output_duration_s,
+        storyboard_mux_duration_s,
+    )
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=2.0,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=3.0,
+            speed_factor=1.0,
+            source_id="clip_b",
+        ),
+    ]
+    transitions = ["cut", "xfade"]
+    assert storyboard_mux_duration_s(segments) == pytest.approx(5.0)
+    assert composite_output_duration_s(segments, transitions=transitions) == pytest.approx(4.75)
+
+
+def test_build_composite_filtergraph_pads_video_to_storyboard_duration_for_captions() -> None:
+    from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, SpeedSegment
+    from viral_editor.video.filter_builders import build_composite_filtergraph
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.0,
+            src_start_s=0.0,
+            src_end_s=2.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=2.0,
+            out_end_s=5.0,
+            src_start_s=0.0,
+            src_end_s=3.0,
+            speed_factor=1.0,
+            source_id="clip_b",
+        ),
+    ]
+    chunks = {
+        "slot0": [
+            CaptionChunk(
+                words=[CaptionWord(text="late", start_s=4.5, end_s=4.9)],
+                start_s=4.5,
+                end_s=4.9,
+            )
+        ]
+    }
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut", "xfade"],
+        clip_input_index={"clip_a": 0, "clip_b": 1},
+        clip_durations={"clip_a": 10.0, "clip_b": 10.0},
+        caption_chunks_by_slot=chunks,
+        caption_style=CaptionStyle(),
+        slot_ids=["slot0", "slot1"],
+        slot_offsets={"slot0": 0.0, "slot1": 2.0},
+    )
+    assert "tpad=stop_mode=clone:stop_duration=0.250000" in graph
+    assert "between(t\\,4.500000\\,4.900000)" in graph
+
+
 def test_build_composite_filtergraph_spatial_crop() -> None:
     segments = [
         SpeedSegment(
