@@ -100,6 +100,7 @@ class CaptionConfig(DomainModel):
     style: CaptionStyle = Field(default_factory=CaptionStyle)
     slot_overrides: dict[str, str] = Field(default_factory=dict)
     word_timing_overrides: dict[str, list[dict[str, float | str]]] = Field(default_factory=dict)
+    asr_words: list[dict[str, float | str]] = Field(default_factory=list)
 
 
 class SpeedRampConfig(DomainModel):

@@ -338,6 +338,7 @@ class CaptionResponse(BaseModel):
     slot_budgets: list[SlotCaptionBudgetResponse] = Field(default_factory=list)
     wps_presets: list[WpsPresetResponse] = Field(default_factory=list)
     transcribe_available: bool = False
+    audio_sync_available: bool = False
 
 
 class CaptionPatchRequest(BaseModel):
@@ -349,7 +350,9 @@ class CaptionPatchRequest(BaseModel):
     caption_style: CaptionStylePatch | None = None
     slot_overrides: dict[str, str] | None = None
     karaoke_enabled: bool | None = None
+    cleanup: bool = False
     auto_allocate: bool = False
+    audio_sync: bool = False
 
 
 class TranscribeCaptionResponse(BaseModel):

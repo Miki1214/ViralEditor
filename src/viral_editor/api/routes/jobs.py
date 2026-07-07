@@ -1257,39 +1257,86 @@ def patch_caption(
     caption = config.caption
     hook = config.hook
     hook_style = config.hook_style
+    storyboard = load_storyboard(job.workspace / "temp")
 
-    if payload.script_text is not None:
-        script_text = payload.script_text
-        if payload.auto_allocate:
-            from viral_editor.audio.captions import cleanup_script_text
+    if payload.cleanup:
+        from viral_editor.audio.captions import cleanup_caption_texts, cleanup_script_text, cleanup_slot_overrides
 
-            script_text = cleanup_script_text(script_text)
-        caption = caption.model_copy(update={"script_text": script_text})
+        script_source = (
+            payload.script_text if payload.script_text is not None else caption.script_text
+        )
+        overrides_source = (
+            payload.slot_overrides
+            if payload.slot_overrides is not None
+            else caption.slot_overrides
+        )
+        if storyboard and storyboard.slots:
+            script_text, slot_overrides = cleanup_caption_texts(
+                script_text=script_source,
+                slot_overrides=overrides_source,
+                slots=storyboard.slots,
+                words_per_second=caption.words_per_second,
+                word_timing_overrides=caption.word_timing_overrides,
+                emphasis_words=hook.emphasis_words,
+            )
+        else:
+            script_text = cleanup_script_text(script_source)
+            slot_overrides = cleanup_slot_overrides(overrides_source)
+        caption = caption.model_copy(
+            update={"script_text": script_text, "slot_overrides": slot_overrides}
+        )
+    elif payload.script_text is not None:
+        caption = caption.model_copy(update={"script_text": payload.script_text})
     if payload.words_per_second is not None:
         caption = caption.model_copy(update={"words_per_second": payload.words_per_second})
-    if payload.slot_overrides:
+    if (
+        payload.slot_overrides is not None
+        and not payload.cleanup
+        and not payload.auto_allocate
+        and not payload.audio_sync
+    ):
         caption = caption.model_copy(update={"slot_overrides": payload.slot_overrides})
-    elif payload.script_text is not None and payload.auto_allocate:
-        # Splitting the script across slots is an explicit action (triggered by the
-        # "Clean up & auto-allocate" button), not an implicit side effect of every
-        # script_text patch (e.g. blur), so partial edits mid-typing don't reshuffle
-        # per-slot overrides out from under the user.
-        from viral_editor.audio.captions import distribute_script_with_timing_to_slots
 
-        storyboard = load_storyboard(job.workspace / "temp")
+    if payload.auto_allocate:
+        from viral_editor.audio.captions import distribute_script_to_slot_overrides
+
         if storyboard and storyboard.slots:
-            slot_overrides, word_timing_overrides = distribute_script_with_timing_to_slots(
+            slot_overrides = distribute_script_to_slot_overrides(
                 caption.script_text,
                 storyboard.slots,
                 words_per_second=caption.words_per_second,
-                word_timing_overrides=caption.word_timing_overrides,
             )
             caption = caption.model_copy(
                 update={
                     "slot_overrides": slot_overrides,
-                    "word_timing_overrides": word_timing_overrides,
+                    "word_timing_overrides": {},
                 }
             )
+
+    if payload.audio_sync:
+        from viral_editor.audio.captions import asr_words_from_serialized, sync_captions_to_asr
+
+        if not caption.asr_words:
+            raise HTTPException(
+                status_code=400,
+                detail="No transcription data stored. Run Auto-transcribe first.",
+            )
+        if storyboard is None or not storyboard.slots:
+            raise HTTPException(status_code=400, detail="Storyboard with slots required")
+        asr_words = asr_words_from_serialized(caption.asr_words)
+        script_text, slot_overrides, word_timing_overrides = sync_captions_to_asr(
+            asr_words,
+            storyboard.slots,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+        caption = caption.model_copy(
+            update={
+                "script_text": script_text,
+                "slot_overrides": slot_overrides,
+                "word_timing_overrides": word_timing_overrides,
+            }
+        )
     if payload.caption_style is not None:
         caption = caption.model_copy(
             update={"style": apply_caption_style_patch(caption.style, payload.caption_style)}
@@ -1314,7 +1361,6 @@ def patch_caption(
     write_job_config(updated_config, job.workspace)
     _invalidate_composite_previews(job.workspace / "temp")
 
-    storyboard = load_storyboard(job.workspace / "temp")
     return build_caption_response(updated_config, storyboard)
 
 
@@ -1395,11 +1441,14 @@ async def transcribe_caption(
 
     from viral_editor.api.schemas import CaptionWordResponse
 
+    from viral_editor.audio.captions import serialize_word_timing
+
     caption = job.config.caption.model_copy(
         update={
             "script_text": result.script_text,
             "slot_overrides": result.slot_overrides,
             "word_timing_overrides": result.word_timing_overrides,
+            "asr_words": serialize_word_timing(result.words),
         }
     )
     updated_config = job.config.model_copy(update={"caption": caption})

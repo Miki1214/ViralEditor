@@ -414,8 +414,10 @@ export default function App() {
       });
   };
 
-  const handlePatchCaption = async (payload: CaptionPatchInput) => {
-    if (!activeJobId) return;
+  const handlePatchCaption = async (payload: CaptionPatchInput): Promise<CaptionPayload> => {
+    if (!activeJobId) {
+      throw new Error("No active job");
+    }
     setCaptionSaving(true);
     try {
       const updated = await patchCaption(activeJobId, payload);
@@ -427,8 +429,10 @@ export default function App() {
         patchForm({ emphasisWords: payload.emphasis_words.join(", ") });
       }
       refreshPreview();
+      return updated;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update captions");
+      throw err;
     } finally {
       setCaptionSaving(false);
     }

@@ -79,6 +79,53 @@ def cleanup_script_text(script_text: str) -> str:
     return text.strip()
 
 
+def cleanup_slot_overrides(slot_overrides: dict[str, str]) -> dict[str, str]:
+    """Normalize per-slot caption override text."""
+    return {
+        slot_id: cleanup_script_text(text)
+        for slot_id, text in slot_overrides.items()
+        if text.strip()
+    }
+
+
+def cleanup_caption_texts(
+    *,
+    script_text: str,
+    slot_overrides: dict[str, str],
+    slots: list[StorySlot],
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] | None = None,
+    emphasis_words: list[str] | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Normalize the full script and each slot's effective caption text."""
+    cleaned_script = cleanup_script_text(script_text)
+
+    class _CaptionLike:
+        def __init__(self) -> None:
+            self.script_text = cleaned_script
+            self.words_per_second = words_per_second
+            self.slot_overrides = slot_overrides
+            self.word_timing_overrides = word_timing_overrides or {}
+
+    chunks_by_slot = build_caption_chunks_for_slots(
+        _CaptionLike(),
+        slots,
+        emphasis_words=emphasis_words,
+    )
+    resolved: dict[str, str] = {}
+    for slot in sorted(slots, key=lambda item: item.order):
+        override = slot_overrides.get(slot.id, "")
+        if override.strip():
+            resolved[slot.id] = override
+            continue
+        chunks = chunks_by_slot.get(slot.id, [])
+        words = [word.text for chunk in chunks for word in chunk.words]
+        if words:
+            resolved[slot.id] = " ".join(words)
+
+    return cleaned_script, cleanup_slot_overrides(resolved)
+
+
 def split_script_into_chunks(
     script_text: str,
     slots: list[StorySlot],
@@ -263,16 +310,106 @@ def _rebase_word_to_slot_local(
     slot: StorySlot,
     time_offset_s: float,
 ) -> CaptionWord:
-    start_s = max(0.0, min(slot.target_duration_s, word.start_s - time_offset_s))
-    end_s = max(0.0, min(slot.target_duration_s, word.end_s - time_offset_s))
-    if end_s < start_s:
-        end_s = start_s
+    raw_start = word.start_s - time_offset_s
+    raw_end = word.end_s - time_offset_s
+    start_s = max(0.0, min(slot.target_duration_s, raw_start))
+    end_s = max(0.0, min(slot.target_duration_s, raw_end))
+    if end_s <= start_s and slot.target_duration_s > 0:
+        room = slot.target_duration_s - start_s
+        if room > 0:
+            end_s = start_s + min(0.05, room)
+        else:
+            start_s = max(0.0, slot.target_duration_s - 0.05)
+            end_s = slot.target_duration_s
     return CaptionWord(
         text=word.text,
         start_s=round(start_s, 4),
         end_s=round(end_s, 4),
         emphasis=word.emphasis,
     )
+
+
+def _synthesize_timed_words(
+    tokens: list[str],
+    slot: StorySlot,
+    emphasis: set[str],
+) -> list[CaptionWord]:
+    chunks = _tokens_to_chunks(tokens, slot.target_duration_s, emphasis)
+    words: list[CaptionWord] = []
+    for chunk in chunks:
+        words.extend(chunk.words)
+    return words
+
+
+def _word_midpoint_in_slot(word: CaptionWord, slot: StorySlot) -> bool:
+    midpoint_s = (word.start_s + word.end_s) / 2.0
+    return slot.out_start_s - 1e-6 <= midpoint_s < slot.out_end_s - 1e-6
+
+
+def _rebase_allocated_words_to_slot(
+    words: list[CaptionWord],
+    *,
+    slot: StorySlot,
+) -> list[CaptionWord]:
+    """Map budget-allocated ASR words onto a slot's local caption timeline."""
+    if not words:
+        return []
+
+    emphasis = {word.text.lower().strip(".,!?") for word in words if word.emphasis}
+    tokens = [word.text for word in words]
+    outside_count = sum(1 for word in words if not _word_midpoint_in_slot(word, slot))
+
+    if outside_count == len(words):
+        return _synthesize_timed_words(tokens, slot, emphasis)
+
+    rebased = [
+        _rebase_word_to_slot_local(word, slot=slot, time_offset_s=slot.out_start_s)
+        for word in words
+    ]
+    return rebased
+
+
+def sync_captions_to_asr(
+    asr_words: list[CaptionWord],
+    slots: list[StorySlot],
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> tuple[str, dict[str, str], dict[str, list[dict[str, float | str]]]]:
+    """Assign caption text and karaoke timing by ASR word timestamps (transcribe layout)."""
+    script_text = transcribed_script_in_window(
+        asr_words,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    slot_overrides = assign_transcribed_words_to_slot_overrides(
+        asr_words,
+        slots,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    timed_by_slot = assign_transcribed_words_with_timing_to_slots(
+        asr_words,
+        slots,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    word_timing_overrides = {
+        slot_id: serialize_word_timing(slot_words)
+        for slot_id, slot_words in timed_by_slot.items()
+    }
+    return script_text, slot_overrides, word_timing_overrides
+
+
+def asr_words_from_serialized(entries: list[dict[str, float | str]]) -> list[CaptionWord]:
+    return [
+        CaptionWord(
+            text=str(entry["text"]),
+            start_s=float(entry["start_s"]),
+            end_s=float(entry["end_s"]),
+        )
+        for entry in entries
+    ]
 
 
 def assign_transcribed_words_with_timing_to_slots(
@@ -415,6 +552,17 @@ def flatten_word_timing_to_storyboard_words(
     return words
 
 
+def _count_zero_duration_words(
+    timing: dict[str, list[dict[str, float | str]]],
+) -> int:
+    return sum(
+        1
+        for words in timing.values()
+        for word in words
+        if float(word["end_s"]) <= float(word["start_s"])
+    )
+
+
 def distribute_script_with_timing_to_slots(
     script_text: str,
     slots: list[StorySlot],
@@ -447,16 +595,15 @@ def distribute_script_with_timing_to_slots(
                 slot_words = allocations.get(slot.id, [])
                 if not slot_words:
                     continue
-                rebased = [
-                    _rebase_word_to_slot_local(
-                        word,
-                        slot=slot,
-                        time_offset_s=slot.out_start_s,
-                    )
-                    for word in slot_words
-                ]
+                rebased = _rebase_allocated_words_to_slot(slot_words, slot=slot)
                 slot_overrides[slot.id] = " ".join(word.text for word in rebased)
                 rebased_timing[slot.id] = serialize_word_timing(rebased)
+            zero_count = _count_zero_duration_words(rebased_timing)
+            if zero_count:
+                raise ValueError(
+                    f"Caption auto-allocate produced {zero_count} zero-duration word(s); "
+                    "ASR timing could not be rebased onto the reallocated slots."
+                )
             return slot_overrides, rebased_timing
 
     budgets = {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CAPTION_STYLE_PRESETS } from "../constants/captionPresets";
 import { HOOK_FONT_OPTIONS } from "../constants/fonts";
 import { WHISPER_LANGUAGE_OPTIONS } from "../constants/whisperLanguages";
@@ -18,7 +18,7 @@ interface CaptionPanelProps {
   saving?: boolean;
   transcribing?: boolean;
   onPatchForm: (partial: Partial<FormState>) => void;
-  onPatchCaption: (payload: CaptionPatchInput) => Promise<void>;
+  onPatchCaption: (payload: CaptionPatchInput) => Promise<CaptionPayload>;
   onTranscribe: (source: TranscribeSource, options: TranscribeOptions, file?: File) => Promise<void>;
 }
 
@@ -139,22 +139,47 @@ export function CaptionPanel({
   const [transcribeLanguage, setTranscribeLanguage] = useState("auto");
   const [transcribeTranslate, setTranscribeTranslate] = useState(false);
   const [scriptDraft, setScriptDraft] = useState(caption?.script_text ?? "");
-  const [lastSyncedScript, setLastSyncedScript] = useState(caption?.script_text ?? "");
-  const [allocating, setAllocating] = useState(false);
+  const [captionAction, setCaptionAction] = useState<"cleanup" | "allocate" | "sync" | null>(
+    null,
+  );
 
-  if (caption && caption.script_text !== lastSyncedScript) {
-    setScriptDraft(caption.script_text);
-    setLastSyncedScript(caption.script_text);
-  }
+  useEffect(() => {
+    if (caption) {
+      setScriptDraft(caption.script_text);
+    }
+  }, [caption?.script_text]);
+
+  const handleCleanup = useCallback(async () => {
+    if (!caption) return;
+    setCaptionAction("cleanup");
+    try {
+      await onPatchCaption({
+        script_text: scriptDraft,
+        slot_overrides: caption.slot_overrides,
+        cleanup: true,
+      });
+    } finally {
+      setCaptionAction(null);
+    }
+  }, [caption, onPatchCaption, scriptDraft]);
 
   const handleAutoAllocate = useCallback(async () => {
-    setAllocating(true);
+    setCaptionAction("allocate");
     try {
       await onPatchCaption({ script_text: scriptDraft, auto_allocate: true });
     } finally {
-      setAllocating(false);
+      setCaptionAction(null);
     }
   }, [onPatchCaption, scriptDraft]);
+
+  const handleAudioSync = useCallback(async () => {
+    setCaptionAction("sync");
+    try {
+      await onPatchCaption({ audio_sync: true });
+    } finally {
+      setCaptionAction(null);
+    }
+  }, [onPatchCaption]);
 
   const wpsOptions = useMemo(
     () => caption?.wps_presets ?? [{ words_per_second: 5, label: "Recommended" }],
@@ -326,17 +351,45 @@ export function CaptionPanel({
         </div>
 
         <label className="block">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="field-label">Script</span>
-            <button
-              type="button"
-              className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase text-scope-trace"
-              disabled={allocating || saving || !scriptDraft.trim()}
-              title="Normalize the script text (quotes, whitespace, spacing) and re-split it across clip slots by reading speed"
-              onClick={() => void handleAutoAllocate()}
-            >
-              {allocating ? "Allocating…" : "Clean up & auto-allocate"}
-            </button>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase"
+                disabled={captionAction !== null || saving || !scriptDraft.trim()}
+                title="Normalize script and per-clip caption text (quotes, whitespace, punctuation spacing)"
+                onClick={() => void handleCleanup()}
+              >
+                {captionAction === "cleanup" ? "Cleaning…" : "Clean up"}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase text-scope-trace"
+                disabled={captionAction !== null || saving || !scriptDraft.trim()}
+                title="Split the script across clips by reading-speed word budget (even text spread)"
+                onClick={() => void handleAutoAllocate()}
+              >
+                {captionAction === "allocate" ? "Allocating…" : "Auto-allocate"}
+              </button>
+              <button
+                type="button"
+                className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase text-hook-gold"
+                disabled={
+                  captionAction !== null ||
+                  saving ||
+                  !caption?.audio_sync_available
+                }
+                title={
+                  caption?.audio_sync_available
+                    ? "Re-assign clip captions using stored ASR word timestamps from transcription"
+                    : "Run Auto-transcribe first to store ASR timing"
+                }
+                onClick={() => void handleAudioSync()}
+              >
+                {captionAction === "sync" ? "Syncing…" : "Audio-sync captions"}
+              </button>
+            </div>
           </div>
           <textarea
             className="field-input mt-1 min-h-[96px] w-full resize-y"
@@ -344,14 +397,13 @@ export function CaptionPanel({
             placeholder="Write your full caption script here…"
             onChange={(e) => setScriptDraft(e.target.value)}
             onBlur={(e) => {
-              if (e.target.value === lastSyncedScript) return;
-              setLastSyncedScript(e.target.value);
+              if (e.target.value === caption?.script_text) return;
               void onPatchCaption({ script_text: e.target.value });
             }}
           />
           <p className="mt-1 text-[10px] text-monitor-muted">
-            Editing saves the raw text only. Use “Clean up &amp; auto-allocate” to split it across
-            clips.
+            Editing saves raw text only. Use Clean up to normalize, Auto-allocate to spread by
+            reading speed, or Audio-sync to restore transcription timing.
           </p>
         </label>
 
@@ -414,6 +466,30 @@ export function CaptionPanel({
               const over = slot.actual_words > slot.suggested_words;
               const under =
                 slot.actual_words < slot.suggested_words && slot.suggested_words > 0;
+              const overrideText = caption.slot_overrides[slot.slot_id] ?? "";
+              // #region agent log
+              fetch("http://127.0.0.1:7654/ingest/6a47800d-278b-46bc-8661-efdc1e1c84d8", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Debug-Session-Id": "5521a3",
+                },
+                body: JSON.stringify({
+                  sessionId: "5521a3",
+                  hypothesisId: "H1-H4",
+                  location: "CaptionPanel.tsx:slot_budgets.map",
+                  message: "textarea bind values",
+                  data: {
+                    slot_id: slot.slot_id,
+                    override_len: overrideText.length,
+                    actual_words: slot.actual_words,
+                    chunk_count: slot.chunks.length,
+                    shows_placeholder: overrideText.length === 0 && slot.actual_words > 0,
+                  },
+                  timestamp: Date.now(),
+                }),
+              }).catch(() => {});
+              // #endregion
               return (
                 <div
                   key={slot.slot_id}
@@ -438,7 +514,7 @@ export function CaptionPanel({
                   <textarea
                     className="field-input mt-2 min-h-[48px] w-full text-xs"
                     placeholder="Override text for this clip (optional)"
-                    value={caption.slot_overrides[slot.slot_id] ?? ""}
+                    value={overrideText}
                     onChange={(e) =>
                       void onPatchCaption({
                         slot_overrides: {

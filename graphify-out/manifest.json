@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783445865.4413722,
-    "ast_hash": "dfb6372eaec5dc4f51885017cc01b6b5",
+    "mtime": 1783447995.0023155,
+    "ast_hash": "e4953598014bc48685e3848b0f56320a",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -85,8 +85,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/schemas.py": {
-    "mtime": 1783440148.5985336,
-    "ast_hash": "72417dab676eaf7c98c09d211ce15e03",
+    "mtime": 1783447719.0942683,
+    "ast_hash": "08c6c343a68236205f9a590db38b6d0a",
     "semantic_hash": ""
   },
   "src/viral_editor/api/speed.py": {
@@ -170,8 +170,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/config.py": {
-    "mtime": 1783373825.2420647,
-    "ast_hash": "1fd8f935cd6fdec2f03c2f653fb9cb38",
+    "mtime": 1783447717.0505557,
+    "ast_hash": "6c9176abe7cd61a7889f4faf74280b25",
     "semantic_hash": ""
   },
   "src/viral_editor/editing/__init__.py": {
@@ -225,8 +225,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/utils/ffmpeg.py": {
-    "mtime": 1783436138.679016,
-    "ast_hash": "1a91dfe35fa5b55ac08f3f9f50f164ef",
+    "mtime": 1783448968.4266937,
+    "ast_hash": "bef033699f20b337ee71006e46e32864",
     "semantic_hash": ""
   },
   "src/viral_editor/utils/logging.py": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/proxy_render.py": {
-    "mtime": 1783445868.540059,
-    "ast_hash": "9b9266d5f8540e295b319d402a073855",
+    "mtime": 1783448972.9807746,
+    "ast_hash": "6a081f269c0fe5a73ae1e052cb86bbe2",
     "semantic_hash": ""
   },
   "src/viral_editor/video/spatial_fx.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "tests/test_api.py": {
-    "mtime": 1783443240.4677396,
-    "ast_hash": "bc565526506f92dcac3fa61be8be941d",
+    "mtime": 1783447991.8534026,
+    "ast_hash": "e0a7ece25b7aa1d07048cd9ced1dfe2e",
     "semantic_hash": ""
   },
   "tests/test_audio_fixtures.py": {
@@ -320,8 +320,8 @@
     "semantic_hash": ""
   },
   "tests/test_ffmpeg_env.py": {
-    "mtime": 1783368317.5188444,
-    "ast_hash": "be592ff9da5354dd127021182947fd4b",
+    "mtime": 1783448993.5698829,
+    "ast_hash": "5064321cee16e80414384c092cc4cbde",
     "semantic_hash": ""
   },
   "tests/test_hook_speed_contract.py": {
@@ -410,8 +410,8 @@
     "semantic_hash": ""
   },
   "web/src/App.tsx": {
-    "mtime": 1783438749.4359155,
-    "ast_hash": "e036b53b32cb3519f44ce8d4062f985e",
+    "mtime": 1783447983.444542,
+    "ast_hash": "2143b0a96f004ef063f054c496c53d08",
     "semantic_hash": ""
   },
   "web/src/api/client.ts": {
@@ -585,8 +585,8 @@
     "semantic_hash": ""
   },
   "web/src/types.ts": {
-    "mtime": 1783440173.2446089,
-    "ast_hash": "df8011cfb535f6b571716efe1fe92a1c",
+    "mtime": 1783447733.0296025,
+    "ast_hash": "5de90ac13b08b8a3956b0a3fbee64ac6",
     "semantic_hash": ""
   },
   "web/src/utils/compositePlayhead.ts": {
@@ -1055,13 +1055,13 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/caption.py": {
-    "mtime": 1783374049.6736388,
-    "ast_hash": "1706e8e0a3852b9da0b3da373e83caeb",
+    "mtime": 1783448598.83575,
+    "ast_hash": "184320b0e907f5da4e0c39ae165b1b9d",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/captions.py": {
-    "mtime": 1783443183.5658662,
-    "ast_hash": "211f7ec86d67251fe8a1e26b4caa48fa",
+    "mtime": 1783447972.915827,
+    "ast_hash": "7b5d6a9a7cafc0ee4c4348502c58b983",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/transcribe.py": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "tests/test_captions.py": {
-    "mtime": 1783443296.848315,
-    "ast_hash": "99a8366960b3a9c721686e6e75377796",
+    "mtime": 1783447990.6707714,
+    "ast_hash": "24abf2a113dc8b042225da095363cab3",
     "semantic_hash": ""
   },
   "tests/test_fonts.py": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783440195.0293171,
-    "ast_hash": "3845b44c8ac85d9d22eedacf3a8c27b6",
+    "mtime": 1783448480.4397864,
+    "ast_hash": "bdbd173e568cabc80d7dec7f32046823",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {

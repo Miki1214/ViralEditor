@@ -630,12 +630,25 @@ def test_get_and_patch_caption(
     assert patched["script_text"].startswith("one two three")
     assert patched["slot_overrides"] == {}
 
-    # Explicit auto_allocate (the "Clean up & auto-allocate" button) performs the split.
-    allocate_response = client.patch(
+    # Explicit cleanup normalizes script whitespace.
+    cleanup_response = client.patch(
         f"/api/jobs/{job.id}/caption",
         json={
             "script_text": "one two  three four five six seven eight nine ten ",
-            "words_per_second": 5.0,
+            "cleanup": True,
+        },
+    )
+    assert cleanup_response.status_code == 200
+    cleaned = cleanup_response.json()
+    assert cleaned["script_text"] == "one two three four five six seven eight nine ten"
+    assert cleaned["slot_overrides"]
+    assert sum(len(text.split()) for text in cleaned["slot_overrides"].values()) == 10
+
+    # Explicit auto_allocate splits by reading-speed budget (text only, no ASR timing).
+    allocate_response = client.patch(
+        f"/api/jobs/{job.id}/caption",
+        json={
+            "script_text": "one two three four five six seven eight nine ten",
             "auto_allocate": True,
         },
     )
@@ -728,7 +741,7 @@ def test_transcribe_caption_persists_script_and_slot_overrides(
     assert first_slot_words[0]["start_s"] < 1.0
 
 
-def test_auto_allocate_preserves_transcribed_word_timing(
+def test_audio_sync_restores_transcribed_word_timing(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -743,7 +756,7 @@ def test_auto_allocate_preserves_transcribed_word_timing(
     from viral_editor.models import CaptionWord, MusicBlock
 
     store: JobStore = client.app.state.job_store
-    workspace = tmp_path / "job_allocate_timing"
+    workspace = tmp_path / "job_audio_sync"
     workspace.mkdir()
     (workspace / "input").mkdir()
     audio_path = workspace / "input" / "track.mp3"
@@ -788,6 +801,13 @@ def test_auto_allocate_preserves_transcribed_word_timing(
         data={"source": "audio_track"},
     )
     assert transcribe_response.status_code == 200
+    assert transcribe_response.json()["script_text"] == "hello world again now"
+
+    get_after_transcribe = client.get(f"/api/jobs/{job.id}/caption")
+    assert get_after_transcribe.status_code == 200
+    assert get_after_transcribe.json()["audio_sync_available"] is True
+    transcribed_first = get_after_transcribe.json()["slot_budgets"][0]["chunks"][0]["words"][0]
+    assert transcribed_first["start_s"] < 1.0
 
     allocate_response = client.patch(
         f"/api/jobs/{job.id}/caption",
@@ -797,10 +817,16 @@ def test_auto_allocate_preserves_transcribed_word_timing(
         },
     )
     assert allocate_response.status_code == 200
-    allocated = allocate_response.json()
-    first_words = allocated["slot_budgets"][0]["chunks"][0]["words"]
-    assert first_words[0]["start_s"] < 1.0
-    assert first_words[0]["start_s"] != 0.0
+
+    sync_response = client.patch(
+        f"/api/jobs/{job.id}/caption",
+        json={"audio_sync": True},
+    )
+    assert sync_response.status_code == 200
+    synced = sync_response.json()
+    first_words = synced["slot_budgets"][0]["chunks"][0]["words"]
+    assert first_words[0]["end_s"] > first_words[0]["start_s"]
+    assert first_words[0]["start_s"] == transcribed_first["start_s"]
 
 
 def test_transcribe_caption_from_clips_builds_per_slot_overrides(

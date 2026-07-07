@@ -105,3 +105,37 @@ def test_run_ffmpeg_raises_on_nonzero_exit(
 
     assert exc_info.value.returncode == 1
     assert "invalid option" in exc_info.value.stderr
+
+
+def test_spill_filter_complex_rewrites_long_windows_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ffmpeg_module, "resolve_ffmpeg_binary", lambda _name: "ffmpeg")
+    monkeypatch.setattr(ffmpeg_module.os, "name", "nt")
+
+    captured: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        script_index = command.index("-filter_complex_script") + 1
+        script_path = Path(command[script_index])
+        captured["script_text"] = script_path.read_text(encoding="utf-8")
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        return Result()
+
+    monkeypatch.setattr(ffmpeg_module.subprocess, "run", fake_run)
+
+    from viral_editor.utils.ffmpeg import run_ffmpeg
+
+    long_graph = "nullsrc," * 12_000
+    run_ffmpeg(["-filter_complex", long_graph, "-f", "null", "-"])
+
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "-filter_complex_script" in command
+    assert "-filter_complex" not in command
+    assert captured["script_text"] == long_graph
+    assert sum(len(str(arg)) + 1 for arg in command) < ffmpeg_module._WIN_CMD_CHAR_LIMIT

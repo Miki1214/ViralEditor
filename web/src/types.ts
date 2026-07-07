@@ -376,6 +376,7 @@ export interface CaptionPayload {
   slot_budgets: SlotCaptionBudget[];
   wps_presets: WpsPresetPayload[];
   transcribe_available: boolean;
+  audio_sync_available: boolean;
 }
 
 export interface CaptionPatchInput {
@@ -387,7 +388,9 @@ export interface CaptionPatchInput {
   caption_style?: Partial<CaptionStylePayload>;
   slot_overrides?: Record<string, string>;
   karaoke_enabled?: boolean;
+  cleanup?: boolean;
   auto_allocate?: boolean;
+  audio_sync?: boolean;
 }
 
 export type TranscribeSource = "audio_track" | "clips" | "custom";

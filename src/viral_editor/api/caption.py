@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import time
+
 from viral_editor.audio.captions import (
     WPS_PRESETS,
     build_caption_chunks_for_slots,
@@ -81,6 +84,49 @@ def build_caption_response(config: JobConfig, storyboard: Storyboard | None) -> 
             )
         )
 
+    stored_overrides = dict(config.caption.slot_overrides)
+    effective_overrides = dict(stored_overrides)
+    for slot in slots:
+        if effective_overrides.get(slot.id, "").strip():
+            continue
+        chunks = chunks_by_slot.get(slot.id, [])
+        words = [word.text for chunk in chunks for word in chunk.words]
+        if words:
+            effective_overrides[slot.id] = " ".join(words)
+
+    # #region agent log
+    try:
+        with open("debug-5521a3.log", "a", encoding="utf-8") as _dbg:
+            for _slot in slots:
+                _chunks = chunks_by_slot.get(_slot.id, [])
+                _chunk_words = sum(len(c.words) for c in _chunks)
+                _stored = stored_overrides.get(_slot.id, "")
+                _effective = effective_overrides.get(_slot.id, "")
+                _dbg.write(
+                    json.dumps(
+                        {
+                            "sessionId": "5521a3",
+                            "runId": "post-fix",
+                            "hypothesisId": "H1-H2",
+                            "location": "caption.py:build_caption_response",
+                            "message": "slot override vs chunks",
+                            "data": {
+                                "slot_id": _slot.id,
+                                "stored_override_len": len(_stored.strip()),
+                                "effective_override_len": len(_effective.strip()),
+                                "chunk_word_count": _chunk_words,
+                                "has_stored": bool(_stored.strip()),
+                                "chunks_only": not _stored.strip() and _chunk_words > 0,
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        }
+                    )
+                    + "\n"
+                )
+    except OSError:
+        pass
+    # #endregion
+
     return CaptionResponse(
         script_text=config.caption.script_text,
         words_per_second=config.caption.words_per_second,
@@ -88,13 +134,14 @@ def build_caption_response(config: JobConfig, storyboard: Storyboard | None) -> 
         emphasis_words=list(config.hook.emphasis_words),
         hook_style=_style_response(config.hook_style),
         caption_style=_style_response(config.caption.style),
-        slot_overrides=dict(config.caption.slot_overrides),
+        slot_overrides=effective_overrides,
         slot_budgets=slot_budgets,
         wps_presets=[
             WpsPresetResponse(words_per_second=preset.words_per_second, label=preset.label)
             for preset in WPS_PRESETS
         ],
         transcribe_available=transcribe_available(),
+        audio_sync_available=bool(config.caption.asr_words),
     )
 
 

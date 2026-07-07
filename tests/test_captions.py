@@ -6,10 +6,12 @@ from viral_editor.audio.captions import (
     WPS_PRESETS,
     assign_transcribed_words_to_slot_overrides,
     assign_transcribed_words_with_timing_to_slots,
+    cleanup_slot_overrides,
     distribute_script_to_slot_overrides,
     distribute_script_with_timing_to_slots,
     suggested_word_count,
     split_script_into_chunks,
+    sync_captions_to_asr,
     transcribed_script_in_window,
 )
 from viral_editor.models import CaptionWord, StorySlot
@@ -36,6 +38,64 @@ def test_wps_presets_include_recommended_default() -> None:
     assert 5.0 in values
     recommended = next(p for p in WPS_PRESETS if p.words_per_second == 5.0)
     assert "Recommended" in recommended.label
+
+
+def test_cleanup_slot_overrides_normalizes_whitespace() -> None:
+    cleaned = cleanup_slot_overrides(
+        {
+            "slot_a": "  hello ,  world  ",
+            "slot_b": "",
+        }
+    )
+    assert cleaned["slot_a"] == "hello, world"
+    assert "slot_b" not in cleaned
+
+
+def test_cleanup_caption_texts_normalizes_script_and_populates_slot_overrides() -> None:
+    from viral_editor.audio.captions import cleanup_caption_texts
+
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    script, overrides = cleanup_caption_texts(
+        script_text="one  two   three four five six seven eight nine ten",
+        slot_overrides={},
+        slots=slots,
+        words_per_second=5.0,
+    )
+    assert script == "one two three four five six seven eight nine ten"
+    assert sum(len(text.split()) for text in overrides.values()) == 10
+
+
+def test_cleanup_caption_texts_cleans_explicit_slot_overrides() -> None:
+    from viral_editor.audio.captions import cleanup_caption_texts
+
+    slots = [_slot("a", 0, 3.0)]
+    _, overrides = cleanup_caption_texts(
+        script_text="hello world",
+        slot_overrides={"a": "  hello ,  world  "},
+        slots=slots,
+        words_per_second=5.0,
+    )
+    assert overrides["a"] == "hello, world"
+
+
+def test_sync_captions_to_asr_maps_words_by_storyboard_time() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
+    words = [
+        CaptionWord(text="hello", start_s=0.5, end_s=0.8),
+        CaptionWord(text="world", start_s=1.0, end_s=1.3),
+        CaptionWord(text="tail", start_s=3.2, end_s=3.5),
+    ]
+    script_text, overrides, timing = sync_captions_to_asr(
+        words,
+        slots,
+        music_start_s=0.0,
+        music_end_s=6.0,
+    )
+    assert script_text == "hello world tail"
+    assert "hello" in overrides["a"]
+    assert "tail" in overrides["b"]
+    assert timing["a"][0]["start_s"] == 0.5
+    assert timing["b"][-1]["text"] == "tail"
 
 
 def test_split_script_distributes_words_by_slot_duration() -> None:
@@ -210,8 +270,8 @@ def test_distribute_script_with_timing_preserves_asr_times_on_auto_allocate() ->
     assert "hello" in overrides["a"]
     assert "tail" in overrides["b"]
     assert timing["a"][0]["start_s"] == 0.1
-    assert timing["a"][1]["start_s"] == 0.9
-    assert timing["b"][-1]["end_s"] == 1.8
+    assert timing["a"][2]["start_s"] == 2.2
+    assert all(float(word["end_s"]) > float(word["start_s"]) for words in timing.values() for word in words)
 
 
 def test_distribute_script_with_timing_clears_stale_timing_when_script_edited() -> None:
@@ -226,6 +286,55 @@ def test_distribute_script_with_timing_clears_stale_timing_when_script_edited() 
     )
     assert overrides["a"] == "completely different words"
     assert timing == {}
+
+
+def test_distribute_script_with_timing_rebases_reallocated_words_without_zero_duration() -> None:
+    """Budget reallocation must not zero ASR timestamps by subtracting slot.out_start_s."""
+    slots = [
+        StorySlot(
+            id="hook",
+            order=0,
+            label="Hook",
+            out_start_s=0.0,
+            out_end_s=1.5,
+            target_duration_s=1.5,
+        ),
+        StorySlot(
+            id="clip",
+            order=1,
+            label="Clip",
+            out_start_s=1.5,
+            out_end_s=6.5,
+            target_duration_s=5.0,
+        ),
+    ]
+    script = "one two three four five six seven eight nine ten"
+    word_timing = {
+        "hook": [
+            {"text": "one", "start_s": 0.1, "end_s": 0.3},
+            {"text": "two", "start_s": 0.4, "end_s": 0.6},
+        ],
+        "clip": [
+            {"text": "three", "start_s": 0.2, "end_s": 0.4},
+            {"text": "four", "start_s": 0.5, "end_s": 0.7},
+            {"text": "five", "start_s": 0.8, "end_s": 1.0},
+            {"text": "six", "start_s": 1.1, "end_s": 1.3},
+            {"text": "seven", "start_s": 1.4, "end_s": 1.6},
+            {"text": "eight", "start_s": 1.7, "end_s": 1.9},
+            {"text": "nine", "start_s": 2.0, "end_s": 2.2},
+            {"text": "ten", "start_s": 2.3, "end_s": 2.5},
+        ],
+    }
+    overrides, timing = distribute_script_with_timing_to_slots(
+        script,
+        slots,
+        words_per_second=5.0,
+        word_timing_overrides=word_timing,
+    )
+    assert sum(len(text.split()) for text in overrides.values()) == 10
+    for slot_words in timing.values():
+        for word in slot_words:
+            assert float(word["end_s"]) > float(word["start_s"])
 
 
 def test_caption_filter_chain_uses_storyboard_slot_offsets_not_packed_video_time(

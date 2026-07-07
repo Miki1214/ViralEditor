@@ -18,6 +18,8 @@ from viral_editor.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+_WIN_CMD_CHAR_LIMIT = 32_000  # CreateProcess limit is 32767 on Windows
+
 _FFMPEG_INSTALL_HINT = (
     "FFmpeg is required but was not found on PATH.\n\n"
     "Install on Windows:\n"
@@ -88,6 +90,48 @@ def resolve_ffmpeg_binary(name: str) -> str | None:
             return resolved
 
     return None
+
+
+def _estimate_command_chars(executable: str, args: list[str]) -> int:
+    return len(executable) + 1 + sum(len(str(arg)) + 1 for arg in args)
+
+
+def _spill_filter_complex_args(
+    args: list[str],
+    *,
+    executable: str,
+) -> tuple[list[str], list[Path]]:
+    """Move inline ``-filter_complex`` graphs to a script file on Windows."""
+    if os.name != "nt":
+        return args, []
+
+    try:
+        fc_idx = next(i for i, arg in enumerate(args) if arg == "-filter_complex")
+    except StopIteration:
+        return args, []
+
+    if fc_idx + 1 >= len(args):
+        return args, []
+
+    if _estimate_command_chars(executable, args) <= _WIN_CMD_CHAR_LIMIT:
+        return args, []
+
+    graph = args[fc_idx + 1]
+    fd, script_name = tempfile.mkstemp(suffix=".ffmpeg.fc", prefix="ve_fc_")
+    script_path = Path(script_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(graph)
+    except Exception:
+        script_path.unlink(missing_ok=True)
+        raise
+
+    new_args = (
+        args[:fc_idx]
+        + ["-filter_complex_script", str(script_path)]
+        + args[fc_idx + 2 :]
+    )
+    return new_args, [script_path]
 
 
 def escape_filter_path(path: Path) -> str:
@@ -227,51 +271,53 @@ def run_ffmpeg_with_progress(
     ) as progress_handle:
         progress_path = Path(progress_handle.name)
 
-    command = [
-        ffmpeg,
-        "-hide_banner",
-        "-nostats",
-        "-progress",
-        str(progress_path),
-        *args,
-    ]
-    logger.debug("Running with progress: %s", " ".join(command))
-
-    stderr_lines: list[str] = []
-    last_pct = -1.0
-
-    def emit_progress(pct: float) -> None:
-        nonlocal last_pct
-        if on_progress is None:
-            return
-        bounded = min(100.0, max(0.0, pct))
-        if bounded <= last_pct + 0.9 and bounded < 100.0:
-            return
-        last_pct = bounded
-        on_progress(bounded)
-
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=str(cwd) if cwd else None,
-    )
-
-    def drain_stderr() -> None:
-        if process.stderr is None:
-            return
-        for line in process.stderr:
-            stderr_lines.append(line)
-            if on_progress is not None:
-                pct = ffmpeg_stderr_progress_percent(line, duration_s)
-                if pct is not None:
-                    emit_progress(pct)
-
-    stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
-    stderr_thread.start()
-
+    spill_paths: list[Path] = []
     try:
+        args, spill_paths = _spill_filter_complex_args(args, executable=ffmpeg)
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-nostats",
+            "-progress",
+            str(progress_path),
+            *args,
+        ]
+        logger.debug("Running with progress: %s", " ".join(command))
+
+        stderr_lines: list[str] = []
+        last_pct = -1.0
+
+        def emit_progress(pct: float) -> None:
+            nonlocal last_pct
+            if on_progress is None:
+                return
+            bounded = min(100.0, max(0.0, pct))
+            if bounded <= last_pct + 0.9 and bounded < 100.0:
+                return
+            last_pct = bounded
+            on_progress(bounded)
+
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=str(cwd) if cwd else None,
+        )
+
+        def drain_stderr() -> None:
+            if process.stderr is None:
+                return
+            for line in process.stderr:
+                stderr_lines.append(line)
+                if on_progress is not None:
+                    pct = ffmpeg_stderr_progress_percent(line, duration_s)
+                    if pct is not None:
+                        emit_progress(pct)
+
+        stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
+        stderr_thread.start()
+
         while process.poll() is None:
             if on_progress is not None and progress_path.is_file():
                 try:
@@ -300,6 +346,8 @@ def run_ffmpeg_with_progress(
         return subprocess.CompletedProcess(command, process.returncode, "", stderr)
     finally:
         progress_path.unlink(missing_ok=True)
+        for spill_path in spill_paths:
+            spill_path.unlink(missing_ok=True)
 
 
 def run_ffmpeg(
@@ -312,27 +360,71 @@ def run_ffmpeg(
     if ffmpeg is None:
         raise EnvironmentError(_FFMPEG_INSTALL_HINT)
 
-    command = [ffmpeg, *args]
-    logger.debug("Running: %s", " ".join(command))
+    spill_paths: list[Path] = []
+    try:
+        args, spill_paths = _spill_filter_complex_args(args, executable=ffmpeg)
+        command = [ffmpeg, *args]
+        logger.debug("Running: %s", " ".join(command))
 
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=str(cwd) if cwd else None,
-    )
+        # #region agent log
+        try:
+            _cmd_chars = sum(len(str(a)) + 1 for a in command)
+            _fc_idx = next(
+                (i for i, a in enumerate(args) if a in ("-filter_complex", "-filter_complex_script")),
+                None,
+            )
+            _fc_mode = args[_fc_idx] if _fc_idx is not None else None
+            _fc_chars = (
+                len(str(args[_fc_idx + 1]))
+                if _fc_idx is not None and _fc_mode == "-filter_complex_script"
+                else (len(str(args[_fc_idx + 1])) if _fc_idx is not None else 0)
+            )
+            _payload = {
+                "sessionId": "471a04",
+                "runId": "post-fix",
+                "hypothesisId": "H1",
+                "location": "ffmpeg.py:run_ffmpeg",
+                "message": "run_ffmpeg command length before subprocess",
+                "data": {
+                    "command_chars": _cmd_chars,
+                    "filter_complex_chars": _fc_chars,
+                    "filter_complex_mode": _fc_mode,
+                    "spilled_to_script": bool(spill_paths),
+                    "arg_count": len(command),
+                    "win_cmd_limit": 32767,
+                    "exceeds_win_limit": _cmd_chars > 32767,
+                },
+                "timestamp": int(time.time() * 1000),
+            }
+            with open(
+                r"c:\Sources\ViralAutomation\debug-471a04.log", "a", encoding="utf-8"
+            ) as _dbg:
+                _dbg.write(json.dumps(_payload) + "\n")
+        except Exception:
+            pass
+        # #endregion
 
-    if result.returncode != 0:
-        stderr_tail = "\n".join(result.stderr.strip().splitlines()[-20:])
-        raise FFmpegError(
-            f"ffmpeg exited with code {result.returncode}",
-            command=command,
-            stderr=stderr_tail,
-            returncode=result.returncode,
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=str(cwd) if cwd else None,
         )
 
-    return result
+        if result.returncode != 0:
+            stderr_tail = "\n".join(result.stderr.strip().splitlines()[-20:])
+            raise FFmpegError(
+                f"ffmpeg exited with code {result.returncode}",
+                command=command,
+                stderr=stderr_tail,
+                returncode=result.returncode,
+            )
+
+        return result
+    finally:
+        for spill_path in spill_paths:
+            spill_path.unlink(missing_ok=True)
 
 
 def run_ffprobe_json(args: list[str]) -> dict:
