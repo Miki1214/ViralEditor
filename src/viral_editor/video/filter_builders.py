@@ -208,6 +208,20 @@ def visual_filters(
     return ",".join(parts)
 
 
+def _segment_out_len_s(
+    segment: SpeedSegment,
+    index: int,
+    *,
+    segment_count: int,
+    tail_extend_s: float,
+) -> float:
+    """Output span for one segment; tail extend recovers xfade-compressed duration."""
+    base = segment.out_end_s - segment.out_start_s
+    if index == segment_count - 1 and tail_extend_s > 1e-6:
+        return base + tail_extend_s
+    return base
+
+
 def segment_filter_chains(
     segment: SpeedSegment,
     *,
@@ -220,10 +234,16 @@ def segment_filter_chains(
     rotation_deg: int = 0,
     fit_mode: str = "contain",
     spatial_crop: tuple[float, float, float, float] | None = None,
+    out_len_extra_s: float = 0.0,
 ) -> tuple[list[str], str]:
     """Build filter chains for one output segment, including source loops."""
-    out_len = max(segment.out_end_s - segment.out_start_s, 1e-6)
-    speed = max(segment.speed_factor, 1e-6)
+    total_src = max(segment.src_end_s - segment.src_start_s, 1e-6)
+    out_len = max(segment.out_end_s - segment.out_start_s + out_len_extra_s, 1e-6)
+    if out_len_extra_s > 1e-6:
+        # Stretch the same crop across a longer output window (xfade tail recovery).
+        speed = max(total_src / out_len, 1e-6)
+    else:
+        speed = max(segment.speed_factor, 1e-6)
     spans = source_trim_spans(
         segment.src_start_s,
         segment.src_end_s,
@@ -958,6 +978,13 @@ def build_composite_filtergraph(
     width, height = scale
     parts: list[str] = []
     segment_labels: list[str] = []
+    storyboard_dur = storyboard_mux_duration_s(segments)
+    compressed_dur = composite_output_duration_s(
+        segments,
+        transitions=transitions,
+        xfade_s=xfade_s,
+    )
+    tail_extend_s = max(0.0, storyboard_dur - compressed_dur)
 
     for index, segment in enumerate(segments):
         label = f"slot{index}"
@@ -980,6 +1007,7 @@ def build_composite_filtergraph(
                 clip_id,
                 (0, "contain", None),
             )
+        out_len_extra_s = tail_extend_s if index == len(segments) - 1 else 0.0
         chains, concat_ref = segment_filter_chains(
             segment,
             input_label=f"{input_idx}:v",
@@ -991,6 +1019,7 @@ def build_composite_filtergraph(
             rotation_deg=rotation_deg,
             fit_mode=fit_mode,
             spatial_crop=spatial_crop,
+            out_len_extra_s=out_len_extra_s,
         )
         parts.extend(chains)
         role = segment_roles[index] if segment_roles and index < len(segment_roles) else None
@@ -1013,11 +1042,21 @@ def build_composite_filtergraph(
             parts.append(f"{segment_labels[0]}copy[bodyv]")
         else:
             current = segment_labels[0]
-            elapsed = segments[0].out_end_s - segments[0].out_start_s
+            elapsed = _segment_out_len_s(
+                segments[0],
+                0,
+                segment_count=len(segments),
+                tail_extend_s=tail_extend_s,
+            )
             for index in range(1, len(segment_labels)):
                 transition = transitions[index] if index < len(transitions) else "cut"
                 nxt = segment_labels[index]
-                seg_len = segments[index].out_end_s - segments[index].out_start_s
+                seg_len = _segment_out_len_s(
+                    segments[index],
+                    index,
+                    segment_count=len(segments),
+                    tail_extend_s=tail_extend_s,
+                )
                 if transition == "xfade" and xfade_s > 1e-6:
                     merged = f"xf{index}"
                     offset = max(elapsed - xfade_s, 0.0)
@@ -1058,20 +1097,6 @@ def build_composite_filtergraph(
         pan_gain=pan_gain,
         output_label=motion_label,
     )
-
-    storyboard_dur = storyboard_mux_duration_s(segments)
-    compressed_dur = composite_output_duration_s(
-        segments,
-        transitions=transitions,
-        xfade_s=xfade_s,
-    )
-    pad_s = max(0.0, storyboard_dur - compressed_dur)
-    if pad_s > 1e-6:
-        pad_label = "storyboardpad"
-        parts.append(
-            f"{composed_ref}tpad=stop_mode=clone:stop_duration={pad_s:.6f}[{pad_label}]"
-        )
-        composed_ref = f"[{pad_label}]"
 
     if has_hook_title:
         composed_ref = build_hook_title_overlay(

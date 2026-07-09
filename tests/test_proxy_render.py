@@ -511,7 +511,8 @@ def test_build_composite_filtergraph_pads_video_to_storyboard_duration_for_capti
         slot_ids=["slot0", "slot1"],
         slot_offsets={"slot0": 0.0, "slot1": 2.0},
     )
-    assert "tpad=stop_mode=clone:stop_duration=0.250000" in graph
+    assert "tpad=stop_mode=clone" not in graph
+    assert "trim=duration=3.250000" in graph
     assert "between(t\\,4.500000\\,4.900000)" in graph
 
 

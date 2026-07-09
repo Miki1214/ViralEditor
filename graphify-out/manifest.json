@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/proxy_render.py": {
-    "mtime": 1783458530.8176768,
-    "ast_hash": "9b9266d5f8540e295b319d402a073855",
+    "mtime": 1783619981.1401556,
+    "ast_hash": "cbc9c093decdc25295412affcffce8f7",
     "semantic_hash": ""
   },
   "src/viral_editor/video/spatial_fx.py": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "tests/test_proxy_render.py": {
-    "mtime": 1783461525.0905595,
-    "ast_hash": "379fcefb781804d3bae0830e9cf08158",
+    "mtime": 1783619979.3768477,
+    "ast_hash": "572a8fccf27077fd0a4b93c830c75d04",
     "semantic_hash": ""
   },
   "tests/test_retention_policy.py": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783461642.729786,
-    "ast_hash": "e7fa255b93738be9a5fb5ef05ef8157f",
+    "mtime": 1783619977.8559723,
+    "ast_hash": "15964c38fee7b7f77b8ed49bd66277d8",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
@@ -1055,13 +1055,13 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/caption.py": {
-    "mtime": 1783618838.6919158,
-    "ast_hash": "90aa93ed7112898237546f567473adca",
+    "mtime": 1783619201.2304492,
+    "ast_hash": "18e38a1b0ef0affeba2e2913340093c5",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/captions.py": {
-    "mtime": 1783618888.0262487,
-    "ast_hash": "3b34d5167005c76552ad89c791b6cf29",
+    "mtime": 1783619194.0950997,
+    "ast_hash": "80cf112c02d9007ee3d927e631ceea43",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/transcribe.py": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783618844.495304,
-    "ast_hash": "0051025221c6ae0d56b2fee708bee768",
+    "mtime": 1783619205.7114315,
+    "ast_hash": "bd299a31ca388c4e43894f81461d04b3",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {
