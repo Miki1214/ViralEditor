@@ -137,6 +137,9 @@ def transcribe_from_clips(
     segments, _roles, slot_ids = storyboard_to_segments(storyboard, clip_media)
     clips_by_id = {clip.id: clip for clip in config.clips}
     slots_by_id = {slot.id: slot for slot in storyboard.slots}
+    for slot in storyboard.slots:
+        slot_overrides.setdefault(slot.id, "")
+        word_timing_overrides.setdefault(slot.id, [])
 
     try:
         for segment, slot_id in zip(segments, slot_ids, strict=True):

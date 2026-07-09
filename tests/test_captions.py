@@ -162,6 +162,33 @@ def test_assign_transcribed_words_to_slot_overrides_maps_by_storyboard_time() ->
     assert overrides["b"] == "middle clip tail"
 
 
+def test_assign_transcribed_words_marks_silent_slots_explicit_empty() -> None:
+    slots = [_slot("a", 0, 3.0), _slot("b", 1, 3.0), _slot("c", 2, 3.0)]
+    words = [
+        CaptionWord(text="hello", start_s=0.5, end_s=0.8),
+        CaptionWord(text="world", start_s=1.0, end_s=1.3),
+    ]
+    overrides = assign_transcribed_words_to_slot_overrides(
+        words,
+        slots,
+        music_start_s=0.0,
+        music_end_s=9.0,
+    )
+    assert overrides == {"a": "hello world", "b": "", "c": ""}
+
+    chunks_by_slot = split_script_into_chunks(
+        "hello world",
+        slots,
+        slot_overrides=overrides,
+    )
+    assert [word.text for chunk in chunks_by_slot["a"] for word in chunk.words] == [
+        "hello",
+        "world",
+    ]
+    assert chunks_by_slot["b"] == []
+    assert chunks_by_slot["c"] == []
+
+
 def test_assign_transcribed_words_with_timing_to_slots_rebases_to_slot_local_time() -> None:
     slots = [_slot("a", 0, 3.0), _slot("b", 1, 2.0)]
     words = [

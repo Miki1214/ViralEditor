@@ -291,11 +291,7 @@ def assign_transcribed_words_to_slot_overrides(
         if matched_slot is not None:
             buckets[matched_slot.id].append(word.text)
 
-    return {
-        slot_id: " ".join(tokens)
-        for slot_id, tokens in buckets.items()
-        if tokens
-    }
+    return {slot.id: " ".join(buckets[slot.id]) for slot in ordered}
 
 
 def _match_word_to_slot(

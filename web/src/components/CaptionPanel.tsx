@@ -151,9 +151,6 @@ export function CaptionPanel({
   const [transcribeLanguage, setTranscribeLanguage] = useState("auto");
   const [transcribeTranslate, setTranscribeTranslate] = useState(false);
   const [scriptDraft, setScriptDraft] = useState(caption?.script_text ?? "");
-  const [captionAction, setCaptionAction] = useState<"cleanup" | "allocate" | "sync" | null>(
-    null,
-  );
 
   useEffect(() => {
     if (caption) {
@@ -206,38 +203,6 @@ export function CaptionPanel({
     },
     [caption, onPatchCaption],
   );
-
-  const handleCleanup = useCallback(async () => {
-    if (!caption) return;
-    setCaptionAction("cleanup");
-    try {
-      await onPatchCaption({
-        script_text: scriptDraft,
-        slot_overrides: caption.slot_overrides,
-        cleanup: true,
-      });
-    } finally {
-      setCaptionAction(null);
-    }
-  }, [caption, onPatchCaption, scriptDraft]);
-
-  const handleAutoAllocate = useCallback(async () => {
-    setCaptionAction("allocate");
-    try {
-      await onPatchCaption({ script_text: scriptDraft, auto_allocate: true });
-    } finally {
-      setCaptionAction(null);
-    }
-  }, [onPatchCaption, scriptDraft]);
-
-  const handleAudioSync = useCallback(async () => {
-    setCaptionAction("sync");
-    try {
-      await onPatchCaption({ audio_sync: true });
-    } finally {
-      setCaptionAction(null);
-    }
-  }, [onPatchCaption]);
 
   const wpsOptions = useMemo(
     () => caption?.wps_presets ?? [{ words_per_second: 5, label: "Recommended" }],
@@ -409,46 +374,7 @@ export function CaptionPanel({
         </div>
 
         <label className="block">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="field-label">Script</span>
-            <div className="flex flex-wrap gap-1">
-              <button
-                type="button"
-                className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase"
-                disabled={captionAction !== null || saving || !scriptDraft.trim()}
-                title="Normalize script and per-clip caption text (quotes, whitespace, punctuation spacing)"
-                onClick={() => void handleCleanup()}
-              >
-                {captionAction === "cleanup" ? "Cleaning…" : "Clean up"}
-              </button>
-              <button
-                type="button"
-                className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase text-scope-trace"
-                disabled={captionAction !== null || saving || !scriptDraft.trim()}
-                title="Split the script across clips by reading-speed word budget (even text spread)"
-                onClick={() => void handleAutoAllocate()}
-              >
-                {captionAction === "allocate" ? "Allocating…" : "Auto-allocate"}
-              </button>
-              <button
-                type="button"
-                className="btn-ghost px-2 py-1 font-mono text-[10px] uppercase text-hook-gold"
-                disabled={
-                  captionAction !== null ||
-                  saving ||
-                  !caption?.audio_sync_available
-                }
-                title={
-                  caption?.audio_sync_available
-                    ? "Re-assign clip captions using stored ASR word timestamps from transcription"
-                    : "Run Auto-transcribe first to store ASR timing"
-                }
-                onClick={() => void handleAudioSync()}
-              >
-                {captionAction === "sync" ? "Syncing…" : "Audio-sync captions"}
-              </button>
-            </div>
-          </div>
+          <span className="field-label">Script</span>
           <textarea
             className="field-input mt-1 min-h-[96px] w-full resize-y"
             value={scriptDraft}
@@ -460,8 +386,7 @@ export function CaptionPanel({
             }}
           />
           <p className="mt-1 text-[10px] text-monitor-muted">
-            Editing saves raw text only. Use Clean up to normalize, Auto-allocate to spread by
-            reading speed, or Audio-sync to restore transcription timing.
+            Editing saves on blur. Use Auto-transcribe to populate from audio.
           </p>
         </label>
 
