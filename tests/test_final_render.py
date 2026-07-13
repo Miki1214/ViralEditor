@@ -117,6 +117,26 @@ def test_final_segment_continuity() -> None:
     assert abs(estimated - plan.output_duration_s) < 1.0 / 60.0
 
 
+def test_render_duration_independent_of_loop_crossfade(monkeypatch) -> None:
+    """Mux length comes from the render plan, not music loop crossfade settings."""
+    from viral_editor.audio import loop_seam
+
+    plan = _sample_plan()
+    expected_duration_s = plan_output_duration_s(plan)
+    assert expected_duration_s == 4.0
+
+    for crossfade_s in (0.04, 0.12, 0.25, 0.5):
+        monkeypatch.setattr(loop_seam, "DEFAULT_CROSSFADE_S", crossfade_s)
+        assert plan_output_duration_s(plan) == expected_duration_s
+
+        encode_args = build_final_encode_args(
+            RenderConfig(),
+            audio_input_index=1,
+            duration_s=plan_output_duration_s(plan),
+        )
+        assert f"-t {expected_duration_s:.6f}" in " ".join(encode_args)
+
+
 def test_final_render_without_title_omits_overlay() -> None:
     render_cfg = RenderConfig()
     graph = build_final_filtergraph(

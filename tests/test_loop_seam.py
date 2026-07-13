@@ -3,22 +3,28 @@
 from __future__ import annotations
 
 from viral_editor.audio.loop_seam import (
+    DEFAULT_CROSSFADE_S,
     build_loop_audition_filter,
     build_loop_seam_only_filter,
 )
 from viral_editor.audio.preview import ensure_loop_seam_audio, preview_cache_path
 
 
+def test_default_crossfade_is_120ms() -> None:
+    assert DEFAULT_CROSSFADE_S == 0.12
+
+
 def test_build_loop_audition_filter_uses_equal_power_crossfade() -> None:
     graph = build_loop_audition_filter(10.0, 30.0, crossfade_s=0.04)
     assert "acrossfade" in graph
-    assert "c1=tri:c2=tri" in graph
+    assert "c1=qsin:c2=qsin" in graph
     assert "atrim=start=10.000000:duration=30.000000" in graph
 
 
 def test_build_loop_seam_only_filter_wraps_tail_to_head() -> None:
     graph = build_loop_seam_only_filter(10.0, 40.0, crossfade_s=0.04)
     assert "acrossfade" in graph
+    assert "c1=qsin:c2=qsin" in graph
     assert "atrim=start=" in graph
     assert "apad=pad_dur=" in graph
 

@@ -135,8 +135,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/audio/loop_seam.py": {
-    "mtime": 1781890578.5552268,
-    "ast_hash": "1c68a381670a79217ce1b74021f972f9",
+    "mtime": 1783977128.0767634,
+    "ast_hash": "49432138f6c42a4fc9039414031b23d9",
     "semantic_hash": ""
   },
   "src/viral_editor/audio/preview.py": {
@@ -340,8 +340,8 @@
     "semantic_hash": ""
   },
   "tests/test_loop_seam.py": {
-    "mtime": 1781902713.5638556,
-    "ast_hash": "851deccb3d97e8536c9957452f4f7227",
+    "mtime": 1783977073.440395,
+    "ast_hash": "57ca15e89c4c8e7958dd702f6586ad6f",
     "semantic_hash": ""
   },
   "tests/test_models.py": {
@@ -375,8 +375,8 @@
     "semantic_hash": ""
   },
   "tests/test_storyboard.py": {
-    "mtime": 1783366932.9182794,
-    "ast_hash": "da6281035b7d6ad66c54a191334757da",
+    "mtime": 1783976411.7839284,
+    "ast_hash": "4aa44e7014d230ebfc1dc3c9fd363b3b",
     "semantic_hash": ""
   },
   "tests/test_structure.py": {
@@ -495,8 +495,8 @@
     "semantic_hash": ""
   },
   "web/src/components/StoryboardPanel.tsx": {
-    "mtime": 1782667374.8707528,
-    "ast_hash": "0d03d748fa34806b8d4fa662eb7d6d74",
+    "mtime": 1783976326.435755,
+    "ast_hash": "aed08d7a1c5f1ef98421bc4be5cef9e6",
     "semantic_hash": ""
   },
   "web/src/components/StoryboardScopeCanvas.tsx": {
@@ -610,13 +610,13 @@
     "semantic_hash": ""
   },
   "web/src/utils/hookCrop.test.ts": {
-    "mtime": 1781974187.2834568,
-    "ast_hash": "9b18d65bb63c396ab31b2cb7cf334ca2",
+    "mtime": 1783976306.0154095,
+    "ast_hash": "a9aac15d4ad773f9396b96bf4d7fd2d5",
     "semantic_hash": ""
   },
   "web/src/utils/hookCrop.ts": {
-    "mtime": 1781966467.194452,
-    "ast_hash": "e25d0ac504ef2fa5442000d4ecf9221a",
+    "mtime": 1783976325.4879105,
+    "ast_hash": "de44033190ae32b8b19740ef5af47405",
     "semantic_hash": ""
   },
   "web/src/utils/playheadBus.ts": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783965425.9150257,
-    "ast_hash": "b92b2af2559a1c01d477ed50f9cff862",
+    "mtime": 1783965725.1691132,
+    "ast_hash": "97eb83a09d94289cc6badb832d052a17",
     "semantic_hash": ""
   },
   "assets/README.md": {
@@ -1040,8 +1040,8 @@
     "semantic_hash": ""
   },
   "tests/test_final_render.py": {
-    "mtime": 1783366563.0815854,
-    "ast_hash": "7e2a86f7dfc465becbbd30cdb3ea30a6",
+    "mtime": 1783977109.9479623,
+    "ast_hash": "34a07290f010e4576502494d5b78461f",
     "semantic_hash": ""
   },
   ".cursor/plans/phase_6_render_plan_rewrite_c911ad52.plan.md": {
@@ -1175,13 +1175,13 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/auto_rotate.py": {
-    "mtime": 1783965463.430247,
-    "ast_hash": "866f784ab174bf93d537a047fbf2e6ff",
+    "mtime": 1783965692.6913576,
+    "ast_hash": "54f65c20f8475ff0c5b754e1cb38d170",
     "semantic_hash": ""
   },
   "tests/test_auto_rotate.py": {
-    "mtime": 1783965445.2416353,
-    "ast_hash": "e7c4e1182b6a5241bb2333d36aa04cf0",
+    "mtime": 1783965711.3823884,
+    "ast_hash": "3ccdd6e386fed307dea8181afce294b3",
     "semantic_hash": ""
   },
   "tests/test_auto_rotate_settings.py": {
@@ -1202,6 +1202,16 @@
   "tests/test_orientation_classifier.py": {
     "mtime": 1783965451.4094355,
     "ast_hash": "dcbc1d53e61cf81b9919b58de78dfde3",
+    "semantic_hash": ""
+  },
+  ".cursor/plans/default_whole-clip_speed-fit_on_upload_bf377297.plan.md": {
+    "mtime": 1783976403.378673,
+    "ast_hash": "2885205ba7fb996774c9337da1e6f5a8",
+    "semantic_hash": ""
+  },
+  ".cursor/plans/smoother_audio_loop_crossfade_3069c082.plan.md": {
+    "mtime": 1783977144.0562136,
+    "ast_hash": "6eb4bcc3b73ab977870d607be639d793",
     "semantic_hash": ""
   }
 }
