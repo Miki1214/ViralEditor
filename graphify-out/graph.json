@@ -1823,7 +1823,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_render_job",
-      "community": 99,
+      "community": 149,
       "norm_label": "render_job.py"
     },
     {
@@ -1833,7 +1833,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "api_render_job_segment_transform_for_slot",
-      "community": 99,
+      "community": 149,
       "norm_label": "_segment_transform_for_slot()"
     },
     {
@@ -1843,7 +1843,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "api_render_job_build_render_plan",
-      "community": 99,
+      "community": 149,
       "norm_label": "build_render_plan()"
     },
     {
@@ -1893,7 +1893,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "api_render_job_render_storyboard_final",
-      "community": 99,
+      "community": 149,
       "norm_label": "render_storyboard_final()"
     },
     {
@@ -1903,7 +1903,7 @@
       "source_location": "L151",
       "_origin": "ast",
       "id": "api_render_job_start_final_render",
-      "community": 33,
+      "community": 149,
       "norm_label": "start_final_render()"
     },
     {
@@ -1923,7 +1923,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_render_job_rationale_1",
-      "community": 99,
+      "community": 149,
       "norm_label": "final render orchestration for api jobs."
     },
     {
@@ -1933,7 +1933,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "api_render_job_rationale_48",
-      "community": 99,
+      "community": 149,
       "norm_label": "build a ``renderplan`` and assembly metadata from a filled storyboard."
     },
     {
@@ -1943,7 +1943,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "api_render_job_rationale_94",
-      "community": 99,
+      "community": 149,
       "norm_label": "encode the final mp4 for a storyboard with all slots assigned."
     },
     {
@@ -1953,7 +1953,7 @@
       "source_location": "L152",
       "_origin": "ast",
       "id": "api_render_job_rationale_152",
-      "community": 33,
+      "community": 149,
       "norm_label": "render the final mp4 on a background thread."
     },
     {
@@ -2313,7 +2313,7 @@
       "source_location": "L654",
       "_origin": "ast",
       "id": "routes_jobs_update_clips",
-      "community": 33,
+      "community": 53,
       "norm_label": "update_clips()"
     },
     {
@@ -2333,7 +2333,7 @@
       "source_location": "L714",
       "_origin": "ast",
       "id": "routes_jobs_get_speed_ramp_preview",
-      "community": 33,
+      "community": 53,
       "norm_label": "get_speed_ramp_preview()"
     },
     {
@@ -2450,7 +2450,7 @@
       "label": "patch_storyboard()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L965",
+      "source_location": "L970",
       "_origin": "ast",
       "id": "routes_jobs_patch_storyboard",
       "community": 33,
@@ -2460,7 +2460,7 @@
       "label": "StoryboardPatchRequest",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L965",
+      "source_location": "L970",
       "_origin": "ast",
       "id": "storyboardpatchrequest",
       "community": 0,
@@ -2470,7 +2470,7 @@
       "label": "assign_slot_video()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1022",
+      "source_location": "L1027",
       "_origin": "ast",
       "id": "routes_jobs_assign_slot_video",
       "community": 33,
@@ -2480,7 +2480,7 @@
       "label": "patch_slot_crop()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1130",
+      "source_location": "L1135",
       "_origin": "ast",
       "id": "routes_jobs_patch_slot_crop",
       "community": 33,
@@ -2490,7 +2490,7 @@
       "label": "SlotCropPatchRequest",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1130",
+      "source_location": "L1135",
       "_origin": "ast",
       "id": "slotcroppatchrequest",
       "community": 0,
@@ -2500,7 +2500,7 @@
       "label": "patch_slot_transform()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1186",
+      "source_location": "L1191",
       "_origin": "ast",
       "id": "routes_jobs_patch_slot_transform",
       "community": 33,
@@ -2510,7 +2510,7 @@
       "label": "SlotTransformPatchRequest",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1186",
+      "source_location": "L1191",
       "_origin": "ast",
       "id": "slottransformpatchrequest",
       "community": 0,
@@ -2520,7 +2520,7 @@
       "label": "clear_slot_video()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1248",
+      "source_location": "L1253",
       "_origin": "ast",
       "id": "routes_jobs_clear_slot_video",
       "community": 33,
@@ -2530,7 +2530,7 @@
       "label": "_segment_transform_for_slot()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1283",
+      "source_location": "L1288",
       "_origin": "ast",
       "id": "routes_jobs_segment_transform_for_slot",
       "community": 33,
@@ -2540,7 +2540,7 @@
       "label": "StorySlot",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1283",
+      "source_location": "L1288",
       "_origin": "ast",
       "id": "src_viral_editor_api_routes_jobs_py_storyslot",
       "community": 0,
@@ -2550,7 +2550,7 @@
       "label": "get_caption()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1296",
+      "source_location": "L1301",
       "_origin": "ast",
       "id": "routes_jobs_get_caption",
       "community": 33,
@@ -2560,7 +2560,7 @@
       "label": "CaptionResponse",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1296",
+      "source_location": "L1301",
       "_origin": "ast",
       "id": "src_viral_editor_api_routes_jobs_py_captionresponse",
       "community": 0,
@@ -2570,17 +2570,17 @@
       "label": "patch_caption()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1305",
+      "source_location": "L1310",
       "_origin": "ast",
       "id": "routes_jobs_patch_caption",
-      "community": 154,
+      "community": 4,
       "norm_label": "patch_caption()"
     },
     {
       "label": "CaptionPatchRequest",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1305",
+      "source_location": "L1310",
       "_origin": "ast",
       "id": "captionpatchrequest",
       "community": 0,
@@ -2590,7 +2590,7 @@
       "label": "transcribe_caption()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1497",
+      "source_location": "L1474",
       "_origin": "ast",
       "id": "routes_jobs_transcribe_caption",
       "community": 33,
@@ -2600,7 +2600,7 @@
       "label": "TranscribeCaptionResponse",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1497",
+      "source_location": "L1474",
       "_origin": "ast",
       "id": "transcribecaptionresponse",
       "community": 0,
@@ -2610,7 +2610,7 @@
       "label": "get_composite_preview()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/routes/jobs.py",
-      "source_location": "L1611",
+      "source_location": "L1588",
       "_origin": "ast",
       "id": "routes_jobs_get_composite_preview",
       "community": 33,
@@ -2653,7 +2653,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_runner",
-      "community": 6,
+      "community": 148,
       "norm_label": "runner.py"
     },
     {
@@ -2663,7 +2663,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "api_runner_on_event_factory",
-      "community": 6,
+      "community": 148,
       "norm_label": "_on_event_factory()"
     },
     {
@@ -2683,7 +2683,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "api_runner_start_job",
-      "community": 0,
+      "community": 148,
       "norm_label": "start_job()"
     },
     {
@@ -2733,7 +2733,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_runner_rationale_1",
-      "community": 6,
+      "community": 148,
       "norm_label": "background pipeline execution for api jobs."
     },
     {
@@ -2743,7 +2743,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "api_runner_rationale_34",
-      "community": 0,
+      "community": 148,
       "norm_label": "run a queued job on a background thread."
     },
     {
@@ -3183,7 +3183,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_speed",
-      "community": 63,
+      "community": 53,
       "norm_label": "speed.py"
     },
     {
@@ -3193,7 +3193,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "api_speed_load_speed_ramp_options",
-      "community": 63,
+      "community": 53,
       "norm_label": "load_speed_ramp_options()"
     },
     {
@@ -3203,7 +3203,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "src_viral_editor_api_speed_py_path",
-      "community": 63,
+      "community": 53,
       "norm_label": "path"
     },
     {
@@ -3213,7 +3213,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "src_viral_editor_api_speed_py_speedrampoptionset",
-      "community": 63,
+      "community": 53,
       "norm_label": "speedrampoptionset"
     },
     {
@@ -3223,7 +3223,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "api_speed_load_speed_segments",
-      "community": 63,
+      "community": 53,
       "norm_label": "load_speed_segments()"
     },
     {
@@ -3233,7 +3233,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "src_viral_editor_api_speed_py_speedrampplan",
-      "community": 63,
+      "community": 53,
       "norm_label": "speedrampplan"
     },
     {
@@ -3243,7 +3243,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "api_speed_trim_sections",
-      "community": 63,
+      "community": 53,
       "norm_label": "_trim_sections()"
     },
     {
@@ -3253,7 +3253,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "src_viral_editor_api_speed_py_musicsection",
-      "community": 63,
+      "community": 99,
       "norm_label": "musicsection"
     },
     {
@@ -3263,7 +3263,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "api_speed_compute_speed_options",
-      "community": 133,
+      "community": 53,
       "norm_label": "compute_speed_options()"
     },
     {
@@ -3273,7 +3273,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "src_viral_editor_api_speed_py_jobconfig",
-      "community": 63,
+      "community": 53,
       "norm_label": "jobconfig"
     },
     {
@@ -3283,7 +3283,7 @@
       "source_location": "L141",
       "_origin": "ast",
       "id": "api_speed_invalidate_speed_previews",
-      "community": 63,
+      "community": 53,
       "norm_label": "invalidate_speed_previews()"
     },
     {
@@ -3293,7 +3293,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "api_speed_refresh_speed_selection",
-      "community": 63,
+      "community": 53,
       "norm_label": "refresh_speed_selection()"
     },
     {
@@ -3303,7 +3303,7 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "api_speed_speed_proxy_cache_key",
-      "community": 63,
+      "community": 53,
       "norm_label": "speed_proxy_cache_key()"
     },
     {
@@ -3313,7 +3313,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_speed_rationale_1",
-      "community": 63,
+      "community": 53,
       "norm_label": "load speed-ramp artifacts and refresh style selection."
     },
     {
@@ -3323,7 +3323,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "api_speed_rationale_78",
-      "community": 133,
+      "community": 53,
       "norm_label": "recompute all speed options from analysis artifacts."
     },
     {
@@ -3333,7 +3333,7 @@
       "source_location": "L156",
       "_origin": "ast",
       "id": "api_speed_rationale_156",
-      "community": 63,
+      "community": 53,
       "norm_label": "apply style/overrides, recompute options, and persist selected segments."
     },
     {
@@ -3653,7 +3653,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_storyboard",
-      "community": 33,
+      "community": 8,
       "norm_label": "storyboard.py"
     },
     {
@@ -3673,7 +3673,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "src_viral_editor_api_storyboard_py_path",
-      "community": 33,
+      "community": 8,
       "norm_label": "path"
     },
     {
@@ -3683,7 +3683,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "src_viral_editor_api_storyboard_py_storyboard",
-      "community": 33,
+      "community": 8,
       "norm_label": "storyboard"
     },
     {
@@ -3703,7 +3703,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "api_storyboard_storyboard_variant_key",
-      "community": 33,
+      "community": 8,
       "norm_label": "_storyboard_variant_key()"
     },
     {
@@ -3713,7 +3713,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "api_storyboard_load_storyboard_variants",
-      "community": 33,
+      "community": 8,
       "norm_label": "load_storyboard_variants()"
     },
     {
@@ -3723,7 +3723,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "api_storyboard_persist_storyboard_variant",
-      "community": 33,
+      "community": 8,
       "norm_label": "persist_storyboard_variant()"
     },
     {
@@ -3733,7 +3733,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "api_storyboard_slot_reuse_key",
-      "community": 33,
+      "community": 8,
       "norm_label": "_slot_reuse_key()"
     },
     {
@@ -3743,7 +3743,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "src_viral_editor_api_storyboard_py_storyslot",
-      "community": 33,
+      "community": 8,
       "norm_label": "storyslot"
     },
     {
@@ -3753,7 +3753,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "api_storyboard_copy_slot_assignment",
-      "community": 33,
+      "community": 8,
       "norm_label": "_copy_slot_assignment()"
     },
     {
@@ -3763,7 +3763,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "api_storyboard_reuse_storyboard_assignments",
-      "community": 33,
+      "community": 8,
       "norm_label": "reuse_storyboard_assignments()"
     },
     {
@@ -3773,7 +3773,7 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "api_storyboard_refresh_hook_inversion_layout",
-      "community": 33,
+      "community": 8,
       "norm_label": "refresh_hook_inversion_layout()"
     },
     {
@@ -3783,7 +3783,7 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "src_viral_editor_api_storyboard_py_jobconfig",
-      "community": 33,
+      "community": 8,
       "norm_label": "jobconfig"
     },
     {
@@ -3793,7 +3793,7 @@
       "source_location": "L154",
       "_origin": "ast",
       "id": "api_storyboard_sync_teaser_duration_from_layout",
-      "community": 33,
+      "community": 8,
       "norm_label": "sync_teaser_duration_from_layout()"
     },
     {
@@ -3803,7 +3803,7 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "api_storyboard_sync_storyboard_hook_layout",
-      "community": 33,
+      "community": 8,
       "norm_label": "sync_storyboard_hook_layout()"
     },
     {
@@ -3813,7 +3813,7 @@
       "source_location": "L192",
       "_origin": "ast",
       "id": "api_storyboard_hook_output_budget_s",
-      "community": 33,
+      "community": 19,
       "norm_label": "hook_output_budget_s()"
     },
     {
@@ -3823,7 +3823,7 @@
       "source_location": "L203",
       "_origin": "ast",
       "id": "api_storyboard_teaser_settings_response",
-      "community": 33,
+      "community": 8,
       "norm_label": "teaser_settings_response()"
     },
     {
@@ -3833,7 +3833,7 @@
       "source_location": "L250",
       "_origin": "ast",
       "id": "api_storyboard_is_hook_family_role",
-      "community": 33,
+      "community": 8,
       "norm_label": "_is_hook_family_role()"
     },
     {
@@ -3843,7 +3843,7 @@
       "source_location": "L254",
       "_origin": "ast",
       "id": "api_storyboard_hook_unified_crop_range",
-      "community": 33,
+      "community": 19,
       "norm_label": "hook_unified_crop_range()"
     },
     {
@@ -3853,7 +3853,7 @@
       "source_location": "L280",
       "_origin": "ast",
       "id": "api_storyboard_resplit_hook_family_crops",
-      "community": 33,
+      "community": 8,
       "norm_label": "_resplit_hook_family_crops()"
     },
     {
@@ -3863,7 +3863,7 @@
       "source_location": "L326",
       "_origin": "ast",
       "id": "api_storyboard_hook_family_assigned_clip_id",
-      "community": 33,
+      "community": 8,
       "norm_label": "hook_family_assigned_clip_id()"
     },
     {
@@ -3873,7 +3873,7 @@
       "source_location": "L337",
       "_origin": "ast",
       "id": "api_storyboard_hook_clip_id_for_slot",
-      "community": 33,
+      "community": 8,
       "norm_label": "hook_clip_id_for_slot()"
     },
     {
@@ -3883,7 +3883,7 @@
       "source_location": "L345",
       "_origin": "ast",
       "id": "api_storyboard_persist_storyboard_for_job",
-      "community": 33,
+      "community": 8,
       "norm_label": "persist_storyboard_for_job()"
     },
     {
@@ -3893,7 +3893,7 @@
       "source_location": "L395",
       "_origin": "ast",
       "id": "api_storyboard_refresh_storyboard_after_music",
-      "community": 33,
+      "community": 8,
       "norm_label": "refresh_storyboard_after_music()"
     },
     {
@@ -3903,7 +3903,7 @@
       "source_location": "L402",
       "_origin": "ast",
       "id": "api_storyboard_apply_storyboard_patch",
-      "community": 33,
+      "community": 8,
       "norm_label": "apply_storyboard_patch()"
     },
     {
@@ -3913,7 +3913,7 @@
       "source_location": "L416",
       "_origin": "ast",
       "id": "api_storyboard_assign_slot_clip",
-      "community": 33,
+      "community": 8,
       "norm_label": "assign_slot_clip()"
     },
     {
@@ -3923,7 +3923,7 @@
       "source_location": "L416",
       "_origin": "ast",
       "id": "src_viral_editor_api_storyboard_py_mediainfo",
-      "community": 33,
+      "community": 8,
       "norm_label": "mediainfo"
     },
     {
@@ -3933,7 +3933,7 @@
       "source_location": "L416",
       "_origin": "ast",
       "id": "spatialcrop",
-      "community": 0,
+      "community": 8,
       "norm_label": "spatialcrop"
     },
     {
@@ -3943,7 +3943,7 @@
       "source_location": "L475",
       "_origin": "ast",
       "id": "api_storyboard_update_slot_crop",
-      "community": 33,
+      "community": 8,
       "norm_label": "update_slot_crop()"
     },
     {
@@ -3953,7 +3953,7 @@
       "source_location": "L528",
       "_origin": "ast",
       "id": "api_storyboard_update_slot_transform",
-      "community": 33,
+      "community": 8,
       "norm_label": "update_slot_transform()"
     },
     {
@@ -3963,7 +3963,7 @@
       "source_location": "L582",
       "_origin": "ast",
       "id": "api_storyboard_clear_slot_clip",
-      "community": 33,
+      "community": 8,
       "norm_label": "clear_slot_clip()"
     },
     {
@@ -3973,7 +3973,7 @@
       "source_location": "L611",
       "_origin": "ast",
       "id": "api_storyboard_clip_media_for_storyboard",
-      "community": 33,
+      "community": 8,
       "norm_label": "clip_media_for_storyboard()"
     },
     {
@@ -3983,7 +3983,7 @@
       "source_location": "L633",
       "_origin": "ast",
       "id": "api_storyboard_storyboard_segments_debug_payload",
-      "community": 33,
+      "community": 19,
       "norm_label": "storyboard_segments_debug_payload()"
     },
     {
@@ -3993,7 +3993,7 @@
       "source_location": "L682",
       "_origin": "ast",
       "id": "api_storyboard_sync_config_clips_from_storyboard",
-      "community": 33,
+      "community": 8,
       "norm_label": "sync_config_clips_from_storyboard()"
     },
     {
@@ -4003,7 +4003,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_storyboard_rationale_1",
-      "community": 33,
+      "community": 8,
       "norm_label": "storyboard artifact helpers and refresh logic."
     },
     {
@@ -4013,7 +4013,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "api_storyboard_rationale_104",
-      "community": 33,
+      "community": 8,
       "norm_label": "copy per-slot clip assignments/crops/transforms from a prior storyboard."
     },
     {
@@ -4023,7 +4023,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "api_storyboard_rationale_131",
-      "community": 33,
+      "community": 8,
       "norm_label": "split or merge hook slots to match retention fx settings."
     },
     {
@@ -4033,7 +4033,7 @@
       "source_location": "L158",
       "_origin": "ast",
       "id": "api_storyboard_rationale_158",
-      "community": 33,
+      "community": 8,
       "norm_label": "keep teaser.duration_s aligned with downbeat-snapped hook start slot."
     },
     {
@@ -4043,7 +4043,7 @@
       "source_location": "L180",
       "_origin": "ast",
       "id": "api_storyboard_rationale_180",
-      "community": 33,
+      "community": 8,
       "norm_label": "reconcile hook inversion layout and downbeat alignment with current settings."
     },
     {
@@ -4053,7 +4053,7 @@
       "source_location": "L208",
       "_origin": "ast",
       "id": "api_storyboard_rationale_208",
-      "community": 33,
+      "community": 8,
       "norm_label": "build teaser settings payload including valid payoff downbeat positions."
     },
     {
@@ -4063,7 +4063,7 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "api_storyboard_rationale_255",
-      "community": 33,
+      "community": 19,
       "norm_label": "return the contiguous source crop spanning hook / hook_start + hook_end."
     },
     {
@@ -4073,7 +4073,7 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "api_storyboard_rationale_287",
-      "community": 33,
+      "community": 8,
       "norm_label": "apply a unified hook source window and re-split payoff/build slot crops."
     },
     {
@@ -4083,7 +4083,7 @@
       "source_location": "L338",
       "_origin": "ast",
       "id": "api_storyboard_rationale_338",
-      "community": 33,
+      "community": 8,
       "norm_label": "stable clip id shared by hook / hook_start / hook_end slots."
     },
     {
@@ -4093,7 +4093,7 @@
       "source_location": "L351",
       "_origin": "ast",
       "id": "api_storyboard_rationale_351",
-      "community": 33,
+      "community": 8,
       "norm_label": "build and persist a storyboard from the current music selection."
     },
     {
@@ -4103,7 +4103,7 @@
       "source_location": "L615",
       "_origin": "ast",
       "id": "api_storyboard_rationale_615",
-      "community": 33,
+      "community": 8,
       "norm_label": "probe media for every clip referenced by config and/or storyboard slots."
     },
     {
@@ -4113,7 +4113,7 @@
       "source_location": "L637",
       "_origin": "ast",
       "id": "api_storyboard_rationale_637",
-      "community": 33,
+      "community": 19,
       "norm_label": "build per-slot segment debug rows for ui / api inspection."
     },
     {
@@ -4123,7 +4123,7 @@
       "source_location": "L686",
       "_origin": "ast",
       "id": "api_storyboard_rationale_686",
-      "community": 33,
+      "community": 8,
       "norm_label": "ensure config.clips contains every assigned clip id."
     },
     {
@@ -4163,7 +4163,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "audio_beat_detector_audioanalysiserror",
-      "community": 148,
+      "community": 0,
       "norm_label": "audioanalysiserror"
     },
     {
@@ -4173,7 +4173,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "runtimeerror",
-      "community": 148,
+      "community": 0,
       "norm_label": "runtimeerror"
     },
     {
@@ -4183,7 +4183,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "audio_beat_detector_audiodspconfig",
-      "community": 148,
+      "community": 99,
       "norm_label": "audiodspconfig"
     },
     {
@@ -4193,7 +4193,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "audio_beat_detector_audioanalysisresult",
-      "community": 30,
+      "community": 99,
       "norm_label": "audioanalysisresult"
     },
     {
@@ -4323,7 +4323,7 @@
       "source_location": "L331",
       "_origin": "ast",
       "id": "src_viral_editor_audio_beat_detector_py_transient",
-      "community": 30,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -4353,7 +4353,7 @@
       "source_location": "L372",
       "_origin": "ast",
       "id": "src_viral_editor_audio_beat_detector_py_audiotimeline",
-      "community": 30,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -4393,7 +4393,7 @@
       "source_location": "L612",
       "_origin": "ast",
       "id": "src_viral_editor_audio_beat_detector_py_beatsyncfeatures",
-      "community": 30,
+      "community": 99,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -4443,7 +4443,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "audio_beat_detector_rationale_23",
-      "community": 148,
+      "community": 0,
       "norm_label": "raised when audio dsp fails."
     },
     {
@@ -4453,7 +4453,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "audio_beat_detector_rationale_27",
-      "community": 148,
+      "community": 99,
       "norm_label": "tunable parameters for onset and transient detection."
     },
     {
@@ -4463,7 +4463,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "audio_beat_detector_rationale_51",
-      "community": 30,
+      "community": 99,
       "norm_label": "timeline plus reusable dsp features for downstream planners."
     },
     {
@@ -4723,7 +4723,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "audio_block_planner_candidate",
-      "community": 9,
+      "community": 146,
       "norm_label": "_candidate"
     },
     {
@@ -5233,7 +5233,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "audio_captions_wpspreset",
-      "community": 34,
+      "community": 94,
       "norm_label": "wpspreset"
     },
     {
@@ -5283,7 +5283,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "audio_captions_cleanup_caption_texts",
-      "community": 154,
+      "community": 34,
       "norm_label": "cleanup_caption_texts()"
     },
     {
@@ -5313,7 +5313,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "src_viral_editor_audio_captions_py_captionchunk",
-      "community": 143,
+      "community": 34,
       "norm_label": "captionchunk"
     },
     {
@@ -5353,7 +5353,7 @@
       "source_location": "L257",
       "_origin": "ast",
       "id": "audio_captions_transcribed_script_in_window",
-      "community": 4,
+      "community": 94,
       "norm_label": "transcribed_script_in_window()"
     },
     {
@@ -5533,7 +5533,7 @@
       "source_location": "L628",
       "_origin": "ast",
       "id": "audio_captions_tokens_to_chunks",
-      "community": 143,
+      "community": 4,
       "norm_label": "_tokens_to_chunks()"
     },
     {
@@ -5593,7 +5593,7 @@
       "source_location": "L855",
       "_origin": "ast",
       "id": "audio_captions_group_into_phrases",
-      "community": 143,
+      "community": 4,
       "norm_label": "_group_into_phrases()"
     },
     {
@@ -5603,7 +5603,7 @@
       "source_location": "L905",
       "_origin": "ast",
       "id": "audio_captions_build_caption_chunks_for_slots",
-      "community": 143,
+      "community": 34,
       "norm_label": "build_caption_chunks_for_slots()"
     },
     {
@@ -5663,7 +5663,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "audio_captions_rationale_102",
-      "community": 154,
+      "community": 34,
       "norm_label": "normalize the full script and each slot's effective caption text."
     },
     {
@@ -5713,7 +5713,7 @@
       "source_location": "L263",
       "_origin": "ast",
       "id": "audio_captions_rationale_263",
-      "community": 4,
+      "community": 94,
       "norm_label": "join transcribed words whose midpoint falls inside the selected music window."
     },
     {
@@ -5813,7 +5813,7 @@
       "source_location": "L633",
       "_origin": "ast",
       "id": "audio_captions_rationale_633",
-      "community": 143,
+      "community": 4,
       "norm_label": "group tokens into 2\u20134 word phrase chunks with even sub-timing."
     },
     {
@@ -5843,7 +5843,7 @@
       "source_location": "L856",
       "_origin": "ast",
       "id": "audio_captions_rationale_856",
-      "community": 143,
+      "community": 4,
       "norm_label": "split tokens into groups of phrase_min_words..phrase_max_words words."
     },
     {
@@ -5853,7 +5853,7 @@
       "source_location": "L911",
       "_origin": "ast",
       "id": "audio_captions_rationale_911",
-      "community": 143,
+      "community": 34,
       "norm_label": "build per-slot caption chunks from a caption config and ordered slots."
     },
     {
@@ -5873,7 +5873,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "audio_features_beatfeaturesmeta",
-      "community": 23,
+      "community": 99,
       "norm_label": "beatfeaturesmeta"
     },
     {
@@ -5883,7 +5883,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "audio_features_beatsyncfeatures",
-      "community": 32,
+      "community": 99,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -5953,7 +5953,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "audio_features_save_features",
-      "community": 32,
+      "community": 99,
       "norm_label": "save_features()"
     },
     {
@@ -5963,7 +5963,7 @@
       "source_location": "L168",
       "_origin": "ast",
       "id": "src_viral_editor_audio_features_py_path",
-      "community": 32,
+      "community": 99,
       "norm_label": "path"
     },
     {
@@ -5973,7 +5973,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "audio_features_load_features",
-      "community": 32,
+      "community": 99,
       "norm_label": "load_features()"
     },
     {
@@ -5993,7 +5993,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "audio_features_rationale_32",
-      "community": 23,
+      "community": 99,
       "norm_label": "serializable metadata for beat-synchronous features."
     },
     {
@@ -6003,7 +6003,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "audio_features_rationale_45",
-      "community": 32,
+      "community": 99,
       "norm_label": "beat-synchronous matrices for structure and loop planning."
     },
     {
@@ -6143,7 +6143,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "src_viral_editor_audio_loop_planner_py_transient",
-      "community": 32,
+      "community": 91,
       "norm_label": "transient"
     },
     {
@@ -6203,7 +6203,7 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "src_viral_editor_audio_loop_planner_py_musicblock",
-      "community": 32,
+      "community": 91,
       "norm_label": "musicblock"
     },
     {
@@ -6393,7 +6393,7 @@
       "source_location": "L808",
       "_origin": "ast",
       "id": "src_viral_editor_audio_loop_planner_py_musicblockcatalog",
-      "community": 32,
+      "community": 30,
       "norm_label": "musicblockcatalog"
     },
     {
@@ -6753,7 +6753,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "audio_storyboard_salientcut",
-      "community": 90,
+      "community": 5,
       "norm_label": "_salientcut"
     },
     {
@@ -6763,7 +6763,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "audio_storyboard_boundaryplan",
-      "community": 90,
+      "community": 99,
       "norm_label": "_boundaryplan"
     },
     {
@@ -6773,7 +6773,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "audio_storyboard_soft_count_range",
-      "community": 90,
+      "community": 5,
       "norm_label": "_soft_count_range()"
     },
     {
@@ -6803,7 +6803,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_beatsyncfeatures",
-      "community": 5,
+      "community": 99,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -6813,7 +6813,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "audio_storyboard_drop_counts_by_slot",
-      "community": 1,
+      "community": 5,
       "norm_label": "_drop_counts_by_slot()"
     },
     {
@@ -6823,7 +6823,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_transient",
-      "community": 1,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -6853,7 +6853,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_musicblock",
-      "community": 14,
+      "community": 99,
       "norm_label": "musicblock"
     },
     {
@@ -6863,7 +6863,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_musicsection",
-      "community": 14,
+      "community": 99,
       "norm_label": "musicsection"
     },
     {
@@ -6873,7 +6873,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_ndarray",
-      "community": 90,
+      "community": 99,
       "norm_label": "ndarray"
     },
     {
@@ -6883,7 +6883,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_storyboard",
-      "community": 5,
+      "community": 151,
       "norm_label": "storyboard"
     },
     {
@@ -6893,7 +6893,7 @@
       "source_location": "L210",
       "_origin": "ast",
       "id": "audio_storyboard_slot_rationales",
-      "community": 90,
+      "community": 5,
       "norm_label": "_slot_rationales()"
     },
     {
@@ -6903,7 +6903,7 @@
       "source_location": "L250",
       "_origin": "ast",
       "id": "audio_storyboard_nearest_time_in_range",
-      "community": 90,
+      "community": 5,
       "norm_label": "_nearest_time_in_range()"
     },
     {
@@ -6913,7 +6913,7 @@
       "source_location": "L263",
       "_origin": "ast",
       "id": "audio_storyboard_collect_salient_candidates",
-      "community": 90,
+      "community": 5,
       "norm_label": "_collect_salient_candidates()"
     },
     {
@@ -6923,7 +6923,7 @@
       "source_location": "L318",
       "_origin": "ast",
       "id": "audio_storyboard_greedy_salient_cuts",
-      "community": 90,
+      "community": 5,
       "norm_label": "_greedy_salient_cuts()"
     },
     {
@@ -6933,7 +6933,7 @@
       "source_location": "L375",
       "_origin": "ast",
       "id": "audio_storyboard_clamp_boundary_count",
-      "community": 90,
+      "community": 5,
       "norm_label": "_clamp_boundary_count()"
     },
     {
@@ -6943,7 +6943,7 @@
       "source_location": "L429",
       "_origin": "ast",
       "id": "audio_storyboard_slot_reasons_from_cuts",
-      "community": 90,
+      "community": 5,
       "norm_label": "_slot_reasons_from_cuts()"
     },
     {
@@ -6953,7 +6953,7 @@
       "source_location": "L454",
       "_origin": "ast",
       "id": "audio_storyboard_salient_boundaries",
-      "community": 90,
+      "community": 5,
       "norm_label": "_salient_boundaries()"
     },
     {
@@ -6963,7 +6963,7 @@
       "source_location": "L559",
       "_origin": "ast",
       "id": "audio_storyboard_compute_boundaries",
-      "community": 90,
+      "community": 5,
       "norm_label": "_compute_boundaries()"
     },
     {
@@ -7033,7 +7033,7 @@
       "source_location": "L731",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_storyslot",
-      "community": 5,
+      "community": 151,
       "norm_label": "storyslot"
     },
     {
@@ -7103,7 +7103,7 @@
       "source_location": "L925",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_mediainfo",
-      "community": 5,
+      "community": 99,
       "norm_label": "mediainfo"
     },
     {
@@ -7133,7 +7133,7 @@
       "source_location": "L1145",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_speedsegment",
-      "community": 14,
+      "community": 99,
       "norm_label": "speedsegment"
     },
     {
@@ -7143,7 +7143,7 @@
       "source_location": "L1188",
       "_origin": "ast",
       "id": "audio_storyboard_assigned_storyboard_slots",
-      "community": 5,
+      "community": 151,
       "norm_label": "assigned_storyboard_slots()"
     },
     {
@@ -7153,7 +7153,7 @@
       "source_location": "L1197",
       "_origin": "ast",
       "id": "audio_storyboard_slot_at_storyboard_time",
-      "community": 5,
+      "community": 151,
       "norm_label": "slot_at_storyboard_time()"
     },
     {
@@ -7163,7 +7163,7 @@
       "source_location": "L1208",
       "_origin": "ast",
       "id": "audio_storyboard_composite_video_start_for_assigned_index",
-      "community": 5,
+      "community": 151,
       "norm_label": "_composite_video_start_for_assigned_index()"
     },
     {
@@ -7173,7 +7173,7 @@
       "source_location": "L1222",
       "_origin": "ast",
       "id": "audio_storyboard_storyboard_time_to_composite_time",
-      "community": 5,
+      "community": 151,
       "norm_label": "storyboard_time_to_composite_time()"
     },
     {
@@ -7183,7 +7183,7 @@
       "source_location": "L1255",
       "_origin": "ast",
       "id": "audio_storyboard_remap_fx_events_for_composite",
-      "community": 5,
+      "community": 151,
       "norm_label": "remap_fx_events_for_composite()"
     },
     {
@@ -7193,7 +7193,7 @@
       "source_location": "L1255",
       "_origin": "ast",
       "id": "src_viral_editor_audio_storyboard_py_fxevent",
-      "community": 5,
+      "community": 99,
       "norm_label": "fxevent"
     },
     {
@@ -7243,7 +7243,7 @@
       "source_location": "L1308",
       "_origin": "ast",
       "id": "audio_storyboard_merge_storyboard_updates",
-      "community": 5,
+      "community": 151,
       "norm_label": "merge_storyboard_updates()"
     },
     {
@@ -7263,7 +7263,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_58",
-      "community": 90,
+      "community": 5,
       "norm_label": "soft slot-count band around the user's slots chip."
     },
     {
@@ -7293,7 +7293,7 @@
       "source_location": "L568",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_568",
-      "community": 90,
+      "community": 5,
       "norm_label": "pick boundaries from salient audio events or fall back to even/downbeat splits."
     },
     {
@@ -7383,7 +7383,7 @@
       "source_location": "L1189",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_1189",
-      "community": 5,
+      "community": 151,
       "norm_label": "slots with clips in storyboard playback order."
     },
     {
@@ -7393,7 +7393,7 @@
       "source_location": "L1198",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_1198",
-      "community": 5,
+      "community": 151,
       "norm_label": "return the storyboard slot whose output window contains ``time_s``."
     },
     {
@@ -7403,7 +7403,7 @@
       "source_location": "L1228",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_1228",
-      "community": 5,
+      "community": 151,
       "norm_label": "map block playhead time to packed composited preview video time."
     },
     {
@@ -7413,7 +7413,7 @@
       "source_location": "L1261",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_1261",
-      "community": 5,
+      "community": 151,
       "norm_label": "keep fx only for assigned slots; remap timestamps to packed composite time."
     },
     {
@@ -7453,7 +7453,7 @@
       "source_location": "L1312",
       "_origin": "ast",
       "id": "audio_storyboard_rationale_1312",
-      "community": 5,
+      "community": 151,
       "norm_label": "apply slot field updates while preserving assignments."
     },
     {
@@ -7483,7 +7483,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "src_viral_editor_audio_structure_py_ndarray",
-      "community": 32,
+      "community": 99,
       "norm_label": "ndarray"
     },
     {
@@ -7533,7 +7533,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "src_viral_editor_audio_structure_py_beatsyncfeatures",
-      "community": 32,
+      "community": 99,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -7543,7 +7543,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "src_viral_editor_audio_structure_py_transient",
-      "community": 32,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -7553,7 +7553,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "src_viral_editor_audio_structure_py_musicsection",
-      "community": 32,
+      "community": 99,
       "norm_label": "musicsection"
     },
     {
@@ -8823,7 +8823,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_config",
-      "community": 56,
+      "community": 148,
       "norm_label": "config.py"
     },
     {
@@ -8833,7 +8833,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "viral_editor_config_validate_color",
-      "community": 28,
+      "community": 149,
       "norm_label": "_validate_color()"
     },
     {
@@ -8843,7 +8843,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "viral_editor_config_resolve_path",
-      "community": 56,
+      "community": 148,
       "norm_label": "resolve_path()"
     },
     {
@@ -8853,7 +8853,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_viral_editor_config_py_path",
-      "community": 0,
+      "community": 148,
       "norm_label": "path"
     },
     {
@@ -8873,7 +8873,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "valueerror",
-      "community": 28,
+      "community": 149,
       "norm_label": "valueerror"
     },
     {
@@ -8893,7 +8893,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "viral_editor_config_renderconfig_validate_preset",
-      "community": 28,
+      "community": 149,
       "norm_label": ".validate_preset()"
     },
     {
@@ -8913,7 +8913,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "viral_editor_config_styleconfig_validate_colors",
-      "community": 28,
+      "community": 149,
       "norm_label": ".validate_colors()"
     },
     {
@@ -8943,7 +8943,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "viral_editor_config_speedrampconfig",
-      "community": 141,
+      "community": 18,
       "norm_label": "speedrampconfig"
     },
     {
@@ -8953,7 +8953,7 @@
       "source_location": "L121",
       "_origin": "ast",
       "id": "viral_editor_config_speedrampconfig_s_max_gte_s_min",
-      "community": 28,
+      "community": 149,
       "norm_label": ".s_max_gte_s_min()"
     },
     {
@@ -8963,7 +8963,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "viral_editor_config_speedrampconfig_validate_style",
-      "community": 28,
+      "community": 149,
       "norm_label": ".validate_style()"
     },
     {
@@ -8983,7 +8983,7 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "viral_editor_config_spatialfxconfig",
-      "community": 14,
+      "community": 99,
       "norm_label": "spatialfxconfig"
     },
     {
@@ -8993,7 +8993,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "viral_editor_config_retentionconfig",
-      "community": 14,
+      "community": 99,
       "norm_label": "retentionconfig"
     },
     {
@@ -9013,7 +9013,7 @@
       "source_location": "L181",
       "_origin": "ast",
       "id": "viral_editor_config_musicselectionconfig_window_end_after_start",
-      "community": 28,
+      "community": 149,
       "norm_label": ".window_end_after_start()"
     },
     {
@@ -9053,7 +9053,7 @@
       "source_location": "L225",
       "_origin": "ast",
       "id": "viral_editor_config_jobconfig_load",
-      "community": 0,
+      "community": 148,
       "norm_label": ".load()"
     },
     {
@@ -9063,7 +9063,7 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "viral_editor_config_format_validation_error",
-      "community": 0,
+      "community": 148,
       "norm_label": "_format_validation_error()"
     },
     {
@@ -9083,7 +9083,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_1",
-      "community": 56,
+      "community": 148,
       "norm_label": "job configuration models and json loading."
     },
     {
@@ -9093,7 +9093,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_41",
-      "community": 56,
+      "community": 148,
       "norm_label": "resolve relative paths against the current working directory."
     },
     {
@@ -9143,7 +9143,7 @@
       "source_location": "L96",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_96",
-      "community": 141,
+      "community": 18,
       "norm_label": "body caption script, reading speed, and per-slot overrides."
     },
     {
@@ -9153,7 +9153,7 @@
       "source_location": "L107",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_107",
-      "community": 141,
+      "community": 18,
       "norm_label": "speed-ramp planner parameters."
     },
     {
@@ -9173,7 +9173,7 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_147",
-      "community": 14,
+      "community": 99,
       "norm_label": "beat-synced zoom punches, rotation shakes, and horizontal pan."
     },
     {
@@ -9183,7 +9183,7 @@
       "source_location": "L162",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_162",
-      "community": 14,
+      "community": 99,
       "norm_label": "research-backed interrupt cadence and hook policy."
     },
     {
@@ -9223,7 +9223,7 @@
       "source_location": "L226",
       "_origin": "ast",
       "id": "viral_editor_config_rationale_226",
-      "community": 0,
+      "community": 148,
       "norm_label": "load and validate a job json file.          relative paths in the file are resol"
     },
     {
@@ -9233,7 +9233,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_dev_runner",
-      "community": 22,
+      "community": 152,
       "norm_label": "dev_runner.py"
     },
     {
@@ -9243,7 +9243,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_devstartuperror",
-      "community": 22,
+      "community": 152,
       "norm_label": "devstartuperror"
     },
     {
@@ -9253,7 +9253,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_require_ui_deps",
-      "community": 22,
+      "community": 152,
       "norm_label": "_require_ui_deps()"
     },
     {
@@ -9263,7 +9263,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_build_api_command",
-      "community": 22,
+      "community": 152,
       "norm_label": "build_api_command()"
     },
     {
@@ -9273,7 +9273,7 @@
       "source_location": "L54",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_build_ui_command",
-      "community": 22,
+      "community": 152,
       "norm_label": "build_ui_command()"
     },
     {
@@ -9283,7 +9283,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_terminate",
-      "community": 22,
+      "community": 152,
       "norm_label": "_terminate()"
     },
     {
@@ -9293,7 +9293,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "popen",
-      "community": 22,
+      "community": 152,
       "norm_label": "popen"
     },
     {
@@ -9303,7 +9303,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_run_dev",
-      "community": 22,
+      "community": 152,
       "norm_label": "run_dev()"
     },
     {
@@ -9313,7 +9313,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_rationale_1",
-      "community": 22,
+      "community": 152,
       "norm_label": "run control room api + vite dev server together."
     },
     {
@@ -9323,7 +9323,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_rationale_16",
-      "community": 22,
+      "community": 152,
       "norm_label": "raised when dev prerequisites are missing."
     },
     {
@@ -9333,7 +9333,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "viral_editor_dev_runner_rationale_78",
-      "community": 22,
+      "community": 152,
       "norm_label": "start api (uvicorn) and vite; block until one exits or ctrl+c."
     },
     {
@@ -9343,7 +9343,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "editing_init",
-      "community": 30,
+      "community": 1,
       "norm_label": "__init__.py"
     },
     {
@@ -9353,7 +9353,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "editing_init_rationale_1",
-      "community": 30,
+      "community": 1,
       "norm_label": "export retention policy symbols."
     },
     {
@@ -9513,7 +9513,7 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "src_viral_editor_editing_retention_policy_py_transient",
-      "community": 90,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -9633,7 +9633,7 @@
       "source_location": "L922",
       "_origin": "ast",
       "id": "retentionplanscore",
-      "community": 90,
+      "community": 99,
       "norm_label": "retentionplanscore"
     },
     {
@@ -9663,7 +9663,7 @@
       "source_location": "L1056",
       "_origin": "ast",
       "id": "editing_retention_policy_vocal_boundary_penalty",
-      "community": 15,
+      "community": 160,
       "norm_label": "vocal_boundary_penalty()"
     },
     {
@@ -9843,7 +9843,7 @@
       "source_location": "L1064",
       "_origin": "ast",
       "id": "editing_retention_policy_rationale_1064",
-      "community": 15,
+      "community": 160,
       "norm_label": "return 0 when loop boundaries sit in vocal gaps, 1 when both cut mid-phrase."
     },
     {
@@ -9893,7 +9893,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ingest_loader",
-      "community": 53,
+      "community": 150,
       "norm_label": "loader.py"
     },
     {
@@ -9903,7 +9903,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "ingest_loader_ingesterror",
-      "community": 148,
+      "community": 150,
       "norm_label": "ingesterror"
     },
     {
@@ -9923,7 +9923,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "ingest_loader_parse_frame_rate",
-      "community": 53,
+      "community": 150,
       "norm_label": "parse_frame_rate()"
     },
     {
@@ -9933,7 +9933,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "ingest_loader_parse_duration",
-      "community": 53,
+      "community": 150,
       "norm_label": "_parse_duration()"
     },
     {
@@ -9943,7 +9943,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "ingest_loader_pick_stream",
-      "community": 53,
+      "community": 150,
       "norm_label": "_pick_stream()"
     },
     {
@@ -9953,7 +9953,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "ingest_loader_duration_from_probe",
-      "community": 53,
+      "community": 150,
       "norm_label": "_duration_from_probe()"
     },
     {
@@ -9963,7 +9963,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "ingest_loader_log_vfr_warning",
-      "community": 53,
+      "community": 150,
       "norm_label": "_log_vfr_warning()"
     },
     {
@@ -9973,7 +9973,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "src_viral_editor_ingest_loader_py_path",
-      "community": 53,
+      "community": 150,
       "norm_label": "path"
     },
     {
@@ -9983,7 +9983,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "ingest_loader_probe_media",
-      "community": 53,
+      "community": 150,
       "norm_label": "probe_media()"
     },
     {
@@ -9993,7 +9993,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "src_viral_editor_ingest_loader_py_mediainfo",
-      "community": 53,
+      "community": 150,
       "norm_label": "mediainfo"
     },
     {
@@ -10003,7 +10003,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "ingest_loader_ensure_output_writable",
-      "community": 53,
+      "community": 150,
       "norm_label": "_ensure_output_writable()"
     },
     {
@@ -10013,7 +10013,7 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "ingest_loader_validate_job",
-      "community": 53,
+      "community": 63,
       "norm_label": "validate_job()"
     },
     {
@@ -10023,7 +10023,7 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "src_viral_editor_ingest_loader_py_jobconfig",
-      "community": 53,
+      "community": 99,
       "norm_label": "jobconfig"
     },
     {
@@ -10033,7 +10033,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "ingest_loader_rationale_1",
-      "community": 53,
+      "community": 150,
       "norm_label": "media validation and ffprobe-based ingestion."
     },
     {
@@ -10043,7 +10043,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "ingest_loader_rationale_21",
-      "community": 148,
+      "community": 150,
       "norm_label": "raised when job media validation or probing fails."
     },
     {
@@ -10063,7 +10063,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "ingest_loader_rationale_34",
-      "community": 53,
+      "community": 150,
       "norm_label": "parse ffprobe frame rate (e.g. ``30000/1001``) to float seconds."
     },
     {
@@ -10073,7 +10073,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "ingest_loader_rationale_95",
-      "community": 53,
+      "community": 150,
       "norm_label": "probe a media file with ffprobe and return structured metadata."
     },
     {
@@ -10083,7 +10083,7 @@
       "source_location": "L187",
       "_origin": "ast",
       "id": "ingest_loader_rationale_187",
-      "community": 53,
+      "community": 63,
       "norm_label": "validate input files, probe media, and derive the output timeline."
     },
     {
@@ -10093,7 +10093,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_models",
-      "community": 30,
+      "community": 1,
       "norm_label": "models.py"
     },
     {
@@ -10103,7 +10103,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "viral_editor_models_domainmodel",
-      "community": 30,
+      "community": 99,
       "norm_label": "domainmodel"
     },
     {
@@ -10123,7 +10123,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "viral_editor_models_mediainfo",
-      "community": 1,
+      "community": 99,
       "norm_label": "mediainfo"
     },
     {
@@ -10153,7 +10153,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "viral_editor_models_transient",
-      "community": 14,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -10163,7 +10163,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "viral_editor_models_audiotimeline",
-      "community": 30,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -10183,7 +10183,7 @@
       "source_location": "L119",
       "_origin": "ast",
       "id": "viral_editor_models_musicsection",
-      "community": 32,
+      "community": 99,
       "norm_label": "musicsection"
     },
     {
@@ -10293,7 +10293,7 @@
       "source_location": "L243",
       "_origin": "ast",
       "id": "viral_editor_models_clipreel",
-      "community": 8,
+      "community": 57,
       "norm_label": "clipreel"
     },
     {
@@ -10303,7 +10303,7 @@
       "source_location": "L249",
       "_origin": "ast",
       "id": "viral_editor_models_clipreel_clip_boundaries_s",
-      "community": 8,
+      "community": 57,
       "norm_label": ".clip_boundaries_s()"
     },
     {
@@ -10323,7 +10323,7 @@
       "source_location": "L277",
       "_origin": "ast",
       "id": "viral_editor_models_captionword",
-      "community": 34,
+      "community": 94,
       "norm_label": "captionword"
     },
     {
@@ -10333,7 +10333,7 @@
       "source_location": "L286",
       "_origin": "ast",
       "id": "viral_editor_models_captionchunk",
-      "community": 106,
+      "community": 27,
       "norm_label": "captionchunk"
     },
     {
@@ -10353,7 +10353,7 @@
       "source_location": "L310",
       "_origin": "ast",
       "id": "viral_editor_models_retentionplanscore",
-      "community": 90,
+      "community": 99,
       "norm_label": "retentionplanscore"
     },
     {
@@ -10363,7 +10363,7 @@
       "source_location": "L320",
       "_origin": "ast",
       "id": "viral_editor_models_storyboard",
-      "community": 1,
+      "community": 99,
       "norm_label": "storyboard"
     },
     {
@@ -10383,7 +10383,7 @@
       "source_location": "L343",
       "_origin": "ast",
       "id": "viral_editor_models_speedcurvepoint",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedcurvepoint"
     },
     {
@@ -10393,7 +10393,7 @@
       "source_location": "L352",
       "_origin": "ast",
       "id": "viral_editor_models_speedrampplan",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedrampplan"
     },
     {
@@ -10403,7 +10403,7 @@
       "source_location": "L368",
       "_origin": "ast",
       "id": "viral_editor_models_speedrampoption",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedrampoption"
     },
     {
@@ -10423,7 +10423,7 @@
       "source_location": "L384",
       "_origin": "ast",
       "id": "viral_editor_models_fxevent",
-      "community": 14,
+      "community": 99,
       "norm_label": "fxevent"
     },
     {
@@ -10433,7 +10433,7 @@
       "source_location": "L395",
       "_origin": "ast",
       "id": "viral_editor_models_teaserspec",
-      "community": 99,
+      "community": 27,
       "norm_label": "teaserspec"
     },
     {
@@ -10443,7 +10443,7 @@
       "source_location": "L406",
       "_origin": "ast",
       "id": "viral_editor_models_emphasisspec",
-      "community": 30,
+      "community": 1,
       "norm_label": "emphasisspec"
     },
     {
@@ -10453,7 +10453,7 @@
       "source_location": "L413",
       "_origin": "ast",
       "id": "viral_editor_models_boxspec",
-      "community": 30,
+      "community": 1,
       "norm_label": "boxspec"
     },
     {
@@ -10463,7 +10463,7 @@
       "source_location": "L421",
       "_origin": "ast",
       "id": "viral_editor_models_saferect",
-      "community": 30,
+      "community": 1,
       "norm_label": "saferect"
     },
     {
@@ -10473,7 +10473,7 @@
       "source_location": "L430",
       "_origin": "ast",
       "id": "viral_editor_models_timewindow",
-      "community": 30,
+      "community": 1,
       "norm_label": "timewindow"
     },
     {
@@ -10513,7 +10513,7 @@
       "source_location": "L461",
       "_origin": "ast",
       "id": "src_viral_editor_models_py_path",
-      "community": 70,
+      "community": 147,
       "norm_label": "path"
     },
     {
@@ -10523,7 +10523,7 @@
       "source_location": "L472",
       "_origin": "ast",
       "id": "viral_editor_models_write_artifact_list",
-      "community": 148,
+      "community": 25,
       "norm_label": "write_artifact_list()"
     },
     {
@@ -10543,7 +10543,7 @@
       "source_location": "L483",
       "_origin": "ast",
       "id": "t",
-      "community": 147,
+      "community": 13,
       "norm_label": "t"
     },
     {
@@ -10553,7 +10553,7 @@
       "source_location": "L489",
       "_origin": "ast",
       "id": "viral_editor_models_read_artifact",
-      "community": 147,
+      "community": 13,
       "norm_label": "read_artifact()"
     },
     {
@@ -10563,7 +10563,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_1",
-      "community": 30,
+      "community": 1,
       "norm_label": "shared domain models \u2014 the contract between pipeline stages."
     },
     {
@@ -10573,7 +10573,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_27",
-      "community": 30,
+      "community": 99,
       "norm_label": "base for all pipeline data contracts."
     },
     {
@@ -10593,7 +10593,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_42",
-      "community": 1,
+      "community": 99,
       "norm_label": "probed metadata for a video or audio stream."
     },
     {
@@ -10623,7 +10623,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_82",
-      "community": 14,
+      "community": 99,
       "norm_label": "a detected audio hit aligned to the music timeline."
     },
     {
@@ -10633,7 +10633,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_90",
-      "community": 30,
+      "community": 99,
       "norm_label": "beat/transient analysis output from the audio dsp stage."
     },
     {
@@ -10653,7 +10653,7 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_120",
-      "community": 32,
+      "community": 99,
       "norm_label": "structural section from beat-synchronous segmentation."
     },
     {
@@ -10763,7 +10763,7 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_244",
-      "community": 8,
+      "community": 57,
       "norm_label": "virtual concatenated source built from ordered clip crops."
     },
     {
@@ -10773,7 +10773,7 @@
       "source_location": "L250",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_250",
-      "community": 8,
+      "community": 57,
       "norm_label": "reel-time positions where the active clip changes."
     },
     {
@@ -10793,7 +10793,7 @@
       "source_location": "L278",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_278",
-      "community": 34,
+      "community": 94,
       "norm_label": "one timed word within a caption phrase chunk."
     },
     {
@@ -10803,7 +10803,7 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_287",
-      "community": 106,
+      "community": 27,
       "norm_label": "a short phrase (2\u20134 words) shown together on screen."
     },
     {
@@ -10813,7 +10813,7 @@
       "source_location": "L295",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_295",
-      "community": 1,
+      "community": 99,
       "norm_label": "typography and overlay styling for title or body captions."
     },
     {
@@ -10823,7 +10823,7 @@
       "source_location": "L311",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_311",
-      "community": 90,
+      "community": 99,
       "norm_label": "viral-readiness score for a music window edit plan."
     },
     {
@@ -10833,7 +10833,7 @@
       "source_location": "L321",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_321",
-      "community": 1,
+      "community": 99,
       "norm_label": "ordered slot timeline derived from the selected music block."
     },
     {
@@ -10853,7 +10853,7 @@
       "source_location": "L344",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_344",
-      "community": 8,
+      "community": 57,
       "norm_label": "downsampled point on the output speed curve for ui overlay."
     },
     {
@@ -10863,7 +10863,7 @@
       "source_location": "L353",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_353",
-      "community": 8,
+      "community": 57,
       "norm_label": "speed-ramp planner artifact for phase 6 render."
     },
     {
@@ -10873,7 +10873,7 @@
       "source_location": "L369",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_369",
-      "community": 8,
+      "community": 57,
       "norm_label": "one hook-oriented speed profile with summary plan."
     },
     {
@@ -10893,7 +10893,7 @@
       "source_location": "L385",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_385",
-      "community": 14,
+      "community": 99,
       "norm_label": "spatial effect impulse (zoom punch, rotation shake, or horizontal pan) at a time"
     },
     {
@@ -10903,7 +10903,7 @@
       "source_location": "L396",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_396",
-      "community": 99,
+      "community": 1,
       "norm_label": "frame-0 teaser clip extracted from the tail of the source video."
     },
     {
@@ -10913,7 +10913,7 @@
       "source_location": "L407",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_407",
-      "community": 30,
+      "community": 1,
       "norm_label": "duotone emphasis tokens within hook text."
     },
     {
@@ -10923,7 +10923,7 @@
       "source_location": "L414",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_414",
-      "community": 30,
+      "community": 1,
       "norm_label": "background pill / shadow box behind title text."
     },
     {
@@ -10933,7 +10933,7 @@
       "source_location": "L422",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_422",
-      "community": 30,
+      "community": 1,
       "norm_label": "platform-safe viewport inset (clears native ui chrome)."
     },
     {
@@ -10943,7 +10943,7 @@
       "source_location": "L431",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_431",
-      "community": 30,
+      "community": 1,
       "norm_label": "inclusive start, exclusive end overlay window in seconds."
     },
     {
@@ -10983,7 +10983,7 @@
       "source_location": "L473",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_473",
-      "community": 148,
+      "community": 25,
       "norm_label": "serialize a list of domain models to ``temp_dir/<name>.json``."
     },
     {
@@ -11003,7 +11003,7 @@
       "source_location": "L490",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_490",
-      "community": 147,
+      "community": 13,
       "norm_label": "load a domain model from a json artifact written by ``write_artifact``."
     },
     {
@@ -11033,7 +11033,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "viral_editor_pipeline_pipelineresult",
-      "community": 148,
+      "community": 0,
       "norm_label": "pipelineresult"
     },
     {
@@ -11043,7 +11043,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "viral_editor_pipeline_emit",
-      "community": 148,
+      "community": 0,
       "norm_label": "_emit()"
     },
     {
@@ -11053,7 +11053,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "src_viral_editor_pipeline_py_pipelineevent",
-      "community": 148,
+      "community": 0,
       "norm_label": "pipelineevent"
     },
     {
@@ -11063,7 +11063,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "src_viral_editor_pipeline_py_stageaction",
-      "community": 148,
+      "community": 0,
       "norm_label": "stageaction"
     },
     {
@@ -11073,7 +11073,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "viral_editor_pipeline_run_pipeline",
-      "community": 148,
+      "community": 25,
       "norm_label": "run_pipeline()"
     },
     {
@@ -11083,7 +11083,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "src_viral_editor_pipeline_py_path",
-      "community": 148,
+      "community": 0,
       "norm_label": "path"
     },
     {
@@ -11093,7 +11093,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "src_viral_editor_pipeline_py_jobconfig",
-      "community": 148,
+      "community": 0,
       "norm_label": "jobconfig"
     },
     {
@@ -11113,7 +11113,7 @@
       "source_location": "L52",
       "_origin": "ast",
       "id": "viral_editor_pipeline_rationale_52",
-      "community": 148,
+      "community": 0,
       "norm_label": "outcome of a pipeline run."
     },
     {
@@ -11123,7 +11123,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "viral_editor_pipeline_rationale_83",
-      "community": 148,
+      "community": 25,
       "norm_label": "execute the retention video pipeline.      provide either ``config_path`` or a p"
     },
     {
@@ -11133,7 +11133,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_pipeline_events",
-      "community": 6,
+      "community": 148,
       "norm_label": "pipeline_events.py"
     },
     {
@@ -11153,7 +11153,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "viral_editor_pipeline_events_pipelineevent_now",
-      "community": 148,
+      "community": 0,
       "norm_label": ".now()"
     },
     {
@@ -11163,7 +11163,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_viral_editor_pipeline_events_py_stageaction",
-      "community": 148,
+      "community": 0,
       "norm_label": "stageaction"
     },
     {
@@ -11173,7 +11173,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "viral_editor_pipeline_events_rationale_1",
-      "community": 6,
+      "community": 148,
       "norm_label": "pipeline stage events for cli, api, and sse consumers."
     },
     {
@@ -11303,7 +11303,7 @@
       "source_location": "L145",
       "_origin": "ast",
       "id": "utils_ffmpeg_escape_drawtext_text",
-      "community": 70,
+      "community": 147,
       "norm_label": "escape_drawtext_text()"
     },
     {
@@ -11483,7 +11483,7 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "utils_ffmpeg_rationale_146",
-      "community": 70,
+      "community": 147,
       "norm_label": "escape caption text for drawtext ``text=`` inside single quotes.      pair with"
     },
     {
@@ -12093,7 +12093,7 @@
       "source_location": "L191",
       "_origin": "ast",
       "id": "video_auto_rotate_metadata_vote_from_probe",
-      "community": 108,
+      "community": 159,
       "norm_label": "metadata_vote_from_probe()"
     },
     {
@@ -12103,7 +12103,7 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "video_auto_rotate_detect_metadata_rotation",
-      "community": 13,
+      "community": 64,
       "norm_label": "detect_metadata_rotation()"
     },
     {
@@ -12153,7 +12153,7 @@
       "source_location": "L315",
       "_origin": "ast",
       "id": "video_auto_rotate_detect_orientation_rotation",
-      "community": 64,
+      "community": 108,
       "norm_label": "detect_orientation_rotation()"
     },
     {
@@ -12233,7 +12233,7 @@
       "source_location": "L192",
       "_origin": "ast",
       "id": "video_auto_rotate_rationale_192",
-      "community": 108,
+      "community": 159,
       "norm_label": "parse rotation metadata from one ffprobe video stream dict."
     },
     {
@@ -12243,7 +12243,7 @@
       "source_location": "L214",
       "_origin": "ast",
       "id": "video_auto_rotate_rationale_214",
-      "community": 13,
+      "community": 64,
       "norm_label": "read container rotation metadata via ffprobe."
     },
     {
@@ -12263,7 +12263,7 @@
       "source_location": "L323",
       "_origin": "ast",
       "id": "video_auto_rotate_rationale_323",
-      "community": 64,
+      "community": 108,
       "norm_label": "use a dedicated orientation classifier on extracted keyframes."
     },
     {
@@ -12503,7 +12503,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "video_filter_builders",
-      "community": 153,
+      "community": 138,
       "norm_label": "filter_builders.py"
     },
     {
@@ -12593,7 +12593,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "video_filter_builders_source_trim_spans",
-      "community": 27,
+      "community": 138,
       "norm_label": "source_trim_spans()"
     },
     {
@@ -12623,7 +12623,7 @@
       "source_location": "L212",
       "_origin": "ast",
       "id": "video_filter_builders_segment_out_len_s",
-      "community": 27,
+      "community": 138,
       "norm_label": "_segment_out_len_s()"
     },
     {
@@ -12633,7 +12633,7 @@
       "source_location": "L212",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_speedsegment",
-      "community": 27,
+      "community": 138,
       "norm_label": "speedsegment"
     },
     {
@@ -12643,7 +12643,7 @@
       "source_location": "L226",
       "_origin": "ast",
       "id": "video_filter_builders_segment_filter_chains",
-      "community": 27,
+      "community": 138,
       "norm_label": "segment_filter_chains()"
     },
     {
@@ -12653,7 +12653,7 @@
       "source_location": "L303",
       "_origin": "ast",
       "id": "video_filter_builders_enable_between_expr",
-      "community": 153,
+      "community": 138,
       "norm_label": "_enable_between_expr()"
     },
     {
@@ -12663,7 +12663,7 @@
       "source_location": "L308",
       "_origin": "ast",
       "id": "video_filter_builders_enable_union_expr",
-      "community": 153,
+      "community": 138,
       "norm_label": "_enable_union_expr()"
     },
     {
@@ -12673,7 +12673,7 @@
       "source_location": "L315",
       "_origin": "ast",
       "id": "video_filter_builders_hook_title_windows",
-      "community": 27,
+      "community": 138,
       "norm_label": "_hook_title_windows()"
     },
     {
@@ -12683,7 +12683,7 @@
       "source_location": "L327",
       "_origin": "ast",
       "id": "video_filter_builders_ffmpeg_fontcolor",
-      "community": 153,
+      "community": 138,
       "norm_label": "_ffmpeg_fontcolor()"
     },
     {
@@ -12693,7 +12693,7 @@
       "source_location": "L336",
       "_origin": "ast",
       "id": "video_filter_builders_ffmpeg_boxcolor",
-      "community": 153,
+      "community": 138,
       "norm_label": "_ffmpeg_boxcolor()"
     },
     {
@@ -12773,7 +12773,7 @@
       "source_location": "L438",
       "_origin": "ast",
       "id": "video_filter_builders_normalized_emphasis_token",
-      "community": 153,
+      "community": 138,
       "norm_label": "_normalized_emphasis_token()"
     },
     {
@@ -12793,7 +12793,7 @@
       "source_location": "L546",
       "_origin": "ast",
       "id": "video_filter_builders_drawtext_hook_overlay",
-      "community": 153,
+      "community": 138,
       "norm_label": "drawtext_hook_overlay()"
     },
     {
@@ -12803,44 +12803,44 @@
       "source_location": "L570",
       "_origin": "ast",
       "id": "video_filter_builders_build_hook_title_overlay",
-      "community": 153,
+      "community": 138,
       "norm_label": "build_hook_title_overlay()"
     },
     {
       "label": "_ink_rgb_from_color()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L636",
+      "source_location": "L602",
       "_origin": "ast",
       "id": "video_filter_builders_ink_rgb_from_color",
-      "community": 153,
+      "community": 147,
       "norm_label": "_ink_rgb_from_color()"
     },
     {
       "label": "_pixel_matches_ink()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L648",
+      "source_location": "L614",
       "_origin": "ast",
       "id": "video_filter_builders_pixel_matches_ink",
-      "community": 153,
+      "community": 147,
       "norm_label": "_pixel_matches_ink()"
     },
     {
       "label": "_measure_karaoke_word_y_tops_px()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L654",
+      "source_location": "L620",
       "_origin": "ast",
       "id": "video_filter_builders_measure_karaoke_word_y_tops_px",
-      "community": 153,
+      "community": 147,
       "norm_label": "_measure_karaoke_word_y_tops_px()"
     },
     {
       "label": "build_caption_filter_chain()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L728",
+      "source_location": "L694",
       "_origin": "ast",
       "id": "video_filter_builders_build_caption_filter_chain",
       "community": 153,
@@ -12850,7 +12850,7 @@
       "label": "CaptionChunk",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L728",
+      "source_location": "L694",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_captionchunk",
       "community": 27,
@@ -12860,7 +12860,7 @@
       "label": "teaser_mask_filter()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L873",
+      "source_location": "L842",
       "_origin": "ast",
       "id": "video_filter_builders_teaser_mask_filter",
       "community": 138,
@@ -12870,7 +12870,7 @@
       "label": "build_teaser_filter_chain()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L879",
+      "source_location": "L848",
       "_origin": "ast",
       "id": "video_filter_builders_build_teaser_filter_chain",
       "community": 138,
@@ -12880,17 +12880,17 @@
       "label": "TeaserSpec",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L879",
+      "source_location": "L848",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_teaserspec",
-      "community": 138,
+      "community": 27,
       "norm_label": "teaserspec"
     },
     {
       "label": "apply_spatial_fx_chain()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L928",
+      "source_location": "L897",
       "_origin": "ast",
       "id": "video_filter_builders_apply_spatial_fx_chain",
       "community": 52,
@@ -12900,7 +12900,7 @@
       "label": "build_proxy_filtergraph()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1055",
+      "source_location": "L1024",
       "_origin": "ast",
       "id": "video_filter_builders_build_proxy_filtergraph",
       "community": 27,
@@ -12910,7 +12910,7 @@
       "label": "SpeedRampPlan",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1055",
+      "source_location": "L1024",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_speedrampplan",
       "community": 27,
@@ -12920,30 +12920,30 @@
       "label": "build_composite_filtergraph()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1096",
+      "source_location": "L1065",
       "_origin": "ast",
       "id": "video_filter_builders_build_composite_filtergraph",
-      "community": 27,
+      "community": 138,
       "norm_label": "build_composite_filtergraph()"
     },
     {
       "label": "storyboard_mux_duration_s()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1282",
+      "source_location": "L1251",
       "_origin": "ast",
       "id": "video_filter_builders_storyboard_mux_duration_s",
-      "community": 27,
+      "community": 138,
       "norm_label": "storyboard_mux_duration_s()"
     },
     {
       "label": "composite_output_duration_s()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1287",
+      "source_location": "L1256",
       "_origin": "ast",
       "id": "video_filter_builders_composite_output_duration_s",
-      "community": 27,
+      "community": 138,
       "norm_label": "composite_output_duration_s()"
     },
     {
@@ -12953,7 +12953,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_1",
-      "community": 153,
+      "community": 138,
       "norm_label": "pure ffmpeg filtergraph builders shared by preview and final render."
     },
     {
@@ -13013,7 +13013,7 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_111",
-      "community": 27,
+      "community": 138,
       "norm_label": "expand a possibly wrapped source range into in-bounds trim spans."
     },
     {
@@ -13043,7 +13043,7 @@
       "source_location": "L219",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_219",
-      "community": 27,
+      "community": 138,
       "norm_label": "output span for one segment; tail extend recovers xfade-compressed duration."
     },
     {
@@ -13053,7 +13053,7 @@
       "source_location": "L240",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_240",
-      "community": 27,
+      "community": 138,
       "norm_label": "build filter chains for one output segment, including source loops."
     },
     {
@@ -13063,7 +13063,7 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_304",
-      "community": 153,
+      "community": 138,
       "norm_label": "return an enable= expression with commas escaped for filter_complex."
     },
     {
@@ -13103,26 +13103,26 @@
       "source_location": "L583",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_583",
-      "community": 153,
+      "community": 138,
       "norm_label": "overlay hook title on a motion-stabilized frame with slot-timed visibility."
     },
     {
       "label": "Return absolute drawtext y per word so karaoke ink matches the phrase line.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L667",
+      "source_location": "L633",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_667",
-      "community": 153,
+      "id": "video_filter_builders_rationale_633",
+      "community": 147,
       "norm_label": "return absolute drawtext y per word so karaoke ink matches the phrase line."
     },
     {
       "label": "Overlay timed phrase captions on a composed segment reference.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L741",
+      "source_location": "L707",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_741",
+      "id": "video_filter_builders_rationale_707",
       "community": 153,
       "norm_label": "overlay timed phrase captions on a composed segment reference."
     },
@@ -13130,9 +13130,9 @@
       "label": "Extract and time-fit the teaser tail into a prepended clip.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L892",
+      "source_location": "L861",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_892",
+      "id": "video_filter_builders_rationale_861",
       "community": 138,
       "norm_label": "extract and time-fit the teaser tail into a prepended clip."
     },
@@ -13140,9 +13140,9 @@
       "label": "Apply beat-synced zoom/rotate/pan impulses.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L942",
+      "source_location": "L911",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_942",
+      "id": "video_filter_builders_rationale_911",
       "community": 52,
       "norm_label": "apply beat-synced zoom/rotate/pan impulses."
     },
@@ -13150,9 +13150,9 @@
       "label": "Build an ffmpeg filtergraph for segment-wise speed preview.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1062",
+      "source_location": "L1031",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1062",
+      "id": "video_filter_builders_rationale_1031",
       "community": 27,
       "norm_label": "build an ffmpeg filtergraph for segment-wise speed preview."
     },
@@ -13160,30 +13160,30 @@
       "label": "Build ffmpeg filtergraph for storyboard slots with optional xfade + hook title.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1122",
+      "source_location": "L1091",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1122",
-      "community": 27,
+      "id": "video_filter_builders_rationale_1091",
+      "community": 138,
       "norm_label": "build ffmpeg filtergraph for storyboard slots with optional xfade + hook title."
     },
     {
       "label": "Packed segment timeline length \u2014 matches storyboard/audio caption clock.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1283",
+      "source_location": "L1252",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1283",
-      "community": 27,
+      "id": "video_filter_builders_rationale_1252",
+      "community": 138,
       "norm_label": "packed segment timeline length \u2014 matches storyboard/audio caption clock."
     },
     {
       "label": "Estimate xfade-compressed composited video body length before storyboard pad.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1293",
+      "source_location": "L1262",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1293",
-      "community": 27,
+      "id": "video_filter_builders_rationale_1262",
+      "community": 138,
       "norm_label": "estimate xfade-compressed composited video body length before storyboard pad."
     },
     {
@@ -13583,7 +13583,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "src_viral_editor_video_proxy_render_py_speedsegment",
-      "community": 99,
+      "community": 27,
       "norm_label": "speedsegment"
     },
     {
@@ -13623,7 +13623,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "src_viral_editor_video_proxy_render_py_speedrampplan",
-      "community": 99,
+      "community": 27,
       "norm_label": "speedrampplan"
     },
     {
@@ -13633,7 +13633,7 @@
       "source_location": "L247",
       "_origin": "ast",
       "id": "video_proxy_render_selected_plan_segments",
-      "community": 99,
+      "community": 27,
       "norm_label": "selected_plan_segments()"
     },
     {
@@ -13683,7 +13683,7 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "video_proxy_render_rationale_248",
-      "community": 99,
+      "community": 27,
       "norm_label": "expose segments for tests and callers."
     },
     {
@@ -13743,7 +13743,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "src_viral_editor_video_spatial_fx_py_transient",
-      "community": 14,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -13753,7 +13753,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "src_viral_editor_video_spatial_fx_py_fxevent",
-      "community": 14,
+      "community": 99,
       "norm_label": "fxevent"
     },
     {
@@ -13813,7 +13813,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "src_viral_editor_video_spatial_fx_py_audiotimeline",
-      "community": 14,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -13823,7 +13823,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "src_viral_editor_video_spatial_fx_py_mediainfo",
-      "community": 14,
+      "community": 99,
       "norm_label": "mediainfo"
     },
     {
@@ -13833,7 +13833,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "src_viral_editor_video_spatial_fx_py_ndarray",
-      "community": 14,
+      "community": 99,
       "norm_label": "ndarray"
     },
     {
@@ -13843,7 +13843,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "retentionconfig",
-      "community": 14,
+      "community": 99,
       "norm_label": "retentionconfig"
     },
     {
@@ -13853,7 +13853,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "spatialfxconfig",
-      "community": 14,
+      "community": 99,
       "norm_label": "spatialfxconfig"
     },
     {
@@ -13913,7 +13913,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "video_speed_presets",
-      "community": 152,
+      "community": 1,
       "norm_label": "speed_presets.py"
     },
     {
@@ -13923,7 +13923,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "video_speed_presets_speedpreset",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedpreset"
     },
     {
@@ -13933,7 +13933,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "video_speed_presets_resolve_params",
-      "community": 152,
+      "community": 18,
       "norm_label": "resolve_params()"
     },
     {
@@ -13943,7 +13943,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_presets_py_speedrampconfig",
-      "community": 152,
+      "community": 18,
       "norm_label": "speedrampconfig"
     },
     {
@@ -13953,7 +13953,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "video_speed_presets_rationale_1",
-      "community": 152,
+      "community": 1,
       "norm_label": "hook-oriented speed-ramp preset profiles."
     },
     {
@@ -13963,7 +13963,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "video_speed_presets_rationale_18",
-      "community": 8,
+      "community": 57,
       "norm_label": "resolved tuning weights for one speed profile."
     },
     {
@@ -13973,7 +13973,7 @@
       "source_location": "L120",
       "_origin": "ast",
       "id": "video_speed_presets_rationale_120",
-      "community": 152,
+      "community": 18,
       "norm_label": "merge job config and optional patch overrides onto a named preset."
     },
     {
@@ -14003,7 +14003,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "video_speed_ramp_trim_envelope_to_window",
-      "community": 149,
+      "community": 57,
       "norm_label": "trim_envelope_to_window()"
     },
     {
@@ -14013,7 +14013,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_ndarray",
-      "community": 8,
+      "community": 57,
       "norm_label": "ndarray"
     },
     {
@@ -14033,7 +14033,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_beatsyncfeatures",
-      "community": 8,
+      "community": 57,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -14043,7 +14043,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "video_speed_ramp_mean_envelope",
-      "community": 8,
+      "community": 57,
       "norm_label": "_mean_envelope()"
     },
     {
@@ -14093,7 +14093,7 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_transient",
-      "community": 8,
+      "community": 57,
       "norm_label": "transient"
     },
     {
@@ -14133,7 +14133,7 @@
       "source_location": "L180",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_musicsection",
-      "community": 8,
+      "community": 57,
       "norm_label": "musicsection"
     },
     {
@@ -14163,7 +14163,7 @@
       "source_location": "L201",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_clipreel",
-      "community": 8,
+      "community": 57,
       "norm_label": "clipreel"
     },
     {
@@ -14183,7 +14183,7 @@
       "source_location": "L277",
       "_origin": "ast",
       "id": "video_speed_ramp_beat_energy",
-      "community": 8,
+      "community": 57,
       "norm_label": "_beat_energy()"
     },
     {
@@ -14213,7 +14213,7 @@
       "source_location": "L336",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_audiotimeline",
-      "community": 8,
+      "community": 57,
       "norm_label": "audiotimeline"
     },
     {
@@ -14243,7 +14243,7 @@
       "source_location": "L397",
       "_origin": "ast",
       "id": "budgetpolicy",
-      "community": 8,
+      "community": 57,
       "norm_label": "budgetpolicy"
     },
     {
@@ -14303,7 +14303,7 @@
       "source_location": "L499",
       "_origin": "ast",
       "id": "speedcurvepoint",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedcurvepoint"
     },
     {
@@ -14333,7 +14333,7 @@
       "source_location": "L565",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_mediainfo",
-      "community": 8,
+      "community": 57,
       "norm_label": "mediainfo"
     },
     {
@@ -14343,7 +14343,7 @@
       "source_location": "L565",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_speedrampplan",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedrampplan"
     },
     {
@@ -14363,7 +14363,7 @@
       "source_location": "L676",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_speedrampconfig",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedrampconfig"
     },
     {
@@ -14373,7 +14373,7 @@
       "source_location": "L707",
       "_origin": "ast",
       "id": "video_speed_ramp_plan_speed_options",
-      "community": 8,
+      "community": 57,
       "norm_label": "plan_speed_options()"
     },
     {
@@ -14383,7 +14383,7 @@
       "source_location": "L707",
       "_origin": "ast",
       "id": "src_viral_editor_video_speed_ramp_py_speedrampoptionset",
-      "community": 8,
+      "community": 57,
       "norm_label": "speedrampoptionset"
     },
     {
@@ -14403,7 +14403,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "video_speed_ramp_rationale_51",
-      "community": 149,
+      "community": 57,
       "norm_label": "slice an onset envelope to match a trimmed ``audiotimeline`` window."
     },
     {
@@ -14453,7 +14453,7 @@
       "source_location": "L723",
       "_origin": "ast",
       "id": "video_speed_ramp_rationale_723",
-      "community": 8,
+      "community": 57,
       "norm_label": "compute all hook-oriented speed profiles for ui comparison."
     },
     {
@@ -14543,7 +14543,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "teaserconfig",
-      "community": 56,
+      "community": 27,
       "norm_label": "teaserconfig"
     },
     {
@@ -15533,7 +15533,7 @@
       "source_location": "L196",
       "_origin": "ast",
       "id": "tests_test_auto_rotate_test_metadata_vote_from_probe_side_data_rotation_90",
-      "community": 108,
+      "community": 159,
       "norm_label": "test_metadata_vote_from_probe_side_data_rotation_90()"
     },
     {
@@ -15543,7 +15543,7 @@
       "source_location": "L210",
       "_origin": "ast",
       "id": "tests_test_auto_rotate_test_metadata_vote_from_probe_tags_rotate_270",
-      "community": 108,
+      "community": 159,
       "norm_label": "test_metadata_vote_from_probe_tags_rotate_270()"
     },
     {
@@ -15553,7 +15553,7 @@
       "source_location": "L224",
       "_origin": "ast",
       "id": "tests_test_auto_rotate_test_metadata_vote_from_probe_without_rotation_abstains",
-      "community": 108,
+      "community": 159,
       "norm_label": "test_metadata_vote_from_probe_without_rotation_abstains()"
     },
     {
@@ -15853,7 +15853,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "tests_test_block_planner_py_audiotimeline",
-      "community": 9,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -15953,7 +15953,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_caption_filter_escape.py"
     },
     {
@@ -15963,7 +15963,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_escape_drawtext_text_handles_special_characters",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_escape_drawtext_text_handles_special_characters()"
     },
     {
@@ -15973,7 +15973,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_composite_graph_for_phrase",
-      "community": 70,
+      "community": 147,
       "norm_label": "_composite_graph_for_phrase()"
     },
     {
@@ -15983,7 +15983,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_caption_filtergraph_survives_apostrophe_in_phrase",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_caption_filtergraph_survives_apostrophe_in_phrase()"
     },
     {
@@ -15993,7 +15993,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_caption_filtergraph_survives_percent_and_colon",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_caption_filtergraph_survives_percent_and_colon()"
     },
     {
@@ -16003,7 +16003,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_caption_filtergraph_renders_special_characters",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_caption_filtergraph_renders_special_characters()"
     },
     {
@@ -16013,7 +16013,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_rationale_1",
-      "community": 70,
+      "community": 147,
       "norm_label": "regression tests for drawtext escaping in caption filters."
     },
     {
@@ -16043,7 +16043,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "tests_test_captions_py_storyslot",
-      "community": 34,
+      "community": 27,
       "norm_label": "storyslot"
     },
     {
@@ -16253,7 +16253,7 @@
       "source_location": "L355",
       "_origin": "ast",
       "id": "tests_test_captions_test_transcribed_script_in_window_filters_outside_music_block",
-      "community": 34,
+      "community": 94,
       "norm_label": "test_transcribed_script_in_window_filters_outside_music_block()"
     },
     {
@@ -16313,7 +16313,7 @@
       "source_location": "L475",
       "_origin": "ast",
       "id": "tests_test_captions_test_caption_filter_chain_uses_storyboard_slot_offsets_not_packed_video_time",
-      "community": 106,
+      "community": 27,
       "norm_label": "test_caption_filter_chain_uses_storyboard_slot_offsets_not_packed_video_time()"
     },
     {
@@ -16323,7 +16323,7 @@
       "source_location": "L530",
       "_origin": "ast",
       "id": "tests_test_captions_test_build_caption_filter_chain_emits_timed_drawtext",
-      "community": 106,
+      "community": 27,
       "norm_label": "test_build_caption_filter_chain_emits_timed_drawtext()"
     },
     {
@@ -16363,7 +16363,7 @@
       "source_location": "L737",
       "_origin": "ast",
       "id": "tests_test_captions_test_hook_title_overlay_after_spatial_fx_for_steady_text",
-      "community": 34,
+      "community": 27,
       "norm_label": "test_hook_title_overlay_after_spatial_fx_for_steady_text()"
     },
     {
@@ -16373,7 +16373,7 @@
       "source_location": "L787",
       "_origin": "ast",
       "id": "tests_test_captions_test_hook_title_emphasis_adds_colored_word_overlays",
-      "community": 27,
+      "community": 153,
       "norm_label": "test_hook_title_emphasis_adds_colored_word_overlays()"
     },
     {
@@ -16533,7 +16533,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_config",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_config.py"
     },
     {
@@ -16543,7 +16543,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_test_config_write_job",
-      "community": 56,
+      "community": 143,
       "norm_label": "_write_job()"
     },
     {
@@ -16553,7 +16553,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_test_config_py_path",
-      "community": 56,
+      "community": 143,
       "norm_label": "path"
     },
     {
@@ -16563,7 +16563,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "tests_test_config_minimal_job_payload",
-      "community": 56,
+      "community": 143,
       "norm_label": "_minimal_job_payload()"
     },
     {
@@ -16573,7 +16573,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "tests_test_config_test_minimal_job_loads_with_defaults",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_minimal_job_loads_with_defaults()"
     },
     {
@@ -16583,7 +16583,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "tests_test_config_py_monkeypatch",
-      "community": 56,
+      "community": 143,
       "norm_label": "monkeypatch"
     },
     {
@@ -16593,7 +16593,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "tests_test_config_test_full_job_loads_all_sections",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_full_job_loads_all_sections()"
     },
     {
@@ -16603,7 +16603,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "tests_test_config_test_unknown_key_rejected",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_unknown_key_rejected()"
     },
     {
@@ -16613,7 +16613,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "tests_test_config_test_bad_color_rejected",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_bad_color_rejected()"
     },
     {
@@ -16623,7 +16623,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "tests_test_config_test_bad_teaser_mask_rejected",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_bad_teaser_mask_rejected()"
     },
     {
@@ -16633,7 +16633,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "tests_test_config_test_speed_ramp_s_max_below_s_min_rejected",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_speed_ramp_s_max_below_s_min_rejected()"
     },
     {
@@ -16643,7 +16643,7 @@
       "source_location": "L122",
       "_origin": "ast",
       "id": "tests_test_config_test_resolve_path_relative_to_cwd",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_resolve_path_relative_to_cwd()"
     },
     {
@@ -16653,7 +16653,7 @@
       "source_location": "L127",
       "_origin": "ast",
       "id": "tests_test_config_test_resolve_path_absolute_unchanged",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_resolve_path_absolute_unchanged()"
     },
     {
@@ -16663,7 +16663,7 @@
       "source_location": "L132",
       "_origin": "ast",
       "id": "tests_test_config_test_effective_clips_wraps_lone_video_path",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_effective_clips_wraps_lone_video_path()"
     },
     {
@@ -16673,7 +16673,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "tests_test_config_test_job_config_accepts_clips_without_video_path",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_job_config_accepts_clips_without_video_path()"
     },
     {
@@ -16683,7 +16683,7 @@
       "source_location": "L175",
       "_origin": "ast",
       "id": "tests_test_config_test_absolute_paths_in_job",
-      "community": 56,
+      "community": 143,
       "norm_label": "test_absolute_paths_in_job()"
     },
     {
@@ -16693,7 +16693,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_config_rationale_1",
-      "community": 56,
+      "community": 143,
       "norm_label": "tests for job configuration loading and validation."
     },
     {
@@ -16853,7 +16853,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_ffmpeg_env.py"
     },
     {
@@ -16873,7 +16873,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ensure_ffmpeg_raises_with_install_hint_when_missing",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_ensure_ffmpeg_raises_with_install_hint_when_missing()"
     },
     {
@@ -16883,7 +16883,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_py_monkeypatch",
-      "community": 19,
+      "community": 70,
       "norm_label": "monkeypatch"
     },
     {
@@ -16893,7 +16893,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_resolve_ffmpeg_binary_falls_back_to_winget_path",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_resolve_ffmpeg_binary_falls_back_to_winget_path()"
     },
     {
@@ -16903,7 +16903,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_py_path",
-      "community": 19,
+      "community": 70,
       "norm_label": "path"
     },
     {
@@ -16913,7 +16913,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_run_ffprobe_json_parses_output",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_run_ffprobe_json_parses_output()"
     },
     {
@@ -16923,7 +16923,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ffmpeg_encode_progress_percent_from_progress_file",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_ffmpeg_encode_progress_percent_from_progress_file()"
     },
     {
@@ -16933,7 +16933,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ffmpeg_encode_progress_percent_caps_before_complete",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_ffmpeg_encode_progress_percent_caps_before_complete()"
     },
     {
@@ -16943,7 +16943,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ffmpeg_stderr_progress_percent_parses_time",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_ffmpeg_stderr_progress_percent_parses_time()"
     },
     {
@@ -16953,7 +16953,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_run_ffmpeg_raises_on_nonzero_exit",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_run_ffmpeg_raises_on_nonzero_exit()"
     },
     {
@@ -16963,7 +16963,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_spill_filter_complex_rewrites_long_windows_command",
-      "community": 19,
+      "community": 70,
       "norm_label": "test_spill_filter_complex_rewrites_long_windows_command()"
     },
     {
@@ -16973,7 +16973,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_rationale_1",
-      "community": 19,
+      "community": 70,
       "norm_label": "tests for ffmpeg environment checks."
     },
     {
@@ -17123,7 +17123,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_fonts",
-      "community": 140,
+      "community": 153,
       "norm_label": "test_fonts.py"
     },
     {
@@ -17133,7 +17133,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "tests_test_fonts_test_font_registry_includes_montserrat_black",
-      "community": 140,
+      "community": 153,
       "norm_label": "test_font_registry_includes_montserrat_black()"
     },
     {
@@ -17143,7 +17143,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "tests_test_fonts_test_resolve_font_path_returns_existing_file",
-      "community": 140,
+      "community": 153,
       "norm_label": "test_resolve_font_path_returns_existing_file()"
     },
     {
@@ -17153,7 +17153,7 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "tests_test_fonts_test_measure_phrase_word_offsets_returns_monotonic_x_positions",
-      "community": 140,
+      "community": 153,
       "norm_label": "test_measure_phrase_word_offsets_returns_monotonic_x_positions()"
     },
     {
@@ -17163,7 +17163,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_fonts_rationale_1",
-      "community": 140,
+      "community": 153,
       "norm_label": "tests for font registry and text metrics."
     },
     {
@@ -17173,7 +17173,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_hook_speed_contract.py"
     },
     {
@@ -17183,7 +17183,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_block",
-      "community": 33,
+      "community": 19,
       "norm_label": "_block()"
     },
     {
@@ -17193,7 +17193,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_py_musicblock",
-      "community": 1,
+      "community": 27,
       "norm_label": "musicblock"
     },
     {
@@ -17203,7 +17203,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_clip_media",
-      "community": 33,
+      "community": 19,
       "norm_label": "_clip_media()"
     },
     {
@@ -17213,7 +17213,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_py_mediainfo",
-      "community": 33,
+      "community": 19,
       "norm_label": "mediainfo"
     },
     {
@@ -17223,7 +17223,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_make_hook_split_storyboard",
-      "community": 33,
+      "community": 19,
       "norm_label": "_make_hook_split_storyboard()"
     },
     {
@@ -17233,7 +17233,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_py_storyboard",
-      "community": 33,
+      "community": 19,
       "norm_label": "storyboard"
     },
     {
@@ -17243,7 +17243,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_assert_hook_speed_contract",
-      "community": 33,
+      "community": 19,
       "norm_label": "_assert_hook_speed_contract()"
     },
     {
@@ -17253,7 +17253,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_assign_resplit_satisfies_hook_speed_contract",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_assign_resplit_satisfies_hook_speed_contract()"
     },
     {
@@ -17263,7 +17263,7 @@
       "source_location": "L158",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_update_slot_crop_resplit_satisfies_contract",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_update_slot_crop_resplit_satisfies_contract()"
     },
     {
@@ -17273,7 +17273,7 @@
       "source_location": "L178",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_segment_parity_unified_label_matches_speed_factor",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_segment_parity_unified_label_matches_speed_factor()"
     },
     {
@@ -17283,7 +17283,7 @@
       "source_location": "L194",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_teaser_payoff_speed_matches_hook_start_segment",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_teaser_payoff_speed_matches_hook_start_segment()"
     },
     {
@@ -17293,7 +17293,7 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_generate_test_clip",
-      "community": 33,
+      "community": 19,
       "norm_label": "_generate_test_clip()"
     },
     {
@@ -17303,7 +17303,7 @@
       "source_location": "L222",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_py_path",
-      "community": 33,
+      "community": 19,
       "norm_label": "path"
     },
     {
@@ -17313,7 +17313,7 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_generate_test_audio",
-      "community": 33,
+      "community": 19,
       "norm_label": "_generate_test_audio()"
     },
     {
@@ -17323,7 +17323,7 @@
       "source_location": "L263",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_probe_duration_s",
-      "community": 33,
+      "community": 19,
       "norm_label": "_probe_duration_s()"
     },
     {
@@ -17333,7 +17333,7 @@
       "source_location": "L269",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_render_truth_hook_segments_match_output_budget",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_render_truth_hook_segments_match_output_budget()"
     },
     {
@@ -17343,7 +17343,7 @@
       "source_location": "L352",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_render_truth_single_segment_duration",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_render_truth_single_segment_duration()"
     },
     {
@@ -17353,7 +17353,7 @@
       "source_location": "L386",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_update_slot_crop_shrinks_hook_unified_span",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_update_slot_crop_shrinks_hook_unified_span()"
     },
     {
@@ -17363,7 +17363,7 @@
       "source_location": "L407",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_test_clip_slot_segment_uses_own_crop_not_hook_unified",
-      "community": 33,
+      "community": 19,
       "norm_label": "test_clip_slot_segment_uses_own_crop_not_hook_unified()"
     },
     {
@@ -17373,7 +17373,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_rationale_1",
-      "community": 33,
+      "community": 19,
       "norm_label": "hook crop / timestretch contract tests \u2014 ui label vs segments vs render."
     },
     {
@@ -17383,7 +17383,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_rationale_60",
-      "community": 33,
+      "community": 19,
       "norm_label": "storyboard with hook_start/hook_end and full-clip unified crop."
     },
     {
@@ -17393,7 +17393,7 @@
       "source_location": "L353",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_rationale_353",
-      "community": 33,
+      "community": 19,
       "norm_label": "one timestretched segment: 6s source -> 2s output at 3x."
     },
     {
@@ -17403,7 +17403,7 @@
       "source_location": "L387",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_rationale_387",
-      "community": 33,
+      "community": 19,
       "norm_label": "dragging the hook crop shorter must persist and resplit start/end slots."
     },
     {
@@ -17413,7 +17413,7 @@
       "source_location": "L408",
       "_origin": "ast",
       "id": "tests_test_hook_speed_contract_rationale_408",
-      "community": 33,
+      "community": 19,
       "norm_label": "body clip slots must keep their own crop/speed when hook inversion is enabled."
     },
     {
@@ -17423,7 +17423,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ingest",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_ingest.py"
     },
     {
@@ -17433,7 +17433,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "tests_test_ingest_write_minimal_job",
-      "community": 53,
+      "community": 63,
       "norm_label": "_write_minimal_job()"
     },
     {
@@ -17443,7 +17443,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "tests_test_ingest_py_path",
-      "community": 53,
+      "community": 63,
       "norm_label": "path"
     },
     {
@@ -17453,7 +17453,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "tests_test_ingest_py_jobconfig",
-      "community": 53,
+      "community": 63,
       "norm_label": "jobconfig"
     },
     {
@@ -17463,7 +17463,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "tests_test_ingest_test_probe_media_parses_video_metadata",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_probe_media_parses_video_metadata()"
     },
     {
@@ -17473,7 +17473,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "tests_test_ingest_py_monkeypatch",
-      "community": 53,
+      "community": 63,
       "norm_label": "monkeypatch"
     },
     {
@@ -17483,7 +17483,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "tests_test_ingest_test_probe_media_parses_audio_metadata",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_probe_media_parses_audio_metadata()"
     },
     {
@@ -17493,7 +17493,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "tests_test_ingest_test_probe_media_missing_file_raises",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_probe_media_missing_file_raises()"
     },
     {
@@ -17503,7 +17503,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "tests_test_ingest_test_probe_media_empty_file_raises",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_probe_media_empty_file_raises()"
     },
     {
@@ -17513,7 +17513,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "tests_test_ingest_test_validate_job_returns_ingest_result",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_validate_job_returns_ingest_result()"
     },
     {
@@ -17523,7 +17523,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "tests_test_ingest_test_validate_job_clamps_oversized_crop",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_validate_job_clamps_oversized_crop()"
     },
     {
@@ -17533,7 +17533,7 @@
       "source_location": "L197",
       "_origin": "ast",
       "id": "tests_test_ingest_test_validate_job_rejects_missing_video",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_validate_job_rejects_missing_video()"
     },
     {
@@ -17543,7 +17543,7 @@
       "source_location": "L211",
       "_origin": "ast",
       "id": "tests_test_ingest_test_validate_job_rejects_video_without_stream",
-      "community": 53,
+      "community": 63,
       "norm_label": "test_validate_job_rejects_video_without_stream()"
     },
     {
@@ -17553,7 +17553,7 @@
       "source_location": "L232",
       "_origin": "ast",
       "id": "tests_test_ingest_probe_media_from_payload",
-      "community": 53,
+      "community": 63,
       "norm_label": "probe_media_from_payload()"
     },
     {
@@ -17563,7 +17563,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ingest_rationale_1",
-      "community": 53,
+      "community": 63,
       "norm_label": "tests for media probing and job ingestion."
     },
     {
@@ -17573,7 +17573,7 @@
       "source_location": "L233",
       "_origin": "ast",
       "id": "tests_test_ingest_rationale_233",
-      "community": 53,
+      "community": 63,
       "norm_label": "build mediainfo without calling ffprobe (test helper)."
     },
     {
@@ -17633,7 +17633,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "tests_test_loop_planner_py_transient",
-      "community": 3,
+      "community": 99,
       "norm_label": "transient"
     },
     {
@@ -17643,7 +17643,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "tests_test_loop_planner_py_audiotimeline",
-      "community": 32,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -17783,7 +17783,7 @@
       "source_location": "L408",
       "_origin": "ast",
       "id": "tests_test_loop_planner_test_target_duration_bounds_use_non_overlapping_buckets",
-      "community": 3,
+      "community": 91,
       "norm_label": "test_target_duration_bounds_use_non_overlapping_buckets()"
     },
     {
@@ -17963,7 +17963,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "tests_test_models_test_audio_timeline_round_trip",
-      "community": 1,
+      "community": 99,
       "norm_label": "test_audio_timeline_round_trip()"
     },
     {
@@ -17973,7 +17973,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "tests_test_models_test_clip_models_round_trip",
-      "community": 1,
+      "community": 141,
       "norm_label": "test_clip_models_round_trip()"
     },
     {
@@ -18003,7 +18003,7 @@
       "source_location": "L111",
       "_origin": "ast",
       "id": "tests_test_models_test_teaser_spec_round_trip",
-      "community": 99,
+      "community": 27,
       "norm_label": "test_teaser_spec_round_trip()"
     },
     {
@@ -18013,7 +18013,7 @@
       "source_location": "L122",
       "_origin": "ast",
       "id": "tests_test_models_test_title_spec_round_trip",
-      "community": 30,
+      "community": 1,
       "norm_label": "test_title_spec_round_trip()"
     },
     {
@@ -18023,7 +18023,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "tests_test_models_test_render_plan_round_trip",
-      "community": 99,
+      "community": 1,
       "norm_label": "test_render_plan_round_trip()"
     },
     {
@@ -18043,7 +18043,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "tests_test_models_test_write_and_read_artifact",
-      "community": 147,
+      "community": 1,
       "norm_label": "test_write_and_read_artifact()"
     },
     {
@@ -18217,10 +18217,20 @@
       "norm_label": "test_build_composite_filtergraph_hook_start_mask_and_spatial_fx()"
     },
     {
-      "label": "test_build_composite_filtergraph_translate_pan()",
+      "label": "test_build_composite_filtergraph_hook_end_mask()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
       "source_location": "L206",
+      "_origin": "ast",
+      "id": "tests_test_proxy_render_test_build_composite_filtergraph_hook_end_mask",
+      "community": 27,
+      "norm_label": "test_build_composite_filtergraph_hook_end_mask()"
+    },
+    {
+      "label": "test_build_composite_filtergraph_translate_pan()",
+      "file_type": "code",
+      "source_file": "tests/test_proxy_render.py",
+      "source_location": "L237",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_build_composite_filtergraph_translate_pan",
       "community": 27,
@@ -18230,7 +18240,7 @@
       "label": "test_apply_spatial_fx_chain_applies_all_events()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L243",
+      "source_location": "L274",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_apply_spatial_fx_chain_applies_all_events",
       "community": 52,
@@ -18240,27 +18250,27 @@
       "label": "test_apply_spatial_fx_chain_tail_batch_pan_has_headroom()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L271",
+      "source_location": "L302",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_apply_spatial_fx_chain_tail_batch_pan_has_headroom",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_apply_spatial_fx_chain_tail_batch_pan_has_headroom()"
     },
     {
       "label": "test_apply_spatial_fx_chain_large_translate_batch_ffmpeg()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L327",
+      "source_location": "L358",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_apply_spatial_fx_chain_large_translate_batch_ffmpeg",
-      "community": 70,
+      "community": 147,
       "norm_label": "test_apply_spatial_fx_chain_large_translate_batch_ffmpeg()"
     },
     {
       "label": "test_build_composite_filtergraph_translate_pan_many_beats()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L379",
+      "source_location": "L410",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_build_composite_filtergraph_translate_pan_many_beats",
       "community": 27,
@@ -18270,7 +18280,7 @@
       "label": "test_composite_output_duration_uses_segment_timeline()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L429",
+      "source_location": "L460",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_composite_output_duration_uses_segment_timeline",
       "community": 27,
@@ -18280,17 +18290,17 @@
       "label": "test_storyboard_mux_duration_ignores_xfade_overlap()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L444",
+      "source_location": "L475",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_storyboard_mux_duration_ignores_xfade_overlap",
-      "community": 27,
+      "community": 138,
       "norm_label": "test_storyboard_mux_duration_ignores_xfade_overlap()"
     },
     {
       "label": "test_build_composite_filtergraph_pads_video_to_storyboard_duration_for_captions()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L473",
+      "source_location": "L504",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_build_composite_filtergraph_pads_video_to_storyboard_duration_for_captions",
       "community": 27,
@@ -18300,7 +18310,7 @@
       "label": "test_build_composite_filtergraph_spatial_crop()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L519",
+      "source_location": "L550",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_build_composite_filtergraph_spatial_crop",
       "community": 27,
@@ -18310,7 +18320,7 @@
       "label": "test_build_composite_filtergraph_spatial_crop_letterbox()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L540",
+      "source_location": "L571",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_build_composite_filtergraph_spatial_crop_letterbox",
       "community": 27,
@@ -18320,7 +18330,7 @@
       "label": "test_render_composite_uses_looped_seam_audio()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L563",
+      "source_location": "L594",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_render_composite_uses_looped_seam_audio",
       "community": 27,
@@ -18330,7 +18340,7 @@
       "label": "test_render_speed_proxy_raises_without_real_media()",
       "file_type": "code",
       "source_file": "tests/test_proxy_render.py",
-      "source_location": "L627",
+      "source_location": "L658",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_render_speed_proxy_raises_without_real_media",
       "community": 27,
@@ -18563,7 +18573,7 @@
       "source_location": "L416",
       "_origin": "ast",
       "id": "tests_test_retention_policy_test_vocal_boundary_penalty_is_zero_without_lane",
-      "community": 15,
+      "community": 160,
       "norm_label": "test_vocal_boundary_penalty_is_zero_without_lane()"
     },
     {
@@ -18573,7 +18583,7 @@
       "source_location": "L423",
       "_origin": "ast",
       "id": "tests_test_retention_policy_test_vocal_boundary_penalty_prefers_gaps",
-      "community": 15,
+      "community": 160,
       "norm_label": "test_vocal_boundary_penalty_prefers_gaps()"
     },
     {
@@ -18613,7 +18623,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "tests_test_spatial_fx_py_mediainfo",
-      "community": 14,
+      "community": 99,
       "norm_label": "mediainfo"
     },
     {
@@ -18643,7 +18653,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "tests_test_spatial_fx_py_audiotimeline",
-      "community": 14,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -18763,7 +18773,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_speed_presets",
-      "community": 152,
+      "community": 18,
       "norm_label": "test_speed_presets.py"
     },
     {
@@ -18773,7 +18783,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "tests_test_speed_presets_test_all_preset_ids_resolve",
-      "community": 152,
+      "community": 18,
       "norm_label": "test_all_preset_ids_resolve()"
     },
     {
@@ -18783,7 +18793,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "tests_test_speed_presets_test_unknown_style_raises",
-      "community": 152,
+      "community": 18,
       "norm_label": "test_unknown_style_raises()"
     },
     {
@@ -18793,7 +18803,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "tests_test_speed_presets_test_overrides_merge_on_top_of_preset",
-      "community": 152,
+      "community": 18,
       "norm_label": "test_overrides_merge_on_top_of_preset()"
     },
     {
@@ -18803,7 +18813,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "tests_test_speed_presets_test_config_alpha_overrides_preset_default",
-      "community": 152,
+      "community": 18,
       "norm_label": "test_config_alpha_overrides_preset_default()"
     },
     {
@@ -18813,7 +18823,7 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "tests_test_speed_presets_test_preset_keys_match_registry",
-      "community": 152,
+      "community": 18,
       "norm_label": "test_preset_keys_match_registry()"
     },
     {
@@ -18823,7 +18833,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_speed_presets_rationale_1",
-      "community": 152,
+      "community": 18,
       "norm_label": "tests for speed-ramp preset profiles."
     },
     {
@@ -18863,7 +18873,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "tests_test_speed_ramp_py_audiotimeline",
-      "community": 8,
+      "community": 99,
       "norm_label": "audiotimeline"
     },
     {
@@ -18903,7 +18913,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "tests_test_speed_ramp_py_ndarray",
-      "community": 8,
+      "community": 99,
       "norm_label": "ndarray"
     },
     {
@@ -18923,7 +18933,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "tests_test_speed_ramp_py_speedrampplan",
-      "community": 8,
+      "community": 99,
       "norm_label": "speedrampplan"
     },
     {
@@ -18993,7 +19003,7 @@
       "source_location": "L202",
       "_origin": "ast",
       "id": "tests_test_speed_ramp_test_trim_envelope_matches_timeline_window",
-      "community": 149,
+      "community": 57,
       "norm_label": "test_trim_envelope_matches_timeline_window()"
     },
     {
@@ -19123,7 +19133,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "tests_test_storyboard_py_musicblock",
-      "community": 20,
+      "community": 99,
       "norm_label": "musicblock"
     },
     {
@@ -19143,7 +19153,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "tests_test_storyboard_py_beatsyncfeatures",
-      "community": 14,
+      "community": 99,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -19203,7 +19213,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_compute_boundaries_no_duplicate_endpoints",
-      "community": 90,
+      "community": 5,
       "norm_label": "test_compute_boundaries_no_duplicate_endpoints()"
     },
     {
@@ -19363,7 +19373,7 @@
       "source_location": "L583",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_apply_hook_inversion_preserves_crops_without_reshape",
-      "community": 1,
+      "community": 5,
       "norm_label": "test_apply_hook_inversion_preserves_crops_without_reshape()"
     },
     {
@@ -19373,7 +19383,7 @@
       "source_location": "L631",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_hook_source_range_respects_user_crop",
-      "community": 1,
+      "community": 99,
       "norm_label": "test_hook_source_range_respects_user_crop()"
     },
     {
@@ -19383,7 +19393,7 @@
       "source_location": "L677",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_hook_split_applies_timestretch_to_build_slot",
-      "community": 1,
+      "community": 99,
       "norm_label": "test_hook_split_applies_timestretch_to_build_slot()"
     },
     {
@@ -19393,7 +19403,7 @@
       "source_location": "L725",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_update_slot_crop_resplits_hook_family",
-      "community": 1,
+      "community": 99,
       "norm_label": "test_update_slot_crop_resplits_hook_family()"
     },
     {
@@ -19443,7 +19453,7 @@
       "source_location": "L852",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_remap_fx_events_for_composite_skips_unassigned_slots",
-      "community": 5,
+      "community": 151,
       "norm_label": "test_remap_fx_events_for_composite_skips_unassigned_slots()"
     },
     {
@@ -19463,7 +19473,7 @@
       "source_location": "L1030",
       "_origin": "ast",
       "id": "tests_test_storyboard_test_persist_storyboard_variant_restores_block_specific_assignments",
-      "community": 33,
+      "community": 8,
       "norm_label": "test_persist_storyboard_variant_restores_block_specific_assignments()"
     },
     {
@@ -19473,7 +19483,7 @@
       "source_location": "L1030",
       "_origin": "ast",
       "id": "tests_test_storyboard_py_path",
-      "community": 1,
+      "community": 99,
       "norm_label": "path"
     },
     {
@@ -19503,7 +19513,7 @@
       "source_location": "L1116",
       "_origin": "ast",
       "id": "tests_test_storyboard_py_ndarray",
-      "community": 90,
+      "community": 99,
       "norm_label": "ndarray"
     },
     {
@@ -19593,7 +19603,7 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "tests_test_storyboard_rationale_135",
-      "community": 90,
+      "community": 5,
       "norm_label": "regression: sparse downbeats used to pad with repeated window_end (e.g. [0, 2, 5"
     },
     {
@@ -19733,7 +19743,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "tests_test_structure_py_beatsyncfeatures",
-      "community": 3,
+      "community": 99,
       "norm_label": "beatsyncfeatures"
     },
     {
@@ -20313,7 +20323,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes",
-      "community": 30,
+      "community": 157,
       "norm_label": "test_waveform_lanes.py"
     },
     {
@@ -20323,7 +20333,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_fixture_payload",
-      "community": 30,
+      "community": 157,
       "norm_label": "_fixture_payload()"
     },
     {
@@ -20333,7 +20343,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_test_waveform_payload_includes_beats_lanes_and_chroma",
-      "community": 30,
+      "community": 157,
       "norm_label": "test_waveform_payload_includes_beats_lanes_and_chroma()"
     },
     {
@@ -20343,7 +20353,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_test_waveform_payload_includes_vocal_lane_when_present",
-      "community": 30,
+      "community": 157,
       "norm_label": "test_waveform_payload_includes_vocal_lane_when_present()"
     },
     {
@@ -20353,7 +20363,7 @@
       "source_location": "L85",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_test_validation_bass_low_band_dominates",
-      "community": 30,
+      "community": 157,
       "norm_label": "test_validation_bass_low_band_dominates()"
     },
     {
@@ -20363,7 +20373,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_test_validation_drop_has_high_band_spike_near_hit",
-      "community": 30,
+      "community": 157,
       "norm_label": "test_validation_drop_has_high_band_spike_near_hit()"
     },
     {
@@ -20373,7 +20383,7 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_test_build_scope_lane_series_empty_when_missing",
-      "community": 30,
+      "community": 157,
       "norm_label": "test_build_scope_lane_series_empty_when_missing()"
     },
     {
@@ -20383,7 +20393,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_waveform_lanes_rationale_1",
-      "community": 30,
+      "community": 157,
       "norm_label": "waveform payload lanes and chroma from analysis artifacts."
     },
     {
@@ -21123,7 +21133,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_captionpanel",
-      "community": 10,
+      "community": 17,
       "norm_label": "captionpanel.tsx"
     },
     {
@@ -21133,7 +21143,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "components_captionpanel_captionpanelprops",
-      "community": 10,
+      "community": 17,
       "norm_label": "captionpanelprops"
     },
     {
@@ -21143,7 +21153,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "components_captionpanel_chunkstowordtiming",
-      "community": 10,
+      "community": 17,
       "norm_label": "chunkstowordtiming()"
     },
     {
@@ -21153,7 +21163,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "components_captionpanel_stylefields",
-      "community": 10,
+      "community": 17,
       "norm_label": "stylefields()"
     },
     {
@@ -21163,7 +21173,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "components_captionpanel_captionpanel",
-      "community": 10,
+      "community": 17,
       "norm_label": "captionpanel()"
     },
     {
@@ -21313,7 +21323,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_hookoverlaypanel",
-      "community": 10,
+      "community": 17,
       "norm_label": "hookoverlaypanel.tsx"
     },
     {
@@ -21323,7 +21333,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "components_hookoverlaypanel_hookoverlaypanelprops",
-      "community": 10,
+      "community": 17,
       "norm_label": "hookoverlaypanelprops"
     },
     {
@@ -21333,7 +21343,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "components_hookoverlaypanel_hookoverlaypanel",
-      "community": 10,
+      "community": 17,
       "norm_label": "hookoverlaypanel()"
     },
     {
@@ -21343,7 +21353,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "components_jobform",
-      "community": 10,
+      "community": 17,
       "norm_label": "jobform.tsx"
     },
     {
@@ -21353,7 +21363,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "components_jobform_formstate",
-      "community": 10,
+      "community": 17,
       "norm_label": "formstate"
     },
     {
@@ -21363,7 +21373,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "components_jobform_jobformprops",
-      "community": 10,
+      "community": 17,
       "norm_label": "jobformprops"
     },
     {
@@ -21373,7 +21383,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "components_jobform_jobform",
-      "community": 10,
+      "community": 17,
       "norm_label": "jobform()"
     },
     {
@@ -22343,7 +22353,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "scope_musicdetailrack_musicdetailracktoggle",
-      "community": 26,
+      "community": 16,
       "norm_label": "musicdetailracktoggle()"
     },
     {
@@ -22373,7 +22383,7 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "scope_musicdetailrack_musicdetailrackchart",
-      "community": 26,
+      "community": 16,
       "norm_label": "musicdetailrackchart"
     },
     {
@@ -22983,7 +22993,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "constants_fonts",
-      "community": 10,
+      "community": 17,
       "norm_label": "fonts.ts"
     },
     {
@@ -22993,7 +23003,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "constants_fonts_hookfontoption",
-      "community": 10,
+      "community": 17,
       "norm_label": "hookfontoption"
     },
     {
@@ -23003,7 +23013,7 @@
       "source_location": "L8",
       "_origin": "ast",
       "id": "constants_fonts_hook_font_options",
-      "community": 10,
+      "community": 17,
       "norm_label": "hook_font_options"
     },
     {
@@ -23013,7 +23023,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "constants_fonts_ishookfont",
-      "community": 10,
+      "community": 17,
       "norm_label": "ishookfont()"
     },
     {
@@ -23023,7 +23033,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "constants_whisperlanguages",
-      "community": 10,
+      "community": 17,
       "norm_label": "whisperlanguages.ts"
     },
     {
@@ -23033,7 +23043,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "constants_whisperlanguages_whisperlanguageoption",
-      "community": 10,
+      "community": 17,
       "norm_label": "whisperlanguageoption"
     },
     {
@@ -23043,7 +23053,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "constants_whisperlanguages_whisper_language_options",
-      "community": 10,
+      "community": 17,
       "norm_label": "whisper_language_options"
     },
     {
@@ -23203,7 +23213,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "src_types_scopelaneseries",
-      "community": 16,
+      "community": 11,
       "norm_label": "scopelaneseries"
     },
     {
@@ -23533,7 +23543,7 @@
       "source_location": "L369",
       "_origin": "ast",
       "id": "src_types_captionpayload",
-      "community": 10,
+      "community": 17,
       "norm_label": "captionpayload"
     },
     {
@@ -23543,7 +23553,7 @@
       "source_location": "L383",
       "_origin": "ast",
       "id": "src_types_captionpatchinput",
-      "community": 10,
+      "community": 17,
       "norm_label": "captionpatchinput"
     },
     {
@@ -23553,7 +23563,7 @@
       "source_location": "L401",
       "_origin": "ast",
       "id": "src_types_transcribesource",
-      "community": 10,
+      "community": 17,
       "norm_label": "transcribesource"
     },
     {
@@ -23563,7 +23573,7 @@
       "source_location": "L403",
       "_origin": "ast",
       "id": "src_types_transcribeoptions",
-      "community": 10,
+      "community": 17,
       "norm_label": "transcribeoptions"
     },
     {
@@ -24083,7 +24093,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_slotcountfilter_test",
-      "community": 17,
+      "community": 161,
       "norm_label": "slotcountfilter.test.ts"
     },
     {
@@ -24093,7 +24103,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "utils_slotcountfilter_test_makeblock",
-      "community": 17,
+      "community": 161,
       "norm_label": "makeblock()"
     },
     {
@@ -24103,7 +24113,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "utils_slotcountfilter",
-      "community": 17,
+      "community": 161,
       "norm_label": "slotcountfilter.ts"
     },
     {
@@ -24113,7 +24123,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "utils_slotcountfilter_filterblocksbyslotcount",
-      "community": 17,
+      "community": 161,
       "norm_label": "filterblocksbyslotcount()"
     },
     {
@@ -24443,7 +24453,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "utils_spatialfxmarkers_fxmarker",
-      "community": 11,
+      "community": 16,
       "norm_label": "fxmarker"
     },
     {
@@ -38646,9 +38656,9 @@
       "source_file": "src/viral_editor/api/render_job.py",
       "source_location": "L152",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "api_render_job_rationale_152",
-      "target": "api_render_job_start_final_render",
-      "confidence_score": 1.0
+      "target": "api_render_job_start_final_render"
     },
     {
       "relation": "references",
@@ -90223,6 +90233,17 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/test_proxy_render.py",
+      "source_location": "L208",
+      "weight": 1.0,
+      "source": "tests_test_proxy_render_test_build_composite_filtergraph_hook_end_mask",
+      "target": "viral_editor_models_speedsegment"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tests/test_proxy_render.py",
       "source_location": "L156",
       "weight": 1.0,
       "source": "tests_test_proxy_render_test_build_composite_filtergraph_hook_start_mask_and_spatial_fx",
@@ -96551,9 +96572,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L442",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders",
-      "target": "video_filter_builders_draw_hook_title_layers",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_draw_hook_title_layers"
     },
     {
       "relation": "contains",
@@ -96671,9 +96692,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L438",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders",
-      "target": "video_filter_builders_normalized_emphasis_token",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_normalized_emphasis_token"
     },
     {
       "relation": "contains",
@@ -96854,9 +96875,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L25",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_25",
-      "target": "video_filter_builders_pan_batch_time_envelope",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_pan_batch_time_envelope"
     },
     {
       "relation": "references",
@@ -96941,9 +96962,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_39",
-      "target": "video_filter_builders_fx_decay_ramp",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_fx_decay_ramp"
     },
     {
       "relation": "calls",
@@ -97006,9 +97027,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L64",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_64",
-      "target": "video_filter_builders_combined_pan_x_expression",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_combined_pan_x_expression"
     },
     {
       "relation": "calls",
@@ -97027,9 +97048,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L83",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_83",
-      "target": "video_filter_builders_pan_batch_blend_expression",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_pan_batch_blend_expression"
     },
     {
       "relation": "calls",
@@ -97059,9 +97080,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L97",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_97",
-      "target": "video_filter_builders_normalize_segment_timeline",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_normalize_segment_timeline"
     },
     {
       "relation": "rationale_for",
@@ -97069,9 +97090,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L111",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_111",
-      "target": "video_filter_builders_source_trim_spans",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_source_trim_spans"
     },
     {
       "relation": "calls",
@@ -97090,9 +97111,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L140",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_140",
-      "target": "video_filter_builders_spatial_crop_filter",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_spatial_crop_filter"
     },
     {
       "relation": "calls",
@@ -97122,9 +97143,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L186",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_186",
-      "target": "video_filter_builders_visual_filters",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_visual_filters"
     },
     {
       "relation": "calls",
@@ -97154,9 +97175,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L219",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_219",
-      "target": "video_filter_builders_segment_out_len_s",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_segment_out_len_s"
     },
     {
       "relation": "references",
@@ -97274,9 +97295,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L240",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_240",
-      "target": "video_filter_builders_segment_filter_chains",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_segment_filter_chains"
     },
     {
       "relation": "calls",
@@ -97306,9 +97327,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L304",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_304",
-      "target": "video_filter_builders_enable_between_expr",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_enable_between_expr"
     },
     {
       "relation": "calls",
@@ -97471,9 +97492,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L442",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "src_viral_editor_video_filter_builders_py_captionstyle",
-      "confidence_score": 1.0
+      "target": "src_viral_editor_video_filter_builders_py_captionstyle"
     },
     {
       "relation": "references",
@@ -97548,9 +97569,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L469",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "video_filter_builders_max_caption_width_px",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_max_caption_width_px"
     },
     {
       "relation": "calls",
@@ -97592,9 +97613,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L492",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "video_filter_builders_caption_line_spacing_px",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_caption_line_spacing_px"
     },
     {
       "relation": "calls",
@@ -97636,9 +97657,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L493",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "video_filter_builders_caption_block_y_base_px",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_caption_block_y_base_px"
     },
     {
       "relation": "rationale_for",
@@ -97646,9 +97667,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L372",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_372",
-      "target": "video_filter_builders_caption_block_y_base_px",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_caption_block_y_base_px"
     },
     {
       "relation": "calls",
@@ -97690,9 +97711,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L470",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "video_filter_builders_base_font_size",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_base_font_size"
     },
     {
       "relation": "calls",
@@ -97723,9 +97744,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L473",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "video_filter_builders_styled_drawtext",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_styled_drawtext"
     },
     {
       "relation": "calls",
@@ -97744,9 +97765,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L403",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_403",
-      "target": "video_filter_builders_styled_drawtext",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_styled_drawtext"
     },
     {
       "relation": "calls",
@@ -97755,9 +97776,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L590",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_build_hook_title_overlay",
-      "target": "video_filter_builders_normalized_emphasis_token",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_normalized_emphasis_token"
     },
     {
       "relation": "calls",
@@ -97766,9 +97787,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L459",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_draw_hook_title_layers",
-      "target": "video_filter_builders_normalized_emphasis_token",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_normalized_emphasis_token"
     },
     {
       "relation": "calls",
@@ -97777,9 +97798,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L623",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_build_hook_title_overlay",
-      "target": "video_filter_builders_draw_hook_title_layers",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_draw_hook_title_layers"
     },
     {
       "relation": "rationale_for",
@@ -97787,9 +97808,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L454",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_454",
-      "target": "video_filter_builders_draw_hook_title_layers",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_draw_hook_title_layers"
     },
     {
       "relation": "calls",
@@ -97841,9 +97862,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L583",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_583",
-      "target": "video_filter_builders_build_hook_title_overlay",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_build_hook_title_overlay"
     },
     {
       "relation": "calls",
@@ -97893,9 +97914,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L667",
+      "source_location": "L633",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_667",
+      "source": "video_filter_builders_rationale_633",
       "target": "video_filter_builders_measure_karaoke_word_y_tops_px",
       "confidence_score": 1.0
     },
@@ -97991,9 +98012,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L741",
+      "source_location": "L707",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_741",
+      "source": "video_filter_builders_rationale_707",
       "target": "video_filter_builders_build_caption_filter_chain",
       "confidence_score": 1.0
     },
@@ -98045,9 +98066,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L892",
+      "source_location": "L861",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_892",
+      "source": "video_filter_builders_rationale_861",
       "target": "video_filter_builders_build_teaser_filter_chain",
       "confidence_score": 1.0
     },
@@ -98110,9 +98131,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L942",
+      "source_location": "L911",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_942",
+      "source": "video_filter_builders_rationale_911",
       "target": "video_filter_builders_apply_spatial_fx_chain",
       "confidence_score": 1.0
     },
@@ -98164,9 +98185,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1062",
+      "source_location": "L1031",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1062",
+      "source": "video_filter_builders_rationale_1031",
       "target": "video_filter_builders_build_proxy_filtergraph",
       "confidence_score": 1.0
     },
@@ -98234,6 +98255,17 @@
       "source_location": "L315",
       "weight": 1.0,
       "source": "tests_test_captions_test_hook_title_overlay_after_spatial_fx_for_steady_text",
+      "target": "video_filter_builders_build_composite_filtergraph"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "tests/test_proxy_render.py",
+      "source_location": "L225",
+      "weight": 1.0,
+      "source": "tests_test_proxy_render_test_build_composite_filtergraph_hook_end_mask",
       "target": "video_filter_builders_build_composite_filtergraph"
     },
     {
@@ -98350,9 +98382,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1122",
+      "source_location": "L1091",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1122",
+      "source": "video_filter_builders_rationale_1091",
       "target": "video_filter_builders_build_composite_filtergraph",
       "confidence_score": 1.0
     },
@@ -98393,9 +98425,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1283",
+      "source_location": "L1252",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1283",
+      "source": "video_filter_builders_rationale_1252",
       "target": "video_filter_builders_storyboard_mux_duration_s",
       "confidence_score": 1.0
     },
@@ -98458,9 +98490,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1293",
+      "source_location": "L1262",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1293",
+      "source": "video_filter_builders_rationale_1262",
       "target": "video_filter_builders_composite_output_duration_s",
       "confidence_score": 1.0
     },
@@ -98878,9 +98910,9 @@
       "source_file": "src/viral_editor/video/final_render.py",
       "source_location": "L159",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_final_render_rationale_159",
-      "target": "video_final_render_build_final_filtergraph",
-      "confidence_score": 1.0
+      "target": "video_final_render_build_final_filtergraph"
     },
     {
       "relation": "calls",
@@ -98943,9 +98975,9 @@
       "source_file": "src/viral_editor/video/final_render.py",
       "source_location": "L222",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_final_render_rationale_222",
-      "target": "video_final_render_render_final",
-      "confidence_score": 1.0
+      "target": "video_final_render_render_final"
     },
     {
       "relation": "contains",
@@ -99387,9 +99419,9 @@
       "source_file": "src/viral_editor/video/proxy_render.py",
       "source_location": "L70",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_proxy_render_rationale_70",
-      "target": "video_proxy_render_render_composite",
-      "confidence_score": 1.0
+      "target": "video_proxy_render_render_composite"
     },
     {
       "relation": "references",
@@ -99452,9 +99484,9 @@
       "source_file": "src/viral_editor/video/proxy_render.py",
       "source_location": "L174",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_proxy_render_rationale_174",
-      "target": "video_proxy_render_render_speed_proxy",
-      "confidence_score": 1.0
+      "target": "video_proxy_render_render_speed_proxy"
     },
     {
       "relation": "references",
@@ -99484,9 +99516,9 @@
       "source_file": "src/viral_editor/video/proxy_render.py",
       "source_location": "L248",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_proxy_render_rationale_248",
-      "target": "video_proxy_render_selected_plan_segments",
-      "confidence_score": 1.0
+      "target": "video_proxy_render_selected_plan_segments"
     },
     {
       "relation": "contains",
@@ -105065,9 +105097,9 @@
       "source_file": "tests/test_captions.py",
       "source_location": "L787",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_captions",
-      "target": "tests_test_captions_test_hook_title_emphasis_adds_colored_word_overlays",
-      "confidence_score": 1.0
+      "target": "tests_test_captions_test_hook_title_emphasis_adds_colored_word_overlays"
     },
     {
       "relation": "contains",
@@ -108848,6 +108880,16 @@
       "confidence_score": 1.0,
       "source": "tests_test_proxy_render",
       "target": "tests_test_proxy_render_test_apply_spatial_fx_chain_tail_batch_pan_has_headroom"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/test_proxy_render.py",
+      "source_location": "L206",
+      "weight": 1.0,
+      "source": "tests_test_proxy_render",
+      "target": "tests_test_proxy_render_test_build_composite_filtergraph_hook_end_mask",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -129999,5 +130041,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e0a9aaaa16be03fbf23a01d99085650849f31a3d"
+  "built_at_commit": "f06173f2f95432ebf69b1eb4b831c5373f51e83b"
 }

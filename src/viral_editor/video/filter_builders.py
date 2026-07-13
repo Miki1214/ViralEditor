@@ -836,10 +836,13 @@ def build_caption_filter_chain(
     return current
 
 
+_HOOK_MASK_ROLES = frozenset({"hook", "hook_start", "hook_end"})
+
+
 def teaser_mask_filter(mask: str) -> str:
     if mask == "dir_blur":
-        return "gblur=sigma=12"
-    return "vignette=angle=PI/5"
+        return "gblur=sigma=14:steps=2"
+    return "vignette=angle=PI/4:mode=forward"
 
 
 def build_teaser_filter_chain(
@@ -1137,7 +1140,7 @@ def build_composite_filtergraph(
         )
         parts.extend(chains)
         role = segment_roles[index] if segment_roles and index < len(segment_roles) else None
-        if role == "hook_start" and hook_start_mask:
+        if hook_start_mask and role in _HOOK_MASK_ROLES:
             masked = f"{label}masked"
             parts.append(f"{concat_ref}{teaser_mask_filter(hook_start_mask)}[{masked}]")
             concat_ref = f"[{masked}]"

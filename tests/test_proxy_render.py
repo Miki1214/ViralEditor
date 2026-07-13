@@ -190,7 +190,7 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
         fx_seed=7,
         fx_intensity=1.0,
     )
-    assert "vignette=angle=PI/5" in graph
+    assert "vignette=angle=PI/4" in graph
     assert "concat=n=2:v=1:a=0[composed]" not in graph
     assert "drawtext" in graph
     assert "slot0titled" not in graph
@@ -201,6 +201,37 @@ def test_build_composite_filtergraph_hook_start_mask_and_spatial_fx(monkeypatch)
     assert re.search(r"rotate=[^\]]*eval=frame", graph) is None
     assert "rotate=enable='between(t," in graph
     assert "[outv]" in graph
+
+
+def test_build_composite_filtergraph_hook_end_mask() -> None:
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=3.0,
+            src_start_s=0.0,
+            src_end_s=3.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+        SpeedSegment(
+            out_start_s=3.0,
+            out_end_s=5.0,
+            src_start_s=5.0,
+            src_end_s=7.0,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+    ]
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut", "cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        segment_roles=["clip", "hook_end"],
+        hook_start_mask="dir_blur",
+    )
+    assert graph.count("gblur=sigma=14") == 1
+    assert "vignette=" not in graph
 
 
 def test_build_composite_filtergraph_translate_pan() -> None:

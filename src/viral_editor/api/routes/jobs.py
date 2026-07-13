@@ -940,11 +940,16 @@ def patch_effects(
         raise HTTPException(status_code=404, detail="Storyboard not found")
 
     updated_config = apply_effects_patch(job.config, payload)
+    teaser_layout_fields: set[str] = set()
+    if payload.teaser is not None:
+        teaser_layout_fields = set(payload.teaser.model_dump(exclude_unset=True))
     updated_storyboard = refresh_hook_inversion_layout(
         storyboard,
         updated_config,
         temp_dir=temp_dir,
-        reshape_crops=payload.teaser is not None,
+        reshape_crops=bool(
+            teaser_layout_fields & {"enabled", "duration_s", "tail_fraction"}
+        ),
     )
     updated_config = sync_teaser_duration_from_layout(updated_config, updated_storyboard)
     updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)

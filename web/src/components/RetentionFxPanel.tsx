@@ -378,6 +378,9 @@ export function RetentionFxPanel({
               <option id="retention-fx-mask-vignette" value="vignette">Vignette — soft dark edges</option>
               <option id="retention-fx-mask-dir-blur" value="dir_blur">Directional blur — hide detail</option>
             </select>
+            <p id="retention-fx-mask-hint" className="mt-1 font-mono text-[10px] text-monitor-muted">
+              Applied to Hook · start and Hook · end in the composited preview.
+            </p>
           </label>
         </section>
 

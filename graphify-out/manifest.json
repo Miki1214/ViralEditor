@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783977940.2439997,
-    "ast_hash": "70cf6499a8aaa02a83ddc39929b52bb6",
+    "mtime": 1783978437.9046533,
+    "ast_hash": "0c551d67de555d9a647a9300dcaf5651",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "tests/test_proxy_render.py": {
-    "mtime": 1783619979.3768477,
-    "ast_hash": "572a8fccf27077fd0a4b93c830c75d04",
+    "mtime": 1783978447.1690288,
+    "ast_hash": "e161993f362a4a0846d37a3e2805f494",
     "semantic_hash": ""
   },
   "tests/test_retention_policy.py": {
@@ -460,13 +460,13 @@
     "semantic_hash": ""
   },
   "web/src/components/PhonePreview.tsx": {
-    "mtime": 1783977750.4746075,
-    "ast_hash": "840a061c4fcfc0d37bc236ffc72652eb",
+    "mtime": 1783978054.168601,
+    "ast_hash": "8104990942862940bf8dfa84aa1466b0",
     "semantic_hash": ""
   },
   "web/src/components/RetentionFxPanel.tsx": {
-    "mtime": 1783349958.7228727,
-    "ast_hash": "2a9586dccb76b84259d35f7184f30aa8",
+    "mtime": 1783978453.2718883,
+    "ast_hash": "aeb270a695e9171775db57ee67e9a610",
     "semantic_hash": ""
   },
   "web/src/components/ScopeCanvas.tsx": {
@@ -1030,8 +1030,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783977934.311232,
-    "ast_hash": "01b86e2b8cbb3fc359bf1fc0c96661ac",
+    "mtime": 1783978438.8825085,
+    "ast_hash": "173751e7c132eddce93388cf28d67471",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783977939.2565806,
-    "ast_hash": "be5e9dcfed7729dd3c700f151e10786e",
+    "mtime": 1783978053.267652,
+    "ast_hash": "39c1687d1e15811f61db86c75afe5d4e",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {
