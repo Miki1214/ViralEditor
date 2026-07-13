@@ -19,7 +19,7 @@ SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]
 SlotFitMode = Literal["contain", "cover"]
 CaptionPosition = Literal["top", "center", "bottom"]
-RotationStep = Literal["metadata", "aspect", "vision"]
+RotationStep = Literal["metadata", "aspect", "orientation"]
 RotationDirection = Literal["cw", "ccw"]
 
 
@@ -72,7 +72,7 @@ class AutoRotationLog(DomainModel):
     clip_path: str = ""
     metadata_vote: RotationVote | None = None
     aspect_vote: RotationVote | None = None
-    vision_vote: RotationVote | None = None
+    orientation_vote: RotationVote | None = None
     final_rotation_deg: int = 0
     reason: str = ""
     decided_at: str = ""

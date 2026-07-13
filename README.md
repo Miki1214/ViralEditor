@@ -148,16 +148,18 @@ pytest
 
 ### Auto-rotation on upload
 
-Clip uploads run a 3-step detector (container metadata → aspect ratio → local Ollama vision) and silently set `rotation_deg` when the pipeline agrees. Manual 90° rotate buttons in the storyboard still override detection.
+Clip uploads run a 3-step detector (container metadata → aspect ratio → orientation classifier) and silently set `rotation_deg` when the pipeline agrees. Manual 90° rotate buttons in the storyboard still override detection.
+
+The keyframe step uses [DuarteBarbosa/deep-image-orientation-detection](https://huggingface.co/DuarteBarbosa/deep-image-orientation-detection) (EfficientNet ONNX) — not an LLM.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `AUTO_ROTATE_ENABLED` | `true` | Master switch |
-| `OLLAMA_HOST` | `http://localhost:11434` | Local Ollama base URL |
-| `OLLAMA_MODEL` | `llava` | Vision model tag (swap to test others) |
-| `OLLAMA_VISION_TIMEOUT_S` | `6` | Per-request vision timeout |
-| `AUTO_ROTATE_KEYFRAME_COUNT` | `3` | Keyframes sent to the vision model |
-| `AUTO_ROTATE_MIN_VISION_CONFIDENCE` | `0.55` | Minimum model confidence to accept a vision vote |
+| `AUTO_ROTATE_ORIENTATION_ENABLED` | `true` | Enable/disable the classifier step only |
+| `ORIENTATION_MODEL_REPO` | `DuarteBarbosa/deep-image-orientation-detection` | Hugging Face model repo |
+| `ORIENTATION_MODEL_FILE` | `orientation_model_v2_0.9882.onnx` | ONNX weights filename in the repo |
+| `AUTO_ROTATE_KEYFRAME_COUNT` | `3` | Keyframes analyzed per clip |
+| `AUTO_ROTATE_MIN_ORIENTATION_CONFIDENCE` | `0.55` | Minimum softmax confidence to accept a classifier vote |
 
 Per-clip decision logs are written to `temp/rotation_log/<clip_id>.json` inside each job workspace for later tuning.
 

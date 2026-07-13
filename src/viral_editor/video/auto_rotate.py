@@ -2,24 +2,23 @@
 
 from __future__ import annotations
 
-import base64
-import json
-import re
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
-
-import httpx
 
 from viral_editor.auto_rotate_settings import AutoRotateSettings
 from viral_editor.models import AutoRotationLog, MediaInfo, RotationDirection, RotationVote, write_artifact
 from viral_editor.utils.ffmpeg import FFmpegError, run_ffmpeg, run_ffprobe_json
+from viral_editor.video.orientation_classifier import (
+    class_index_to_degrees,
+    class_label,
+    predict_orientation,
+)
 
 _STEP_PRIORITY: dict[str, int] = {
     "aspect": 0,
     "metadata": 1,
-    "vision": 2,
+    "orientation": 2,
 }
 
 
@@ -69,9 +68,9 @@ def _pick_by_priority(votes: list[RotationVote]) -> RotationVote:
 def _decide_rotation(
     metadata_vote: RotationVote | None,
     aspect_vote: RotationVote | None,
-    vision_vote: RotationVote | None,
+    orientation_vote: RotationVote | None,
 ) -> tuple[int, str]:
-    ordered = [metadata_vote, aspect_vote, vision_vote]
+    ordered = [metadata_vote, aspect_vote, orientation_vote]
     active = [vote for vote in ordered if vote is not None]
 
     if not active:
@@ -93,7 +92,7 @@ def _decide_rotation(
             f"two steps disagreed — priority {winner.step}",
         )
 
-    metadata, aspect, vision = ordered
+    _metadata, _aspect, _orientation = ordered
     agreeing: list[tuple[RotationVote, RotationVote]] = []
     for index, left in enumerate(ordered):
         if left is None:
@@ -115,16 +114,16 @@ def _decide_rotation(
 def combine_votes(
     votes: list[RotationVote | None],
 ) -> tuple[int, AutoRotationLog]:
-    """Combine metadata, aspect, and vision votes into a rotation_deg."""
+    """Combine metadata, aspect, and orientation votes into a rotation_deg."""
     metadata_vote = votes[0] if len(votes) > 0 else None
     aspect_vote = votes[1] if len(votes) > 1 else None
-    vision_vote = votes[2] if len(votes) > 2 else None
+    orientation_vote = votes[2] if len(votes) > 2 else None
 
-    rotation_deg, reason = _decide_rotation(metadata_vote, aspect_vote, vision_vote)
+    rotation_deg, reason = _decide_rotation(metadata_vote, aspect_vote, orientation_vote)
     log = AutoRotationLog(
         metadata_vote=metadata_vote,
         aspect_vote=aspect_vote,
-        vision_vote=vision_vote,
+        orientation_vote=orientation_vote,
         final_rotation_deg=rotation_deg,
         reason=reason,
         decided_at=datetime.now(UTC).isoformat(),
@@ -163,7 +162,7 @@ def detect_aspect_rotation(
     return RotationVote(
         step="aspect",
         rotate=rotate,
-        direction=None,
+        direction="ccw" if rotate else None,
         detail=detail,
     )
 
@@ -251,48 +250,21 @@ def detect_metadata_rotation(path: Path) -> RotationVote | None:
     return None
 
 
-class _HttpClient(Protocol):
-    def post(self, url: str, *, json: dict[str, Any], timeout: float) -> Any: ...
-
-
-_VISION_JSON_RE = re.compile(r"\{[^{}]*\}", re.DOTALL)
-
-
-def parse_vision_response(
-    raw: str,
-    *,
-    min_confidence: float,
-) -> RotationVote | None:
-    """Parse one Ollama vision model response into a rotation vote."""
-    match = _VISION_JSON_RE.search(raw)
-    if match is None:
-        return None
-    try:
-        payload = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-
-    confidence = float(payload.get("confidence", 0.0))
-    if confidence < min_confidence:
-        return None
-
-    rotate = bool(payload.get("rotate"))
-    if not rotate:
-        return RotationVote(
-            step="vision",
-            rotate=False,
-            confidence=confidence,
-            detail="vision model: no rotation needed",
-        )
-
-    direction_raw = str(payload.get("direction", "cw")).lower()
-    direction: RotationDirection = "ccw" if direction_raw == "ccw" else "cw"
+def _vote_from_orientation_class(class_index: int, confidence: float) -> RotationVote:
+    suggested_deg = class_index_to_degrees(class_index)
+    rotate = suggested_deg != 0
+    direction: RotationDirection | None = None
+    if suggested_deg == 90:
+        direction = "cw"
+    elif suggested_deg == 270:
+        direction = "ccw"
     return RotationVote(
-        step="vision",
-        rotate=True,
+        step="orientation",
+        rotate=rotate,
         direction=direction,
+        suggested_deg=suggested_deg,
         confidence=confidence,
-        detail=f"vision model direction={direction}",
+        detail=f"orientation classifier: {class_label(class_index)}",
     )
 
 
@@ -336,79 +308,32 @@ def extract_keyframe_paths(
     return frames
 
 
-def _analyze_frame_with_ollama(
-    frame_path: Path,
-    *,
-    settings: AutoRotateSettings,
-    http_client: _HttpClient,
-) -> RotationVote | None:
-    image_b64 = base64.b64encode(frame_path.read_bytes()).decode("ascii")
-    prompt = (
-        "Analyze this video frame orientation for a portrait 9:16 short-form clip. "
-        "Reply with JSON only: "
-        '{"rotate": true|false, "direction": "cw"|"ccw"|null, "confidence": 0.0-1.0}. '
-        "Set rotate=true only when the frame content appears sideways and needs a 90-degree correction."
-    )
-    try:
-        response = http_client.post(
-            f"{settings.ollama_host}/api/generate",
-            json={
-                "model": settings.ollama_model,
-                "prompt": prompt,
-                "images": [image_b64],
-                "stream": False,
-            },
-            timeout=settings.vision_timeout_s,
-        )
-        response.raise_for_status()
-        raw = str(response.json().get("response", ""))
-    except Exception:
-        return None
-    return parse_vision_response(raw, min_confidence=settings.min_vision_confidence)
-
-
-def _aggregate_vision_votes(votes: list[RotationVote]) -> RotationVote | None:
+def _aggregate_orientation_votes(votes: list[RotationVote]) -> RotationVote | None:
     if not votes:
         return None
 
-    rotate_counts = Counter(bool(vote.rotate) for vote in votes)
-    rotate_needed = rotate_counts.most_common(1)[0][0]
-    if not rotate_needed:
-        avg_conf = sum(vote.confidence or 0.0 for vote in votes) / len(votes)
-        return RotationVote(
-            step="vision",
-            rotate=False,
-            confidence=avg_conf,
-            detail="vision majority: no rotation",
-        )
-
-    directional = [vote for vote in votes if vote.rotate and vote.direction is not None]
-    if not directional:
+    deg_to_class = {0: 0, 90: 1, 180: 2, 270: 3}
+    class_indices = [deg_to_class.get(vote.suggested_deg or 0, 0) for vote in votes]
+    class_counts = Counter(class_indices)
+    winner_class, winner_count = class_counts.most_common(1)[0]
+    if winner_count < (len(votes) + 1) // 2:
         return None
-    direction_counts = Counter(vote.direction for vote in directional)
-    direction = direction_counts.most_common(1)[0][0]
-    if direction_counts.most_common(1)[0][1] < (len(directional) + 1) // 2:
-        return None
-    avg_conf = sum(vote.confidence or 0.0 for vote in directional) / len(directional)
-    return RotationVote(
-        step="vision",
-        rotate=True,
-        direction=direction,
-        confidence=avg_conf,
-        detail=f"vision majority direction={direction}",
-    )
+
+    matching = [vote for vote, idx in zip(votes, class_indices) if idx == winner_class]
+    avg_conf = sum(vote.confidence or 0.0 for vote in matching) / len(matching)
+    return _vote_from_orientation_class(winner_class, avg_conf)
 
 
-def detect_vision_rotation(
+def detect_orientation_rotation(
     path: Path,
     media: MediaInfo,
     *,
     settings: AutoRotateSettings,
     scratch_dir: Path | None = None,
-    http_client: _HttpClient | None = None,
+    predict_fn=predict_orientation,
 ) -> RotationVote | None:
-    """Use local Ollama vision model keyframes to estimate orientation."""
-    if not settings.enabled:
+    """Use a dedicated orientation classifier on extracted keyframes."""
+    if not settings.enabled or not settings.orientation_enabled:
         return None
 
     work_dir = scratch_dir or path.parent / ".auto_rotate_frames"
@@ -421,22 +346,20 @@ def detect_vision_rotation(
     if not frames:
         return None
 
-    client = http_client or httpx.Client()
     frame_votes: list[RotationVote] = []
-    try:
-        for frame in frames:
-            vote = _analyze_frame_with_ollama(
-                frame,
-                settings=settings,
-                http_client=client,
-            )
-            if vote is not None:
-                frame_votes.append(vote)
-    finally:
-        if http_client is None:
-            client.close()
+    for frame in frames:
+        result = predict_fn(
+            frame,
+            repo_id=settings.orientation_model_repo,
+            model_filename=settings.orientation_model_file,
+            min_confidence=settings.min_orientation_confidence,
+        )
+        if result is None:
+            continue
+        class_index, confidence = result
+        frame_votes.append(_vote_from_orientation_class(class_index, confidence))
 
-    return _aggregate_vision_votes(frame_votes)
+    return _aggregate_orientation_votes(frame_votes)
 
 
 def write_rotation_log(log: AutoRotationLog, log_dir: Path, *, clip_id: str) -> Path:
@@ -454,9 +377,8 @@ def run_auto_rotation(
     settings: AutoRotateSettings,
     log_dir: Path,
     scratch_dir: Path | None = None,
-    http_client: _HttpClient | None = None,
 ) -> int:
-    """Run metadata, aspect, and vision detectors and return rotation_deg."""
+    """Run metadata, aspect, and orientation detectors and return rotation_deg."""
     if not settings.enabled:
         log = AutoRotationLog(
             clip_id=clip_id,
@@ -470,14 +392,13 @@ def run_auto_rotation(
 
     metadata_vote = detect_metadata_rotation(path)
     aspect_vote = detect_aspect_rotation(media, target_aspect=target_aspect)
-    vision_vote = detect_vision_rotation(
+    orientation_vote = detect_orientation_rotation(
         path,
         media,
         settings=settings,
         scratch_dir=scratch_dir,
-        http_client=http_client,
     )
-    rotation_deg, log = combine_votes([metadata_vote, aspect_vote, vision_vote])
+    rotation_deg, log = combine_votes([metadata_vote, aspect_vote, orientation_vote])
     log = log.model_copy(
         update={
             "clip_id": clip_id,
