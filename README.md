@@ -146,6 +146,21 @@ Defined in `viral_editor.models` and serialized to `temp/*.json` between stages:
 pytest
 ```
 
+### Auto-rotation on upload
+
+Clip uploads run a 3-step detector (container metadata → aspect ratio → local Ollama vision) and silently set `rotation_deg` when the pipeline agrees. Manual 90° rotate buttons in the storyboard still override detection.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AUTO_ROTATE_ENABLED` | `true` | Master switch |
+| `OLLAMA_HOST` | `http://localhost:11434` | Local Ollama base URL |
+| `OLLAMA_MODEL` | `llava` | Vision model tag (swap to test others) |
+| `OLLAMA_VISION_TIMEOUT_S` | `6` | Per-request vision timeout |
+| `AUTO_ROTATE_KEYFRAME_COUNT` | `3` | Keyframes sent to the vision model |
+| `AUTO_ROTATE_MIN_VISION_CONFIDENCE` | `0.55` | Minimum model confidence to accept a vision vote |
+
+Per-clip decision logs are written to `temp/rotation_log/<clip_id>.json` inside each job workspace for later tuning.
+
 ## Phased implementation
 
 See [Documentation/plans/README.md](Documentation/plans/README.md) for the full phase breakdown. Phase 0 delivers scaffolding only; video logic begins in Phase 1.

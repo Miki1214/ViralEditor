@@ -19,6 +19,8 @@ SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]
 SlotFitMode = Literal["contain", "cover"]
 CaptionPosition = Literal["top", "center", "bottom"]
+RotationStep = Literal["metadata", "aspect", "vision"]
+RotationDirection = Literal["cw", "ccw"]
 
 
 class DomainModel(BaseModel):
@@ -50,6 +52,30 @@ class MediaInfo(DomainModel):
     codec_name: str | None = None
     sample_rate: int | None = Field(default=None, ge=1)
     channels: int | None = Field(default=None, ge=1)
+
+
+class RotationVote(DomainModel):
+    """One auto-rotation detector step recommendation."""
+
+    step: RotationStep
+    rotate: bool | None = None
+    direction: RotationDirection | None = None
+    suggested_deg: int | None = Field(default=None, ge=0, lt=360)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    detail: str = ""
+
+
+class AutoRotationLog(DomainModel):
+    """Per-clip auto-rotation decision log for fine-tuning."""
+
+    clip_id: str = ""
+    clip_path: str = ""
+    metadata_vote: RotationVote | None = None
+    aspect_vote: RotationVote | None = None
+    vision_vote: RotationVote | None = None
+    final_rotation_deg: int = 0
+    reason: str = ""
+    decided_at: str = ""
 
 
 class Transient(DomainModel):

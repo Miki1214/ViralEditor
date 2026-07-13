@@ -96,7 +96,10 @@ from viral_editor.api.speed import (
 from viral_editor.api.store import JobStore, job_workspace, save_upload, write_job_config
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
-from viral_editor.config import ConfigError
+from viral_editor.auto_rotate_settings import load_auto_rotate_settings
+from viral_editor.config import ConfigError, RenderConfig
+from viral_editor.ingest.loader import probe_media
+from viral_editor.video.auto_rotate import run_auto_rotation
 from viral_editor.utils.ffmpeg import FFmpegError
 from viral_editor.models import CaptionStyle, ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
 from viral_editor.audio.captions import build_caption_chunks_for_slots
@@ -119,6 +122,41 @@ from viral_editor.audio.transcribe_sources import (
     transcribe_from_custom_upload,
 )
 from viral_editor.video.proxy_render import render_composite, render_speed_proxy
+
+
+def _target_aspect_ratio(
+    *,
+    render_width: int | None = None,
+    render_height: int | None = None,
+) -> float:
+    defaults = RenderConfig()
+    width = render_width or defaults.width
+    height = render_height or defaults.height
+    return width / height
+
+
+def _detect_upload_rotation_deg(
+    clip_path: Path,
+    media,
+    *,
+    workspace: Path,
+    clip_id: str,
+    target_aspect: float | None = None,
+) -> int:
+    settings = load_auto_rotate_settings()
+    if not settings.enabled:
+        return 0
+    aspect = target_aspect if target_aspect is not None else _target_aspect_ratio()
+    return run_auto_rotation(
+        clip_path,
+        media,
+        clip_id=clip_id,
+        target_aspect=aspect,
+        settings=settings,
+        log_dir=workspace / "temp" / "rotation_log",
+        scratch_dir=workspace / "temp" / "auto_rotate_scratch" / clip_id,
+    )
+
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -216,15 +254,24 @@ async def create_job(
         clip_id = str(meta.get("id", default_id))
         video_name = Path(upload.filename or f"{clip_id}.mp4").name
         save_upload(video_bytes, input_dir / video_name)
+        clip_path = (input_dir / video_name).resolve()
+        media = probe_media(clip_path)
+        detected_rotation = _detect_upload_rotation_deg(
+            clip_path,
+            media,
+            workspace=workspace,
+            clip_id=clip_id,
+        )
         clip_inputs.append(
             ClipInput(
                 id=clip_id,
-                path=(input_dir / video_name).resolve(),
+                path=clip_path,
                 order=int(meta.get("order", index)),
                 included=bool(meta.get("included", True)),
                 role=meta.get("role", "clip"),
                 crop_start_s=meta.get("crop_start_s"),
                 crop_end_s=meta.get("crop_end_s"),
+                rotation_deg=detected_rotation,
             )
         )
 
@@ -1005,8 +1052,6 @@ async def assign_slot_video(
     input_dir = job.workspace / "input"
     save_upload(video_bytes, input_dir / video_name)
     clip_path = (input_dir / video_name).resolve()
-    from viral_editor.ingest.loader import probe_media
-
     media = probe_media(clip_path)
 
     spatial_crop = None
@@ -1018,6 +1063,20 @@ async def assign_slot_video(
         except (json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="Invalid spatial_crop_json") from exc
 
+    if rotation_deg is None:
+        effective_rotation = _detect_upload_rotation_deg(
+            clip_path,
+            media,
+            workspace=job.workspace,
+            clip_id=clip_id,
+            target_aspect=_target_aspect_ratio(
+                render_width=job.config.render.width,
+                render_height=job.config.render.height,
+            ),
+        )
+    else:
+        effective_rotation = int(rotation_deg) % 360
+
     updated_storyboard = assign_slot_clip(
         storyboard,
         slot_id,
@@ -1026,7 +1085,7 @@ async def assign_slot_video(
         crop_start_s=crop_start_s,
         crop_end_s=crop_end_s,
         media=media,
-        rotation_deg=rotation_deg or 0,
+        rotation_deg=effective_rotation,
         spatial_crop=spatial_crop,
     )
     updated_storyboard = refresh_hook_inversion_layout(

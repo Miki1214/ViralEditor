@@ -1648,3 +1648,155 @@ def test_transcribe_caption_rejects_unknown_language(
     )
     assert response.status_code == 400
 
+
+def _storyboard_job(client: TestClient, tmp_path) -> tuple[str, str]:
+    from viral_editor.api.runner import build_job_config
+    from viral_editor.api.storyboard import persist_storyboard
+    from viral_editor.api.store import JobStore
+    from viral_editor.audio.storyboard import plan_storyboard
+    from viral_editor.models import MusicBlock
+
+    store: JobStore = client.app.state.job_store
+    workspace = tmp_path / "job_auto_rotate"
+    workspace.mkdir()
+    (workspace / "input").mkdir()
+    (workspace / "input" / "track.mp3").write_bytes(b"fake")
+    config = build_job_config(
+        workspace=workspace,
+        hook_text="Hook",
+        emphasis_words=[],
+        audio_filename="track.mp3",
+        clips=[],
+    )
+    job = store.create(config, workspace=workspace)
+    block = MusicBlock(
+        id="block_a",
+        start_s=0.0,
+        end_s=6.0,
+        duration_s=6.0,
+        score=0.9,
+        drop_count=1,
+        transient_count=1,
+        label="drop",
+        reason="test",
+    )
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    persist_storyboard(workspace / "temp", storyboard)
+    clip_slot = next(slot for slot in storyboard.slots if slot.role == "clip")
+    return job.id, clip_slot.id
+
+
+def test_assign_slot_video_auto_rotation_when_form_omits_rotation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_id, slot_id = _storyboard_job(client, tmp_path)
+
+    from viral_editor.models import MediaInfo
+
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.probe_media",
+        lambda _path: MediaInfo(
+            path=_path,
+            duration_s=4.0,
+            has_video=True,
+            width=1920,
+            height=1080,
+        ),
+    )
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.run_auto_rotation",
+        lambda *_args, **_kwargs: 90,
+    )
+
+    response = client.put(
+        f"/api/jobs/{job_id}/slots/{slot_id}/clip",
+        data={"crop_start_s": "0", "crop_end_s": "4"},
+        files={"video": ("landscape.mp4", io.BytesIO(b"video-bytes"), "video/mp4")},
+    )
+    assert response.status_code == 200
+    slot = next(item for item in response.json()["slots"] if item["id"] == slot_id)
+    assert slot["rotation_deg"] == 90
+
+
+def test_assign_slot_video_explicit_rotation_overrides_auto_detection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    job_id, slot_id = _storyboard_job(client, tmp_path)
+
+    from viral_editor.models import MediaInfo
+
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.probe_media",
+        lambda _path: MediaInfo(
+            path=_path,
+            duration_s=4.0,
+            has_video=True,
+            width=1920,
+            height=1080,
+        ),
+    )
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("run_auto_rotation should not run when rotation_deg is explicit")
+
+    monkeypatch.setattr("viral_editor.api.routes.jobs.run_auto_rotation", fail_if_called)
+
+    response = client.put(
+        f"/api/jobs/{job_id}/slots/{slot_id}/clip",
+        data={"crop_start_s": "0", "crop_end_s": "4", "rotation_deg": "180"},
+        files={"video": ("landscape.mp4", io.BytesIO(b"video-bytes"), "video/mp4")},
+    )
+    assert response.status_code == 200
+    slot = next(item for item in response.json()["slots"] if item["id"] == slot_id)
+    assert slot["rotation_deg"] == 180
+
+
+def test_create_job_sets_clip_rotation_from_auto_detection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("viral_editor.api.runner.ensure_ffmpeg", lambda: None)
+    monkeypatch.setattr("viral_editor.api.routes.jobs.start_job", lambda *args, **kwargs: None)
+
+    from viral_editor.models import MediaInfo
+
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.probe_media",
+        lambda _path: MediaInfo(
+            path=_path,
+            duration_s=4.0,
+            has_video=True,
+            width=1920,
+            height=1080,
+        ),
+    )
+    monkeypatch.setattr(
+        "viral_editor.api.routes.jobs.run_auto_rotation",
+        lambda *_args, **_kwargs: 90,
+    )
+
+    response = client.post(
+        "/api/jobs",
+        data={
+            "hook_text": "Auto rotate",
+            "clips": json.dumps([{"id": "clip_0", "order": 0, "role": "clip"}]),
+        },
+        files=[
+            ("video", ("clip.mp4", io.BytesIO(b"video-bytes"), "video/mp4")),
+            ("audio", ("track.mp3", io.BytesIO(b"audio-bytes"), "audio/mpeg")),
+        ],
+    )
+    assert response.status_code == 201
+    job_id = response.json()["id"]
+    detail = client.get(f"/api/jobs/{job_id}").json()
+    assert detail["config"]["clips"][0]["rotation_deg"] == 90
+
+
