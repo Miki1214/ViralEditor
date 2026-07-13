@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/models.py": {
-    "mtime": 1783963413.9313564,
-    "ast_hash": "c24f2236bf9385cfcdc0f65401364614",
+    "mtime": 1783965380.1878607,
+    "ast_hash": "f0b9b6e925bb92abf31b06daaca7e723",
     "semantic_hash": ""
   },
   "src/viral_editor/overlay/__init__.py": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783963762.8341956,
-    "ast_hash": "3cfe6e8edfcee53d94b9720ce538e5c1",
+    "mtime": 1783965425.9150257,
+    "ast_hash": "b92b2af2559a1c01d477ed50f9cff862",
     "semantic_hash": ""
   },
   "assets/README.md": {
@@ -785,8 +785,8 @@
     "semantic_hash": ""
   },
   "requirements.txt": {
-    "mtime": 1783374212.8259344,
-    "ast_hash": "508e3317a0f31fb2c3180d6696f99ec6",
+    "mtime": 1783965418.745948,
+    "ast_hash": "0f6bdc3757da347f7c0cf616198455bf",
     "semantic_hash": ""
   },
   "web/index.html": {
@@ -1170,28 +1170,38 @@
     "semantic_hash": ""
   },
   "src/viral_editor/auto_rotate_settings.py": {
-    "mtime": 1783963531.4319482,
-    "ast_hash": "86d853f6d0589506d30216a1eae38be8",
+    "mtime": 1783965374.4872193,
+    "ast_hash": "4a0fd0e47a6bbabe477b02901460bca5",
     "semantic_hash": ""
   },
   "src/viral_editor/video/auto_rotate.py": {
-    "mtime": 1783963639.054374,
-    "ast_hash": "6e6973f3281c0ed638ced6bf31aadd66",
+    "mtime": 1783965463.430247,
+    "ast_hash": "866f784ab174bf93d537a047fbf2e6ff",
     "semantic_hash": ""
   },
   "tests/test_auto_rotate.py": {
-    "mtime": 1783963617.146531,
-    "ast_hash": "431d8e6da5673050ada3d56139aa3bbd",
+    "mtime": 1783965445.2416353,
+    "ast_hash": "e7c4e1182b6a5241bb2333d36aa04cf0",
     "semantic_hash": ""
   },
   "tests/test_auto_rotate_settings.py": {
-    "mtime": 1783963756.4205225,
-    "ast_hash": "ea7f13610d35281e9950c172b8e1ce80",
+    "mtime": 1783965428.1066453,
+    "ast_hash": "f52b6dd00187f1d0d8963546a5f80c8a",
     "semantic_hash": ""
   },
   ".cursor/plans/multi-step_auto-rotation_on_upload_2e284e71.plan.md": {
-    "mtime": 1783963309.2540028,
-    "ast_hash": "713d71da3adf2c80d784f3da5006d17b",
+    "mtime": 1783963790.527911,
+    "ast_hash": "4ac753982a4956ad493d7600f7d8811e",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/video/orientation_classifier.py": {
+    "mtime": 1783965371.59516,
+    "ast_hash": "6baa700ca81b0aed880be8b178ef5703",
+    "semantic_hash": ""
+  },
+  "tests/test_orientation_classifier.py": {
+    "mtime": 1783965451.4094355,
+    "ast_hash": "dcbc1d53e61cf81b9919b58de78dfde3",
     "semantic_hash": ""
   }
 }

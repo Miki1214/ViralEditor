@@ -148,7 +148,7 @@ pytest
 
 ### Auto-rotation on upload
 
-Clip uploads run a 3-step detector (container metadata → aspect ratio → orientation classifier) and silently set `rotation_deg` when the pipeline agrees. Manual 90° rotate buttons in the storyboard still override detection.
+Clip uploads run a 3-step detector (container metadata → aspect ratio → orientation classifier) and silently set `rotation_deg`. **When the classifier returns a vote, it always wins** — metadata and aspect are only used as fallback if the classifier abstains. Manual 90° rotate buttons in the storyboard still override detection.
 
 The keyframe step uses [DuarteBarbosa/deep-image-orientation-detection](https://huggingface.co/DuarteBarbosa/deep-image-orientation-detection) (EfficientNet ONNX) — not an LLM.
 

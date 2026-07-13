@@ -70,7 +70,11 @@ def _decide_rotation(
     aspect_vote: RotationVote | None,
     orientation_vote: RotationVote | None,
 ) -> tuple[int, str]:
-    ordered = [metadata_vote, aspect_vote, orientation_vote]
+    if orientation_vote is not None:
+        deg = _rotation_from_vote(orientation_vote)
+        return deg, "orientation classifier vote — always followed"
+
+    ordered = [metadata_vote, aspect_vote]
     active = [vote for vote in ordered if vote is not None]
 
     if not active:
@@ -92,23 +96,7 @@ def _decide_rotation(
             f"two steps disagreed — priority {winner.step}",
         )
 
-    _metadata, _aspect, _orientation = ordered
-    agreeing: list[tuple[RotationVote, RotationVote]] = []
-    for index, left in enumerate(ordered):
-        if left is None:
-            continue
-        for right in ordered[index + 1 :]:
-            if right is None:
-                continue
-            if _votes_agree(left, right):
-                agreeing.append((left, right))
-
-    if not agreeing:
-        return 0, "three steps — no two matched"
-
-    first, second = agreeing[0]
-    merged = _merge_votes(first, second)
-    return _rotation_from_vote(merged), f"at least two steps matched ({first.step}, {second.step})"
+    return 0, "no recommendation — all steps abstained"
 
 
 def combine_votes(

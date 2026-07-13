@@ -82,18 +82,24 @@ def test_combine_votes_two_steps_disagree_prefers_aspect() -> None:
     assert "priority aspect" in log.reason.lower()
 
 
-def test_combine_votes_three_steps_no_two_match_returns_zero() -> None:
+def test_combine_votes_orientation_overrides_conflicting_metadata_and_aspect() -> None:
     metadata_vote = RotationVote(step="metadata", rotate=True, direction="cw", suggested_deg=90)
     aspect_vote = RotationVote(step="aspect", rotate=False, direction=None)
-    orientation_vote = RotationVote(step="orientation", rotate=True, direction="ccw", suggested_deg=270)
+    orientation_vote = RotationVote(
+        step="orientation",
+        rotate=True,
+        direction="ccw",
+        suggested_deg=270,
+        confidence=0.91,
+    )
 
     rotation_deg, log = combine_votes([metadata_vote, aspect_vote, orientation_vote])
 
-    assert rotation_deg == 0
-    assert "no two matched" in log.reason.lower()
+    assert rotation_deg == 270
+    assert "orientation classifier" in log.reason.lower()
 
 
-def test_combine_votes_three_steps_two_match_uses_direction_from_metadata() -> None:
+def test_combine_votes_orientation_overrides_even_when_metadata_and_aspect_agree() -> None:
     metadata_vote = RotationVote(
         step="metadata",
         rotate=True,
@@ -106,12 +112,38 @@ def test_combine_votes_three_steps_two_match_uses_direction_from_metadata() -> N
         rotate=True,
         direction="cw",
         suggested_deg=90,
+        confidence=0.88,
     )
 
     rotation_deg, log = combine_votes([metadata_vote, aspect_vote, orientation_vote])
 
+    assert rotation_deg == 90
+    assert "orientation classifier" in log.reason.lower()
+
+
+def test_combine_votes_metadata_and_aspect_disagree_without_orientation_returns_zero() -> None:
+    metadata_vote = RotationVote(step="metadata", rotate=True, direction="cw", suggested_deg=90)
+    aspect_vote = RotationVote(step="aspect", rotate=False, direction=None)
+
+    rotation_deg, log = combine_votes([metadata_vote, aspect_vote, None])
+
+    assert rotation_deg == 0
+    assert "priority aspect" in log.reason.lower()
+
+
+def test_combine_votes_metadata_and_aspect_agree_without_orientation() -> None:
+    metadata_vote = RotationVote(
+        step="metadata",
+        rotate=True,
+        direction="ccw",
+        suggested_deg=270,
+    )
+    aspect_vote = RotationVote(step="aspect", rotate=True, direction="ccw")
+
+    rotation_deg, log = combine_votes([metadata_vote, aspect_vote, None])
+
     assert rotation_deg == 270
-    assert "matched" in log.reason.lower()
+    assert "agreed" in log.reason.lower()
 
 
 PORTRAIT_TARGET_ASPECT = 9 / 16
