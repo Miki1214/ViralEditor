@@ -296,8 +296,11 @@ export function RetentionFxPanel({
 
   const retentionScore = storyboard.retention_score;
 
+  const teaserMaskLabel =
+    teaser.mask === "vignette" ? "vignette" : teaser.mask === "dir_blur" ? "dir blur" : "without effect";
+
   const teaserPreviewLabel = teaser.enabled
-    ? `${payoffS.toFixed(1)}s start · ${buildupS.toFixed(1)}s end · ${teaser.mask === "vignette" ? "vignette" : "dir blur"}`
+    ? `${payoffS.toFixed(1)}s start · ${buildupS.toFixed(1)}s end · ${teaserMaskLabel}`
     : "Off";
 
   return (
@@ -375,6 +378,7 @@ export function RetentionFxPanel({
           <label className="block">
             <span id="retention-fx-mask-label" className="field-label">Mask</span>
             <select id="retention-fx-mask-select" className="field-select mt-1 w-full" disabled={saving || !teaser.enabled} value={teaser.mask} onChange={(e) => void onPatch({ teaser: { mask: e.target.value as TeaserSettings["mask"] } })}>
+              <option id="retention-fx-mask-none" value="none">Without effect</option>
               <option id="retention-fx-mask-vignette" value="vignette">Vignette — soft dark edges</option>
               <option id="retention-fx-mask-dir-blur" value="dir_blur">Directional blur — hide detail</option>
             </select>

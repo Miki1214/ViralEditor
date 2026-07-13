@@ -720,7 +720,7 @@
       "label": "main()",
       "file_type": "code",
       "source_file": "scripts/debug_hook_split.py",
-      "source_location": "L118",
+      "source_location": "L122",
       "_origin": "ast",
       "id": "scripts_debug_hook_split_main",
       "community": 136,
@@ -1263,7 +1263,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_effects",
-      "community": 99,
+      "community": 147,
       "norm_label": "effects.py"
     },
     {
@@ -1273,7 +1273,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "api_effects_timeline_for_music_window",
-      "community": 99,
+      "community": 147,
       "norm_label": "_timeline_for_music_window()"
     },
     {
@@ -1343,7 +1343,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "api_effects_assigned_slot_boundary_times_abs",
-      "community": 99,
+      "community": 147,
       "norm_label": "assigned_slot_boundary_times_abs()"
     },
     {
@@ -1353,7 +1353,7 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "api_effects_effective_window_end_s",
-      "community": 99,
+      "community": 147,
       "norm_label": "effective_window_end_s()"
     },
     {
@@ -1363,7 +1363,7 @@
       "source_location": "L113",
       "_origin": "ast",
       "id": "api_effects_spatial_fx_for_preview",
-      "community": 99,
+      "community": 147,
       "norm_label": "spatial_fx_for_preview()"
     },
     {
@@ -1393,7 +1393,7 @@
       "source_location": "L183",
       "_origin": "ast",
       "id": "api_effects_apply_effects_patch",
-      "community": 99,
+      "community": 147,
       "norm_label": "apply_effects_patch()"
     },
     {
@@ -1403,7 +1403,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "api_effects_rationale_1",
-      "community": 99,
+      "community": 147,
       "norm_label": "retention fx helpers for composited preview."
     },
     {
@@ -1423,7 +1423,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "api_effects_rationale_89",
-      "community": 99,
+      "community": 147,
       "norm_label": "absolute audio times where assigned slots begin or end."
     },
     {
@@ -1433,7 +1433,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "api_effects_rationale_184",
-      "community": 99,
+      "community": 147,
       "norm_label": "merge partial teaser / spatial fx / retention settings from an api patch."
     },
     {
@@ -1900,7 +1900,7 @@
       "label": "start_final_render()",
       "file_type": "code",
       "source_file": "src/viral_editor/api/render_job.py",
-      "source_location": "L151",
+      "source_location": "L155",
       "_origin": "ast",
       "id": "api_render_job_start_final_render",
       "community": 149,
@@ -1910,7 +1910,7 @@
       "label": "JobStore",
       "file_type": "code",
       "source_file": "src/viral_editor/api/render_job.py",
-      "source_location": "L151",
+      "source_location": "L155",
       "_origin": "ast",
       "id": "src_viral_editor_api_render_job_py_jobstore",
       "community": 0,
@@ -1950,9 +1950,9 @@
       "label": "Render the final MP4 on a background thread.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/api/render_job.py",
-      "source_location": "L152",
+      "source_location": "L156",
       "_origin": "ast",
-      "id": "api_render_job_rationale_152",
+      "id": "api_render_job_rationale_156",
       "community": 149,
       "norm_label": "render the final mp4 on a background thread."
     },
@@ -5003,7 +5003,7 @@
       "source_location": "L643",
       "_origin": "ast",
       "id": "src_viral_editor_audio_block_planner_py_audiotimeline",
-      "community": 158,
+      "community": 146,
       "norm_label": "audiotimeline"
     },
     {
@@ -5023,7 +5023,7 @@
       "source_location": "L746",
       "_origin": "ast",
       "id": "audio_block_planner_full_track_plan",
-      "community": 158,
+      "community": 9,
       "norm_label": "_full_track_plan()"
     },
     {
@@ -5033,7 +5033,7 @@
       "source_location": "L746",
       "_origin": "ast",
       "id": "src_viral_editor_audio_block_planner_py_musicblockplan",
-      "community": 158,
+      "community": 9,
       "norm_label": "musicblockplan"
     },
     {
@@ -5053,7 +5053,7 @@
       "source_location": "L906",
       "_origin": "ast",
       "id": "audio_block_planner_apply_block_selection",
-      "community": 158,
+      "community": 9,
       "norm_label": "apply_block_selection()"
     },
     {
@@ -5063,7 +5063,7 @@
       "source_location": "L916",
       "_origin": "ast",
       "id": "audio_block_planner_selected_block",
-      "community": 158,
+      "community": 9,
       "norm_label": "selected_block()"
     },
     {
@@ -5073,7 +5073,7 @@
       "source_location": "L916",
       "_origin": "ast",
       "id": "src_viral_editor_audio_block_planner_py_musicblock",
-      "community": 158,
+      "community": 9,
       "norm_label": "musicblock"
     },
     {
@@ -5203,7 +5203,7 @@
       "source_location": "L910",
       "_origin": "ast",
       "id": "audio_block_planner_rationale_910",
-      "community": 158,
+      "community": 9,
       "norm_label": "return a copy of the plan with ``selected_block_id`` updated."
     },
     {
@@ -5233,7 +5233,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "audio_captions_wpspreset",
-      "community": 94,
+      "community": 4,
       "norm_label": "wpspreset"
     },
     {
@@ -5253,7 +5253,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "audio_captions_tokenize_script",
-      "community": 4,
+      "community": 34,
       "norm_label": "tokenize_script()"
     },
     {
@@ -5283,7 +5283,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "audio_captions_cleanup_caption_texts",
-      "community": 34,
+      "community": 154,
       "norm_label": "cleanup_caption_texts()"
     },
     {
@@ -5313,7 +5313,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "src_viral_editor_audio_captions_py_captionchunk",
-      "community": 34,
+      "community": 4,
       "norm_label": "captionchunk"
     },
     {
@@ -5543,7 +5543,7 @@
       "source_location": "L677",
       "_origin": "ast",
       "id": "audio_captions_timing_override_matches_text",
-      "community": 34,
+      "community": 4,
       "norm_label": "_timing_override_matches_text()"
     },
     {
@@ -5603,7 +5603,7 @@
       "source_location": "L905",
       "_origin": "ast",
       "id": "audio_captions_build_caption_chunks_for_slots",
-      "community": 34,
+      "community": 4,
       "norm_label": "build_caption_chunks_for_slots()"
     },
     {
@@ -5633,7 +5633,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "audio_captions_rationale_50",
-      "community": 4,
+      "community": 34,
       "norm_label": "split script text into word tokens."
     },
     {
@@ -5663,7 +5663,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "audio_captions_rationale_102",
-      "community": 34,
+      "community": 154,
       "norm_label": "normalize the full script and each slot's effective caption text."
     },
     {
@@ -5853,7 +5853,7 @@
       "source_location": "L911",
       "_origin": "ast",
       "id": "audio_captions_rationale_911",
-      "community": 34,
+      "community": 4,
       "norm_label": "build per-slot caption chunks from a caption config and ordered slots."
     },
     {
@@ -8833,7 +8833,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "viral_editor_config_validate_color",
-      "community": 149,
+      "community": 148,
       "norm_label": "_validate_color()"
     },
     {
@@ -8873,7 +8873,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "valueerror",
-      "community": 149,
+      "community": 28,
       "norm_label": "valueerror"
     },
     {
@@ -8893,7 +8893,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "viral_editor_config_renderconfig_validate_preset",
-      "community": 149,
+      "community": 28,
       "norm_label": ".validate_preset()"
     },
     {
@@ -8913,7 +8913,7 @@
       "source_location": "L84",
       "_origin": "ast",
       "id": "viral_editor_config_styleconfig_validate_colors",
-      "community": 149,
+      "community": 148,
       "norm_label": ".validate_colors()"
     },
     {
@@ -8953,7 +8953,7 @@
       "source_location": "L121",
       "_origin": "ast",
       "id": "viral_editor_config_speedrampconfig_s_max_gte_s_min",
-      "community": 149,
+      "community": 28,
       "norm_label": ".s_max_gte_s_min()"
     },
     {
@@ -8963,7 +8963,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "viral_editor_config_speedrampconfig_validate_style",
-      "community": 149,
+      "community": 28,
       "norm_label": ".validate_style()"
     },
     {
@@ -9013,7 +9013,7 @@
       "source_location": "L181",
       "_origin": "ast",
       "id": "viral_editor_config_musicselectionconfig_window_end_after_start",
-      "community": 149,
+      "community": 28,
       "norm_label": ".window_end_after_start()"
     },
     {
@@ -10013,7 +10013,7 @@
       "source_location": "L186",
       "_origin": "ast",
       "id": "ingest_loader_validate_job",
-      "community": 63,
+      "community": 150,
       "norm_label": "validate_job()"
     },
     {
@@ -10083,7 +10083,7 @@
       "source_location": "L187",
       "_origin": "ast",
       "id": "ingest_loader_rationale_187",
-      "community": 63,
+      "community": 150,
       "norm_label": "validate input files, probe media, and derive the output timeline."
     },
     {
@@ -10513,7 +10513,7 @@
       "source_location": "L461",
       "_origin": "ast",
       "id": "src_viral_editor_models_py_path",
-      "community": 147,
+      "community": 70,
       "norm_label": "path"
     },
     {
@@ -10523,7 +10523,7 @@
       "source_location": "L472",
       "_origin": "ast",
       "id": "viral_editor_models_write_artifact_list",
-      "community": 25,
+      "community": 70,
       "norm_label": "write_artifact_list()"
     },
     {
@@ -10533,7 +10533,7 @@
       "source_location": "L483",
       "_origin": "ast",
       "id": "viral_editor_models_read_artifact_list",
-      "community": 147,
+      "community": 70,
       "norm_label": "read_artifact_list()"
     },
     {
@@ -10983,7 +10983,7 @@
       "source_location": "L473",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_473",
-      "community": 25,
+      "community": 70,
       "norm_label": "serialize a list of domain models to ``temp_dir/<name>.json``."
     },
     {
@@ -10993,7 +10993,7 @@
       "source_location": "L484",
       "_origin": "ast",
       "id": "viral_editor_models_rationale_484",
-      "community": 147,
+      "community": 70,
       "norm_label": "load a json list artifact into typed domain models."
     },
     {
@@ -11303,7 +11303,7 @@
       "source_location": "L145",
       "_origin": "ast",
       "id": "utils_ffmpeg_escape_drawtext_text",
-      "community": 147,
+      "community": 70,
       "norm_label": "escape_drawtext_text()"
     },
     {
@@ -11483,7 +11483,7 @@
       "source_location": "L146",
       "_origin": "ast",
       "id": "utils_ffmpeg_rationale_146",
-      "community": 147,
+      "community": 70,
       "norm_label": "escape caption text for drawtext ``text=`` inside single quotes.      pair with"
     },
     {
@@ -12513,7 +12513,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "video_filter_builders_pan_batch_time_envelope",
-      "community": 52,
+      "community": 138,
       "norm_label": "pan_batch_time_envelope()"
     },
     {
@@ -12523,7 +12523,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_fxevent",
-      "community": 52,
+      "community": 138,
       "norm_label": "fxevent"
     },
     {
@@ -12533,7 +12533,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "video_filter_builders_fx_decay_ramp",
-      "community": 52,
+      "community": 138,
       "norm_label": "fx_decay_ramp()"
     },
     {
@@ -12543,7 +12543,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "video_filter_builders_zoom_scale_factor",
-      "community": 52,
+      "community": 138,
       "norm_label": "zoom_scale_factor()"
     },
     {
@@ -12553,7 +12553,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "video_filter_builders_pan_event_duration",
-      "community": 52,
+      "community": 138,
       "norm_label": "pan_event_duration()"
     },
     {
@@ -12563,7 +12563,7 @@
       "source_location": "L57",
       "_origin": "ast",
       "id": "video_filter_builders_combined_pan_x_expression",
-      "community": 52,
+      "community": 138,
       "norm_label": "combined_pan_x_expression()"
     },
     {
@@ -12573,7 +12573,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "video_filter_builders_pan_batch_blend_expression",
-      "community": 52,
+      "community": 138,
       "norm_label": "pan_batch_blend_expression()"
     },
     {
@@ -12683,7 +12683,7 @@
       "source_location": "L327",
       "_origin": "ast",
       "id": "video_filter_builders_ffmpeg_fontcolor",
-      "community": 138,
+      "community": 153,
       "norm_label": "_ffmpeg_fontcolor()"
     },
     {
@@ -12693,7 +12693,7 @@
       "source_location": "L336",
       "_origin": "ast",
       "id": "video_filter_builders_ffmpeg_boxcolor",
-      "community": 138,
+      "community": 153,
       "norm_label": "_ffmpeg_boxcolor()"
     },
     {
@@ -12813,7 +12813,7 @@
       "source_location": "L602",
       "_origin": "ast",
       "id": "video_filter_builders_ink_rgb_from_color",
-      "community": 147,
+      "community": 70,
       "norm_label": "_ink_rgb_from_color()"
     },
     {
@@ -12823,7 +12823,7 @@
       "source_location": "L614",
       "_origin": "ast",
       "id": "video_filter_builders_pixel_matches_ink",
-      "community": 147,
+      "community": 70,
       "norm_label": "_pixel_matches_ink()"
     },
     {
@@ -12833,7 +12833,7 @@
       "source_location": "L620",
       "_origin": "ast",
       "id": "video_filter_builders_measure_karaoke_word_y_tops_px",
-      "community": 147,
+      "community": 70,
       "norm_label": "_measure_karaoke_word_y_tops_px()"
     },
     {
@@ -12870,7 +12870,7 @@
       "label": "build_teaser_filter_chain()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L848",
+      "source_location": "L850",
       "_origin": "ast",
       "id": "video_filter_builders_build_teaser_filter_chain",
       "community": 138,
@@ -12880,7 +12880,7 @@
       "label": "TeaserSpec",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L848",
+      "source_location": "L850",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_teaserspec",
       "community": 27,
@@ -12890,17 +12890,17 @@
       "label": "apply_spatial_fx_chain()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L897",
+      "source_location": "L902",
       "_origin": "ast",
       "id": "video_filter_builders_apply_spatial_fx_chain",
-      "community": 52,
+      "community": 138,
       "norm_label": "apply_spatial_fx_chain()"
     },
     {
       "label": "build_proxy_filtergraph()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1024",
+      "source_location": "L1029",
       "_origin": "ast",
       "id": "video_filter_builders_build_proxy_filtergraph",
       "community": 27,
@@ -12910,7 +12910,7 @@
       "label": "SpeedRampPlan",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1024",
+      "source_location": "L1029",
       "_origin": "ast",
       "id": "src_viral_editor_video_filter_builders_py_speedrampplan",
       "community": 27,
@@ -12920,7 +12920,7 @@
       "label": "build_composite_filtergraph()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1065",
+      "source_location": "L1070",
       "_origin": "ast",
       "id": "video_filter_builders_build_composite_filtergraph",
       "community": 138,
@@ -12930,7 +12930,7 @@
       "label": "storyboard_mux_duration_s()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1251",
+      "source_location": "L1256",
       "_origin": "ast",
       "id": "video_filter_builders_storyboard_mux_duration_s",
       "community": 138,
@@ -12940,7 +12940,7 @@
       "label": "composite_output_duration_s()",
       "file_type": "code",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1256",
+      "source_location": "L1261",
       "_origin": "ast",
       "id": "video_filter_builders_composite_output_duration_s",
       "community": 138,
@@ -12963,7 +12963,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_25",
-      "community": 52,
+      "community": 138,
       "norm_label": "inclusive active window covering every impulse in a pan batch."
     },
     {
@@ -12973,7 +12973,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_39",
-      "community": 52,
+      "community": 138,
       "norm_label": "linear 1\u21920 ramp; commas unescaped \u2014 used inside quoted ffmpeg expressions."
     },
     {
@@ -12983,7 +12983,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_64",
-      "community": 52,
+      "community": 138,
       "norm_label": "sum time-gated horizontal offsets; input is already headroom-scaled."
     },
     {
@@ -12993,7 +12993,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_83",
-      "community": 52,
+      "community": 138,
       "norm_label": "blend panned frames only while the batch envelope is active."
     },
     {
@@ -13113,7 +13113,7 @@
       "source_location": "L633",
       "_origin": "ast",
       "id": "video_filter_builders_rationale_633",
-      "community": 147,
+      "community": 70,
       "norm_label": "return absolute drawtext y per word so karaoke ink matches the phrase line."
     },
     {
@@ -13130,9 +13130,9 @@
       "label": "Extract and time-fit the teaser tail into a prepended clip.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L861",
+      "source_location": "L863",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_861",
+      "id": "video_filter_builders_rationale_863",
       "community": 138,
       "norm_label": "extract and time-fit the teaser tail into a prepended clip."
     },
@@ -13140,19 +13140,19 @@
       "label": "Apply beat-synced zoom/rotate/pan impulses.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L911",
+      "source_location": "L916",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_911",
-      "community": 52,
+      "id": "video_filter_builders_rationale_916",
+      "community": 138,
       "norm_label": "apply beat-synced zoom/rotate/pan impulses."
     },
     {
       "label": "Build an ffmpeg filtergraph for segment-wise speed preview.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1031",
+      "source_location": "L1036",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1031",
+      "id": "video_filter_builders_rationale_1036",
       "community": 27,
       "norm_label": "build an ffmpeg filtergraph for segment-wise speed preview."
     },
@@ -13160,9 +13160,9 @@
       "label": "Build ffmpeg filtergraph for storyboard slots with optional xfade + hook title.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1091",
+      "source_location": "L1096",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1091",
+      "id": "video_filter_builders_rationale_1096",
       "community": 138,
       "norm_label": "build ffmpeg filtergraph for storyboard slots with optional xfade + hook title."
     },
@@ -13170,9 +13170,9 @@
       "label": "Packed segment timeline length \u2014 matches storyboard/audio caption clock.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1252",
+      "source_location": "L1257",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1252",
+      "id": "video_filter_builders_rationale_1257",
       "community": 138,
       "norm_label": "packed segment timeline length \u2014 matches storyboard/audio caption clock."
     },
@@ -13180,9 +13180,9 @@
       "label": "Estimate xfade-compressed composited video body length before storyboard pad.",
       "file_type": "rationale",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1262",
+      "source_location": "L1267",
       "_origin": "ast",
-      "id": "video_filter_builders_rationale_1262",
+      "id": "video_filter_builders_rationale_1267",
       "community": 138,
       "norm_label": "estimate xfade-compressed composited video body length before storyboard pad."
     },
@@ -15953,7 +15953,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_caption_filter_escape.py"
     },
     {
@@ -15963,7 +15963,7 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_escape_drawtext_text_handles_special_characters",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_escape_drawtext_text_handles_special_characters()"
     },
     {
@@ -15973,7 +15973,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_composite_graph_for_phrase",
-      "community": 147,
+      "community": 70,
       "norm_label": "_composite_graph_for_phrase()"
     },
     {
@@ -15983,7 +15983,7 @@
       "source_location": "L68",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_caption_filtergraph_survives_apostrophe_in_phrase",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_caption_filtergraph_survives_apostrophe_in_phrase()"
     },
     {
@@ -15993,7 +15993,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_caption_filtergraph_survives_percent_and_colon",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_caption_filtergraph_survives_percent_and_colon()"
     },
     {
@@ -16003,7 +16003,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_test_caption_filtergraph_renders_special_characters",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_caption_filtergraph_renders_special_characters()"
     },
     {
@@ -16013,7 +16013,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_caption_filter_escape_rationale_1",
-      "community": 147,
+      "community": 70,
       "norm_label": "regression tests for drawtext escaping in caption filters."
     },
     {
@@ -16373,7 +16373,7 @@
       "source_location": "L787",
       "_origin": "ast",
       "id": "tests_test_captions_test_hook_title_emphasis_adds_colored_word_overlays",
-      "community": 153,
+      "community": 138,
       "norm_label": "test_hook_title_emphasis_adds_colored_word_overlays()"
     },
     {
@@ -16853,7 +16853,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_ffmpeg_env.py"
     },
     {
@@ -16873,7 +16873,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ensure_ffmpeg_raises_with_install_hint_when_missing",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_ensure_ffmpeg_raises_with_install_hint_when_missing()"
     },
     {
@@ -16883,7 +16883,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_py_monkeypatch",
-      "community": 70,
+      "community": 52,
       "norm_label": "monkeypatch"
     },
     {
@@ -16893,7 +16893,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_resolve_ffmpeg_binary_falls_back_to_winget_path",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_resolve_ffmpeg_binary_falls_back_to_winget_path()"
     },
     {
@@ -16903,7 +16903,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_py_path",
-      "community": 70,
+      "community": 52,
       "norm_label": "path"
     },
     {
@@ -16913,7 +16913,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_run_ffprobe_json_parses_output",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_run_ffprobe_json_parses_output()"
     },
     {
@@ -16923,7 +16923,7 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ffmpeg_encode_progress_percent_from_progress_file",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_ffmpeg_encode_progress_percent_from_progress_file()"
     },
     {
@@ -16933,7 +16933,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ffmpeg_encode_progress_percent_caps_before_complete",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_ffmpeg_encode_progress_percent_caps_before_complete()"
     },
     {
@@ -16943,7 +16943,7 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_ffmpeg_stderr_progress_percent_parses_time",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_ffmpeg_stderr_progress_percent_parses_time()"
     },
     {
@@ -16953,7 +16953,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_run_ffmpeg_raises_on_nonzero_exit",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_run_ffmpeg_raises_on_nonzero_exit()"
     },
     {
@@ -16963,7 +16963,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_test_spill_filter_complex_rewrites_long_windows_command",
-      "community": 70,
+      "community": 52,
       "norm_label": "test_spill_filter_complex_rewrites_long_windows_command()"
     },
     {
@@ -16973,7 +16973,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ffmpeg_env_rationale_1",
-      "community": 70,
+      "community": 52,
       "norm_label": "tests for ffmpeg environment checks."
     },
     {
@@ -17973,7 +17973,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "tests_test_models_test_clip_models_round_trip",
-      "community": 141,
+      "community": 1,
       "norm_label": "test_clip_models_round_trip()"
     },
     {
@@ -18243,7 +18243,7 @@
       "source_location": "L274",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_apply_spatial_fx_chain_applies_all_events",
-      "community": 52,
+      "community": 138,
       "norm_label": "test_apply_spatial_fx_chain_applies_all_events()"
     },
     {
@@ -18253,7 +18253,7 @@
       "source_location": "L302",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_apply_spatial_fx_chain_tail_batch_pan_has_headroom",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_apply_spatial_fx_chain_tail_batch_pan_has_headroom()"
     },
     {
@@ -18263,7 +18263,7 @@
       "source_location": "L358",
       "_origin": "ast",
       "id": "tests_test_proxy_render_test_apply_spatial_fx_chain_large_translate_batch_ffmpeg",
-      "community": 147,
+      "community": 70,
       "norm_label": "test_apply_spatial_fx_chain_large_translate_batch_ffmpeg()"
     },
     {
@@ -19523,7 +19523,7 @@
       "source_location": "L1147",
       "_origin": "ast",
       "id": "tests_test_storyboard_downbeats_every",
-      "community": 90,
+      "community": 20,
       "norm_label": "_downbeats_every()"
     },
     {
@@ -38654,11 +38654,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/api/render_job.py",
-      "source_location": "L152",
+      "source_location": "L156",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "api_render_job_rationale_152",
-      "target": "api_render_job_start_final_render"
+      "source": "api_render_job_rationale_156",
+      "target": "api_render_job_start_final_render",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -78513,6 +78513,17 @@
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
+      "source_file": "src/viral_editor/video/filter_builders.py",
+      "source_location": "L844",
+      "weight": 1.0,
+      "source": "video_filter_builders_teaser_mask_filter",
+      "target": "valueerror"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
       "source_file": "src/viral_editor/video/final_render.py",
       "source_location": "L42",
       "weight": 1.0,
@@ -97916,9 +97927,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L633",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_633",
-      "target": "video_filter_builders_measure_karaoke_word_y_tops_px",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_measure_karaoke_word_y_tops_px"
     },
     {
       "relation": "calls",
@@ -98014,9 +98025,9 @@
       "source_file": "src/viral_editor/video/filter_builders.py",
       "source_location": "L707",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "video_filter_builders_rationale_707",
-      "target": "video_filter_builders_build_caption_filter_chain",
-      "confidence_score": 1.0
+      "target": "video_filter_builders_build_caption_filter_chain"
     },
     {
       "relation": "references",
@@ -98066,9 +98077,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L861",
+      "source_location": "L863",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_861",
+      "source": "video_filter_builders_rationale_863",
       "target": "video_filter_builders_build_teaser_filter_chain",
       "confidence_score": 1.0
     },
@@ -98131,9 +98142,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L911",
+      "source_location": "L916",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_911",
+      "source": "video_filter_builders_rationale_916",
       "target": "video_filter_builders_apply_spatial_fx_chain",
       "confidence_score": 1.0
     },
@@ -98185,9 +98196,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1031",
+      "source_location": "L1036",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1031",
+      "source": "video_filter_builders_rationale_1036",
       "target": "video_filter_builders_build_proxy_filtergraph",
       "confidence_score": 1.0
     },
@@ -98382,9 +98393,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1091",
+      "source_location": "L1096",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1091",
+      "source": "video_filter_builders_rationale_1096",
       "target": "video_filter_builders_build_composite_filtergraph",
       "confidence_score": 1.0
     },
@@ -98425,9 +98436,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1252",
+      "source_location": "L1257",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1252",
+      "source": "video_filter_builders_rationale_1257",
       "target": "video_filter_builders_storyboard_mux_duration_s",
       "confidence_score": 1.0
     },
@@ -98490,9 +98501,9 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/viral_editor/video/filter_builders.py",
-      "source_location": "L1262",
+      "source_location": "L1267",
       "weight": 1.0,
-      "source": "video_filter_builders_rationale_1262",
+      "source": "video_filter_builders_rationale_1267",
       "target": "video_filter_builders_composite_output_duration_s",
       "confidence_score": 1.0
     },
@@ -108887,9 +108898,9 @@
       "source_file": "tests/test_proxy_render.py",
       "source_location": "L206",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_proxy_render",
-      "target": "tests_test_proxy_render_test_build_composite_filtergraph_hook_end_mask",
-      "confidence_score": 1.0
+      "target": "tests_test_proxy_render_test_build_composite_filtergraph_hook_end_mask"
     },
     {
       "relation": "contains",
@@ -130041,5 +130052,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "f06173f2f95432ebf69b1eb4b831c5373f51e83b"
+  "built_at_commit": "92257a7ed0f2bbe0a2f66eff5f8ff7c96e550951"
 }

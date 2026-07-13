@@ -152,7 +152,7 @@ class TeaserSettingsResponse(BaseModel):
     enabled: bool
     tail_fraction: float
     duration_s: float
-    mask: Literal["vignette", "dir_blur"]
+    mask: Literal["vignette", "dir_blur", "none"]
     payoff_downbeats_s: list[float] = Field(default_factory=list)
 
 
@@ -210,7 +210,7 @@ class TeaserSettingsPatch(BaseModel):
     enabled: bool | None = None
     tail_fraction: float | None = Field(default=None, gt=0, le=1)
     duration_s: float | None = Field(default=None, gt=0)
-    mask: Literal["vignette", "dir_blur"] | None = None
+    mask: Literal["vignette", "dir_blur", "none"] | None = None
 
 
 class SpatialFxSettingsPatch(BaseModel):

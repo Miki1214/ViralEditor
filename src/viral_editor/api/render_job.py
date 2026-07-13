@@ -141,7 +141,11 @@ def render_storyboard_final(
         slot_ids=segment_slot_ids,
         slot_offsets=slot_offsets,
         segment_roles=segment_roles,
-        hook_start_mask=config.teaser.mask if config.teaser.enabled else None,
+        hook_start_mask=(
+            config.teaser.mask
+            if config.teaser.enabled and config.teaser.mask != "none"
+            else None
+        ),
         temp_dir=temp_dir,
         on_progress=on_progress,
     )

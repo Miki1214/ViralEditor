@@ -840,6 +840,8 @@ _HOOK_MASK_ROLES = frozenset({"hook", "hook_start", "hook_end"})
 
 
 def teaser_mask_filter(mask: str) -> str:
+    if mask == "none":
+        raise ValueError("teaser mask 'none' must be skipped before calling teaser_mask_filter")
     if mask == "dir_blur":
         return "gblur=sigma=14:steps=2"
     return "vignette=angle=PI/4:mode=forward"
@@ -871,13 +873,16 @@ def build_teaser_filter_chain(
         spatial_crop=spatial_crop,
     )
     label = "teaser"
+    mask_part = ""
+    if teaser.mask != "none":
+        mask_part = f",{teaser_mask_filter(teaser.mask)}"
     chain = (
         f"[{input_label}]trim=start={teaser.src_start_s:.6f}:end={teaser.src_end_s:.6f},"
         f"setpts=PTS-STARTPTS,"
         f"setpts=PTS/{speed:.6f},"
         f"{visual},"
-        f"trim=duration={out_len:.6f},setpts=PTS-STARTPTS,"
-        f"{teaser_mask_filter(teaser.mask)}[{label}]"
+        f"trim=duration={out_len:.6f},setpts=PTS-STARTPTS"
+        f"{mask_part}[{label}]"
     )
     parts.append(chain)
     current = f"[{label}]"

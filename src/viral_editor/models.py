@@ -13,7 +13,7 @@ T = TypeVar("T", bound=BaseModel)
 TransientType = Literal["percussive", "bass", "drop"]
 BudgetPolicy = Literal["scale", "loop", "trim"]
 FxKind = Literal["zoom", "rotate", "translate"]
-TeaserMask = Literal["vignette", "dir_blur"]
+TeaserMask = Literal["vignette", "dir_blur", "none"]
 ClipRole = Literal["clip", "hook", "filler"]
 SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]

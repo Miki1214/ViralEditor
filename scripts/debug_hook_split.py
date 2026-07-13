@@ -99,7 +99,11 @@ def _render_and_probe(
         out_path=out_path,
         temp_dir=workspace / "temp",
         segment_roles=roles,
-        hook_start_mask=config.teaser.mask if config.teaser.enabled else None,
+        hook_start_mask=(
+            config.teaser.mask
+            if config.teaser.enabled and config.teaser.mask != "none"
+            else None
+        ),
         fx_seed=config.seed,
         fx_intensity=config.spatial_fx.intensity,
     )

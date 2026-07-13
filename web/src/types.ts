@@ -238,7 +238,7 @@ export interface StoryboardSegmentsDebugPayload {
   };
 }
 
-export type TeaserMask = "vignette" | "dir_blur";
+export type TeaserMask = "vignette" | "dir_blur" | "none";
 
 export interface TeaserSettings {
   enabled: boolean;

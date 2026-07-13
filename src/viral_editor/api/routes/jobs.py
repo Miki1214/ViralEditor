@@ -1690,7 +1690,9 @@ def get_composite_preview(
                 temp_dir=temp_dir,
                 segment_roles=segment_roles,
                 hook_start_mask=(
-                    job.config.teaser.mask if job.config.teaser.enabled else None
+                    job.config.teaser.mask
+                    if job.config.teaser.enabled and job.config.teaser.mask != "none"
+                    else None
                 ),
                 fx_events=fx_events,
                 fx_seed=job.config.seed,
