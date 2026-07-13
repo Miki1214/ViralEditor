@@ -499,6 +499,87 @@ def test_storyboard_to_segments_scales_speed_to_target() -> None:
     assert segments[0].speed_factor == pytest.approx(1.5)
 
 
+@pytest.mark.parametrize(
+    ("clip_duration_s", "expected_speed_factor"),
+    [
+        (12.0, 3.0),
+        (2.0, 0.5),
+    ],
+)
+def test_storyboard_to_segments_whole_clip_upload_speed_fits_slot(
+    clip_duration_s: float,
+    expected_speed_factor: float,
+) -> None:
+    """Whole-clip crop (upload default) should speed up or slow down to fill the slot."""
+    block = _block(16.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    clip_slot = next(slot for slot in storyboard.slots if slot.role == "clip")
+    clip_slot = clip_slot.model_copy(
+        update={
+            "assigned_clip_id": f"{clip_slot.id}_clip",
+            "crop_start_s": 0.0,
+            "crop_end_s": clip_duration_s,
+        }
+    )
+    slots = [
+        clip_slot if slot.id == clip_slot.id else slot
+        for slot in storyboard.slots
+    ]
+    storyboard = storyboard.model_copy(update={"slots": slots})
+    media = {
+        f"{clip_slot.id}_clip": MediaInfo(
+            path=__file__,
+            duration_s=clip_duration_s,
+            has_video=True,
+        )
+    }
+    segments, roles, slot_ids = storyboard_to_segments(storyboard, media)
+    assert len(segments) == 1
+    assert slot_ids == [clip_slot.id]
+    assert roles == ["clip"]
+    assert segments[0].src_start_s == pytest.approx(0.0)
+    assert segments[0].src_end_s == pytest.approx(clip_duration_s)
+    assert segments[0].speed_factor == pytest.approx(expected_speed_factor)
+
+
+def test_storyboard_to_segments_whole_clip_punch_applies_punch_multiplier() -> None:
+    """Whole-clip punch upload still stacks the punch speed multiplier."""
+    from viral_editor.audio.storyboard import _PUNCH_SPEED
+    from viral_editor.models import StorySlot, Storyboard
+
+    punch_slot = StorySlot(
+        id="slot_punch",
+        order=0,
+        label="Strongest punch",
+        role="punch",
+        out_start_s=0.0,
+        out_end_s=4.0,
+        target_duration_s=4.0,
+        transition_in="cut",
+        assigned_clip_id="punch_clip",
+        crop_start_s=0.0,
+        crop_end_s=12.0,
+    )
+    storyboard = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=16.0,
+        total_duration_s=16.0,
+        slots=[punch_slot],
+    )
+    media = {
+        "punch_clip": MediaInfo(
+            path=__file__,
+            duration_s=12.0,
+            has_video=True,
+        )
+    }
+    segments, roles, _slot_ids = storyboard_to_segments(storyboard, media)
+    assert len(segments) == 1
+    assert roles == ["punch"]
+    assert segments[0].speed_factor == pytest.approx((12.0 / 4.0) * _PUNCH_SPEED)
+
+
 def test_apply_hook_inversion_preserves_crops_without_reshape() -> None:
     from viral_editor.models import Storyboard, StorySlot
 

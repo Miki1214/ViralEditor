@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SlotFitMode, SlotTransition, SpatialCrop, SpatialFxSettings, StoryboardPayload, StorySlot, TeaserSettings, WaveformPayload } from "../types";
 import { slotColorForIndex } from "../utils/slotColors";
 import {
+  defaultAssignCropEndS,
   hookFamilyClipSlot,
   hookSourceBudgetS,
   isHookFamilyRole,
@@ -229,9 +230,7 @@ export function StoryboardPanel({
       try {
         const duration = await probeVideoDuration(objectUrl);
         if (duration != null) {
-          endS = isHookFamilyRole(slot.role)
-            ? duration
-            : Math.min(duration, slot.target_duration_s);
+          endS = defaultAssignCropEndS(slot.role, duration);
         }
       } finally {
         URL.revokeObjectURL(objectUrl);

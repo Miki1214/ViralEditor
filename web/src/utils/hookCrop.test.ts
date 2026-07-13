@@ -1,5 +1,6 @@
 import type { StoryboardPayload, StorySlot } from "../types";
 import {
+  defaultAssignCropEndS,
   hookSourceBudgetS,
   hookUnifiedCrop,
   hookUnifiedLabelSpeed,
@@ -142,6 +143,22 @@ describe("slotCropRange", () => {
     expect(hookUnified.endS - hookUnified.startS).toBeCloseTo(14.48, 2);
     expect(slotCropRange(storyboard, clipSlot)).toEqual({ startS: 0, endS: 3.99 });
     expect(slotCropRange(storyboard, clipSlot).endS).not.toBeCloseTo(hookUnified.endS, 1);
+  });
+});
+
+describe("defaultAssignCropEndS", () => {
+  it("uses the full clip duration for clip slots instead of capping to target duration", () => {
+    expect(defaultAssignCropEndS("clip", 12)).toBe(12);
+  });
+
+  it("uses the full clip duration for punch slots", () => {
+    expect(defaultAssignCropEndS("punch", 8.5)).toBe(8.5);
+  });
+
+  it("uses the full clip duration for hook family slots", () => {
+    expect(defaultAssignCropEndS("hook", 14.48)).toBe(14.48);
+    expect(defaultAssignCropEndS("hook_start", 14.48)).toBe(14.48);
+    expect(defaultAssignCropEndS("hook_end", 14.48)).toBe(14.48);
   });
 });
 
