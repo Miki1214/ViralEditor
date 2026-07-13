@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783455579.75088,
-    "ast_hash": "ae782cb6198c2bc99875b4858e44b837",
+    "mtime": 1783963717.931674,
+    "ast_hash": "89d8c07baabd50b47b935b0ca5bb60bc",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/models.py": {
-    "mtime": 1783373789.760991,
-    "ast_hash": "1a2924d0af40257495f48b923678e9c2",
+    "mtime": 1783963413.9313564,
+    "ast_hash": "c24f2236bf9385cfcdc0f65401364614",
     "semantic_hash": ""
   },
   "src/viral_editor/overlay/__init__.py": {
@@ -280,8 +280,8 @@
     "semantic_hash": ""
   },
   "tests/test_api.py": {
-    "mtime": 1783455581.9236493,
-    "ast_hash": "ea4c0fb1acdc016c40a92ea9223f9f91",
+    "mtime": 1783963737.7393167,
+    "ast_hash": "14ebf7b4c897b1455e18cca1b5732362",
     "semantic_hash": ""
   },
   "tests/test_audio_fixtures.py": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1783961933.433301,
-    "ast_hash": "12ff44ed70b0b021b6ee7db9ebab9824",
+    "mtime": 1783963762.8341956,
+    "ast_hash": "3cfe6e8edfcee53d94b9720ce538e5c1",
     "semantic_hash": ""
   },
   "assets/README.md": {
@@ -1167,6 +1167,31 @@
   "tests/test_dev_runner.py": {
     "mtime": 1783961938.5031958,
     "ast_hash": "1da2306959f07055f1f30926a6010f35",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/auto_rotate_settings.py": {
+    "mtime": 1783963531.4319482,
+    "ast_hash": "86d853f6d0589506d30216a1eae38be8",
+    "semantic_hash": ""
+  },
+  "src/viral_editor/video/auto_rotate.py": {
+    "mtime": 1783963639.054374,
+    "ast_hash": "6e6973f3281c0ed638ced6bf31aadd66",
+    "semantic_hash": ""
+  },
+  "tests/test_auto_rotate.py": {
+    "mtime": 1783963617.146531,
+    "ast_hash": "431d8e6da5673050ada3d56139aa3bbd",
+    "semantic_hash": ""
+  },
+  "tests/test_auto_rotate_settings.py": {
+    "mtime": 1783963756.4205225,
+    "ast_hash": "ea7f13610d35281e9950c172b8e1ce80",
+    "semantic_hash": ""
+  },
+  ".cursor/plans/multi-step_auto-rotation_on_upload_2e284e71.plan.md": {
+    "mtime": 1783963309.2540028,
+    "ast_hash": "713d71da3adf2c80d784f3da5006d17b",
     "semantic_hash": ""
   }
 }

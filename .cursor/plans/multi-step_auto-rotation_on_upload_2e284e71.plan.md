@@ -4,34 +4,34 @@ overview: Add a 3-step auto-rotation detection pipeline (container metadata, wid
 todos:
   - id: baseline
     content: Activate .venv and run existing auto_rotate-adjacent test baseline (test_models.py, test_api.py, test_proxy_render.py) to confirm a clean starting point
-    status: in_progress
+    status: completed
   - id: tdd_combine_votes
     content: "TDD one branch of combine_votes at a time (0/1/2/3-step cases, tie-break priority, no-2-match fallback): red test first, minimal green, refactor"
-    status: pending
+    status: completed
   - id: tdd_aspect
     content: TDD detect_aspect_rotation (landscape-vs-portrait, portrait-vs-portrait, square edge case)
-    status: pending
+    status: completed
   - id: tdd_metadata
     content: TDD detect_metadata_rotation against fixture ffprobe payloads with/without side_data_list/tags.rotate
-    status: pending
+    status: completed
   - id: tdd_vision
     content: "TDD detect_vision_rotation with a mocked httpx client: success, timeout-abstain, malformed-response-abstain"
-    status: pending
+    status: completed
   - id: settings
     content: "Add AutoRotateSettings (env-driven: AUTO_ROTATE_ENABLED, OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_VISION_TIMEOUT_S, AUTO_ROTATE_KEYFRAME_COUNT) and document in README"
-    status: pending
+    status: completed
   - id: log_model
     content: Add AutoRotationLog domain model and JSON artifact writer under temp/rotation_log/<clip_id>.json, TDD'd against a run_auto_rotation test asserting the artifact contents
-    status: pending
+    status: completed
   - id: tdd_wire_create_job
     content: "TDD: failing API test asserting ClipInput.rotation_deg reflects detection in create_job, then wire run_auto_rotation into the clip loop"
-    status: pending
+    status: completed
   - id: tdd_wire_assign_slot_video
     content: "TDD: failing API tests for (a) auto-detected rotation applied when form omits rotation_deg, (b) explicit rotation_deg overrides detection, then wire assign_slot_video"
-    status: pending
+    status: completed
   - id: full_regression
     content: Run the full Python test suite once all units are green to catch regressions, then refactor for cleanup
-    status: pending
+    status: completed
 isProject: false
 ---
 
