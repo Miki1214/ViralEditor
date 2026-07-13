@@ -135,6 +135,7 @@ def render_storyboard_final(
         segment_transforms=segment_transforms,
         hook_text=config.hook.text,
         hook_style=config.hook_style,
+        hook_emphasis_words=config.hook.emphasis_words,
         caption_chunks_by_slot=caption_chunks,
         caption_style=config.caption.style,
         slot_ids=segment_slot_ids,

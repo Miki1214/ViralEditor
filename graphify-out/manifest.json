@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/routes/jobs.py": {
-    "mtime": 1783963717.931674,
-    "ast_hash": "89d8c07baabd50b47b935b0ca5bb60bc",
+    "mtime": 1783977940.2439997,
+    "ast_hash": "70cf6499a8aaa02a83ddc39929b52bb6",
     "semantic_hash": ""
   },
   "src/viral_editor/api/runner.py": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/proxy_render.py": {
-    "mtime": 1783620251.162895,
-    "ast_hash": "9b9266d5f8540e295b319d402a073855",
+    "mtime": 1783977938.6491165,
+    "ast_hash": "1d5074d33323875a239ac82c3cb614a2",
     "semantic_hash": ""
   },
   "src/viral_editor/video/spatial_fx.py": {
@@ -460,8 +460,8 @@
     "semantic_hash": ""
   },
   "web/src/components/PhonePreview.tsx": {
-    "mtime": 1783374172.0512285,
-    "ast_hash": "8104990942862940bf8dfa84aa1466b0",
+    "mtime": 1783977750.4746075,
+    "ast_hash": "840a061c4fcfc0d37bc236ffc72652eb",
     "semantic_hash": ""
   },
   "web/src/components/RetentionFxPanel.tsx": {
@@ -1030,13 +1030,13 @@
     "semantic_hash": ""
   },
   "src/viral_editor/video/filter_builders.py": {
-    "mtime": 1783620244.4408605,
-    "ast_hash": "dbd998b0276e711d9f961cda2ed7f027",
+    "mtime": 1783977934.311232,
+    "ast_hash": "01b86e2b8cbb3fc359bf1fc0c96661ac",
     "semantic_hash": ""
   },
   "src/viral_editor/video/final_render.py": {
-    "mtime": 1783445277.8532844,
-    "ast_hash": "9cb7f39e1dabf629f7e89fa7f868c45a",
+    "mtime": 1783977948.5042684,
+    "ast_hash": "b6cebd6c15546f451abba8a12d23366b",
     "semantic_hash": ""
   },
   "tests/test_final_render.py": {
@@ -1050,8 +1050,8 @@
     "semantic_hash": ""
   },
   "src/viral_editor/api/render_job.py": {
-    "mtime": 1783445276.6411946,
-    "ast_hash": "30f11f3d1d42f32e4b48f342a35fe6f6",
+    "mtime": 1783977938.9122,
+    "ast_hash": "639895c30acf98196341323a84c4d272",
     "semantic_hash": ""
   },
   "src/viral_editor/api/caption.py": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": ""
   },
   "tests/test_captions.py": {
-    "mtime": 1783619031.504028,
-    "ast_hash": "8bf1fccf2de261684d67743a460bf967",
+    "mtime": 1783977958.2490776,
+    "ast_hash": "251554f24a55843b714329695cf6c9c9",
     "semantic_hash": ""
   },
   "tests/test_fonts.py": {
@@ -1090,8 +1090,8 @@
     "semantic_hash": ""
   },
   "web/src/components/CaptionPanel.tsx": {
-    "mtime": 1783619205.7114315,
-    "ast_hash": "bd299a31ca388c4e43894f81461d04b3",
+    "mtime": 1783977939.2565806,
+    "ast_hash": "be5e9dcfed7729dd3c700f151e10786e",
     "semantic_hash": ""
   },
   "web/src/components/CaptionWordTimeline.tsx": {

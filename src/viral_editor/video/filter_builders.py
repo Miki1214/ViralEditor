@@ -9,6 +9,7 @@ from viral_editor.video.spatial_fx import rotate_direction
 
 DEFAULT_COMPOSITE_FPS = 30
 CAPTION_MAX_LINES = 2
+HOOK_TITLE_MAX_LINES = 3
 MIN_ROTATE_DECAY_S = 0.15
 MIN_PAN_DECAY_S = 0.15
 PAN_HEADROOM = 0.15
@@ -434,6 +435,114 @@ def styled_drawtext(
     return f"[{label}]"
 
 
+def _normalized_emphasis_token(text: str) -> str:
+    return text.lower().strip(".,!?")
+
+
+def _draw_hook_title_layers(
+    parts: list[str],
+    input_ref: str,
+    hook_text: str,
+    *,
+    style: CaptionStyle,
+    label: str,
+    width: int,
+    height: int,
+    enable_expr: str | None,
+    emphasis_words: list[str] | None,
+) -> str:
+    """Draw hook title with optional per-word emphasis overlays."""
+    from viral_editor.utils.fonts import resolve_font_path
+    from viral_editor.utils.text_metrics import layout_caption_chunk
+
+    emphasis_set = {
+        _normalized_emphasis_token(word)
+        for word in (emphasis_words or ())
+        if word.strip()
+    }
+    words = hook_text.split()
+    if not words:
+        return input_ref
+
+    font_path = resolve_font_path(style.font_family)
+    ffmpeg_font = resolve_font_for_ffmpeg(style.font_family)
+    max_width_px = _max_caption_width_px(width, style)
+    base_fontsize = _base_font_size(style, height)
+
+    if font_path is None or not ffmpeg_font:
+        return styled_drawtext(
+            parts,
+            input_ref,
+            hook_text,
+            style,
+            label,
+            width=width,
+            height=height,
+            enable_expr=enable_expr,
+        )
+
+    layouts, fontsize = layout_caption_chunk(
+        words,
+        font_path=font_path,
+        base_font_size=base_fontsize,
+        max_width_px=max_width_px,
+        max_lines=HOOK_TITLE_MAX_LINES,
+    )
+
+    line_spacing = _caption_line_spacing_px(fontsize)
+    block_y = _caption_block_y_base_px(
+        style,
+        height=height,
+        fontsize=fontsize,
+        num_lines=max(len(layouts), 1),
+        line_spacing=line_spacing,
+    )
+
+    current = input_ref
+    for line_index, layout in enumerate(layouts):
+        phrase = " ".join(layout.words)
+        y_px = block_y + line_index * line_spacing
+        line_x_expr = f"(w-{layout.line_width_px:.2f})/2"
+        base_label = f"{label}l{line_index}"
+        current = styled_drawtext(
+            parts,
+            current,
+            phrase,
+            style,
+            base_label,
+            width=width,
+            height=height,
+            enable_expr=enable_expr,
+            font_path=ffmpeg_font,
+            x_expr=line_x_expr,
+            y_expr=f"{y_px:.2f}",
+            fontsize_override=fontsize,
+        )
+        if not emphasis_set:
+            continue
+        for word_index, offset in enumerate(layout.word_offsets):
+            if _normalized_emphasis_token(offset.text) not in emphasis_set:
+                continue
+            emph_label = f"{label}e{line_index}w{word_index}"
+            x_expr = f"(w-{layout.line_width_px:.2f})/2+{offset.x_px:.2f}"
+            current = styled_drawtext(
+                parts,
+                current,
+                offset.text,
+                style,
+                emph_label,
+                width=width,
+                height=height,
+                enable_expr=enable_expr,
+                font_path=ffmpeg_font,
+                x_expr=x_expr,
+                y_expr=f"{y_px:.2f}",
+                fontcolor_override=style.emphasis_color,
+                fontsize_override=fontsize,
+            )
+    return current
+
+
 def drawtext_hook_overlay(
     parts: list[str],
     input_ref: str,
@@ -469,20 +578,24 @@ def build_hook_title_overlay(
     width: int,
     height: int,
     label: str = "hooktitle",
+    emphasis_words: list[str] | None = None,
 ) -> str:
     """Overlay hook title on a motion-stabilized frame with slot-timed visibility."""
     windows = _hook_title_windows(segments, segment_roles)
     if not hook_text or not hook_text.strip() or not windows:
         return input_ref
-    return drawtext_hook_overlay(
+    caption_style = style or CaptionStyle(position="top")
+    enable_expr = _enable_union_expr(windows)
+    return _draw_hook_title_layers(
         parts,
         input_ref,
-        hook_text,
-        label,
-        style=style,
+        hook_text.strip(),
+        style=caption_style,
+        label=label,
         width=width,
         height=height,
-        enable_expr=_enable_union_expr(windows),
+        enable_expr=enable_expr,
+        emphasis_words=emphasis_words,
     )
 
 
@@ -957,6 +1070,7 @@ def build_composite_filtergraph(
     segment_transforms: list[tuple[int, str, tuple[float, float, float, float] | None]] | None = None,
     hook_text: str | None = None,
     hook_style: CaptionStyle | None = None,
+    hook_emphasis_words: list[str] | None = None,
     caption_chunks_by_slot: dict[str, list[CaptionChunk]] | None = None,
     caption_style: CaptionStyle | None = None,
     slot_ids: list[str] | None = None,
@@ -1108,6 +1222,7 @@ def build_composite_filtergraph(
             segment_roles=segment_roles,
             width=width,
             height=height,
+            emphasis_words=hook_emphasis_words,
         )
 
     if has_captions:

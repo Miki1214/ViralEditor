@@ -784,6 +784,45 @@ def test_hook_title_overlay_after_spatial_fx_for_steady_text(monkeypatch) -> Non
     assert hook_idx == -1
 
 
+def test_hook_title_emphasis_adds_colored_word_overlays() -> None:
+    from viral_editor.models import CaptionStyle, SpeedSegment
+    from viral_editor.utils.fonts import resolve_font_path
+    from viral_editor.video.filter_builders import build_composite_filtergraph
+
+    font_path = resolve_font_path("Montserrat Black") or resolve_font_path("Arial")
+    if font_path is None:
+        pytest.skip("No font for emphasis layout test")
+
+    segments = [
+        SpeedSegment(
+            out_start_s=0.0,
+            out_end_s=2.5,
+            src_start_s=0.0,
+            src_end_s=2.5,
+            speed_factor=1.0,
+            source_id="clip_a",
+        ),
+    ]
+    style = CaptionStyle(
+        fill_color="#00FFCC",
+        emphasis_color="#FF00AA",
+        position="top",
+    )
+    graph = build_composite_filtergraph(
+        segments,
+        ["cut"],
+        clip_input_index={"clip_a": 0},
+        clip_durations={"clip_a": 10.0},
+        hook_text="I built this in 30 days",
+        hook_style=style,
+        hook_emphasis_words=["30", "days"],
+        segment_roles=["hook"],
+    )
+    assert "I built this in 30 days" in graph
+    assert "fontcolor=0xFF00AA" in graph
+    assert "hooktitlee0w" in graph
+
+
 def test_single_line_caption_uses_top_line_slot_in_two_line_block() -> None:
     from viral_editor.models import CaptionChunk, CaptionWord, CaptionStyle, SpeedSegment
     from viral_editor.utils.fonts import resolve_font_path

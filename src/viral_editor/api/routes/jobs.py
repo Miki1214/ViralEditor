@@ -1650,6 +1650,7 @@ def get_composite_preview(
     cache_payload = {
         "storyboard": storyboard.model_dump(mode="json"),
         "hook": job.config.hook.text,
+        "hook_emphasis_words": job.config.hook.emphasis_words,
         "hook_style": job.config.hook_style.model_dump(mode="json"),
         "caption": job.config.caption.model_dump(mode="json"),
         "teaser": job.config.teaser.model_dump(mode="json"),
@@ -1676,6 +1677,7 @@ def get_composite_preview(
                 out_path=preview_path,
                 hook_text=job.config.hook.text,
                 hook_style=job.config.hook_style,
+                hook_emphasis_words=job.config.hook.emphasis_words,
                 caption_chunks_by_slot=caption_chunks,
                 caption_style=job.config.caption.style,
                 slot_ids=segment_slot_ids,

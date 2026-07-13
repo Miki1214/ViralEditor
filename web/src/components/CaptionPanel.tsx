@@ -262,9 +262,9 @@ export function CaptionPanel({
             value={form.emphasisWords}
             placeholder="30, days"
             onChange={(e) => onPatchForm({ emphasisWords: e.target.value })}
-            onBlur={() =>
+            onBlur={(e) =>
               void onPatchCaption({
-                emphasis_words: form.emphasisWords
+                emphasis_words: e.target.value
                   .split(",")
                   .map((w) => w.trim())
                   .filter(Boolean),
