@@ -102,7 +102,7 @@ function StyleFields({
         />
         <span className="text-xs text-monitor-muted">Background box</span>
       </label>
-      <label className="block sm:col-span-2">
+      <div className="block sm:col-span-2">
         <span className="field-label">Position</span>
         <div className="mt-1 flex gap-2">
           {(["top", "center", "bottom"] as const).map((pos) => (
@@ -118,7 +118,7 @@ function StyleFields({
             </button>
           ))}
         </div>
-      </label>
+      </div>
       <label className="block">
         <span className="field-label">Safe padding %</span>
         <input
