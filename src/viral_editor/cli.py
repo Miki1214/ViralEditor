@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from viral_editor.config import ConfigError
+from viral_editor.dev_runner import DevStartupError, run_dev
 from viral_editor.ingest.loader import IngestError
 from viral_editor.pipeline import run_pipeline
 from viral_editor.utils.ffmpeg import ensure_ffmpeg
@@ -86,7 +87,7 @@ def serve(
 
     logger.info("Starting Control Room at http://%s:%s", host, port)
     typer.echo(f"Control Room API: http://{host}:{port}/api/health")
-    typer.echo("For UI dev: cd web && npm install && npm run dev")
+    typer.echo("For UI dev with hot reload: python -m viral_editor dev")
 
     uvicorn.run(
         "viral_editor.api.main:create_app",
@@ -95,6 +96,24 @@ def serve(
         port=port,
         reload=reload,
     )
+
+
+@app.command()
+def dev(
+    host: str = typer.Option("127.0.0.1", help="API bind address."),
+    port: int = typer.Option(8765, help="API bind port."),
+    reload: bool = typer.Option(True, "--reload/--no-reload", help="Reload API on code changes."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable debug logging."),
+) -> None:
+    """Start Control Room API and Vite dev server together."""
+    configure_logging(verbose=verbose)
+    try:
+        code = run_dev(host=host, port=port, reload=reload)
+    except DevStartupError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from exc
+    if code != 0:
+        raise typer.Exit(code=code)
 
 
 if __name__ == "__main__":

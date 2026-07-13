@@ -39,19 +39,17 @@ Place sample assets under `assets/` (see `assets/README.md`). Job configs live i
 
 Local web dashboard for configuring jobs, watching pipeline telemetry, and previewing output.
 
-### Development (two terminals)
+### Development (one terminal)
 
 ```powershell
-# Terminal 1 — API (with venv activated)
-python -m viral_editor serve
-
-# Terminal 2 — UI with hot reload
-cd web
-npm install
-npm run dev
+# API + Vite hot reload (with venv activated)
+cd web && npm install && cd ..
+python -m viral_editor dev
 ```
 
 Open http://localhost:5173 (Vite proxies `/api` to the API on port 8765).
+
+To run API and UI separately (two terminals): `python -m viral_editor serve` and `cd web && npm run dev`.
 
 ### Production-style (single server)
 
