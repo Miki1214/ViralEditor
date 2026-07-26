@@ -225,7 +225,7 @@ export function StoryboardBlockPlayer({
     const now = performance.now();
     emit(clamped, now - lastAppCommitRef.current >= 150);
     prevAudioTimeRef.current = clamped;
-  }, [publishPlayhead]);
+  }, [publishPlayhead, selectedSlotRef]);
 
   useEffect(() => {
     if (!compositePreviewActive) return;
@@ -373,9 +373,8 @@ export function StoryboardBlockPlayer({
   };
 
   const seek = useCallback(
-    (timeS: number, options?: { commit?: boolean; selectSlot?: boolean }) => {
+    (timeS: number, options?: { commit?: boolean }) => {
       const commit = options?.commit !== false;
-      const selectSlot = options?.selectSlot !== false;
       const clamped = Math.max(0, Math.min(timeS, blockDurationS));
       updatePlayheadDom(clamped);
 
@@ -385,12 +384,6 @@ export function StoryboardBlockPlayer({
         }
         publishPlayhead(clamped, { commit });
         prevAudioTimeRef.current = clamped;
-        if (selectSlot) {
-          const hit = slotAtTime(clamped);
-          if (hit && hit.id !== selectedSlotId) {
-            onSelectSlot?.(hit.id);
-          }
-        }
         return;
       }
       const audio = audioRef.current;
@@ -399,21 +392,12 @@ export function StoryboardBlockPlayer({
       }
       publishPlayhead(clamped, { commit });
       prevAudioTimeRef.current = clamped;
-      if (selectSlot) {
-        const hit = slotAtTime(clamped);
-        if (hit && hit.id !== selectedSlotId) {
-          onSelectSlot?.(hit.id);
-        }
-      }
     },
     [
       blockDurationS,
       compositePreviewActive,
       onSeekCompositePreview,
       publishPlayhead,
-      slotAtTime,
-      selectedSlotId,
-      onSelectSlot,
     ],
   );
 
@@ -423,12 +407,9 @@ export function StoryboardBlockPlayer({
     setScrubbing(false);
     const timeS = scrubValueRef.current;
     updatePlayheadDom(timeS);
-    if (pendingSlotIdRef.current) {
-      onSelectSlot?.(pendingSlotIdRef.current);
-      pendingSlotIdRef.current = null;
-    }
-    seek(timeS, { commit: true, selectSlot: false });
-  }, [onSelectSlot, seek]);
+    pendingSlotIdRef.current = null;
+    seek(timeS, { commit: true });
+  }, [seek]);
 
   useEffect(() => {
     if (!scrubbing) return;
@@ -448,13 +429,9 @@ export function StoryboardBlockPlayer({
       scrubbingRef.current = true;
       updatePlayheadDom(clamped);
       updateActiveSlotLabel(clamped);
-      const hit = slotAtTime(clamped);
-      if (hit && hit.id !== selectedSlotId) {
-        pendingSlotIdRef.current = hit.id;
-      }
-      seek(clamped, { commit: false, selectSlot: false });
+      seek(clamped, { commit: false });
     },
-    [blockDurationS, seek, slotAtTime, selectedSlotId, updatePlayheadDom, updateActiveSlotLabel],
+    [blockDurationS, seek, updatePlayheadDom, updateActiveSlotLabel],
   );
 
   const beginScrub = useCallback(() => {
@@ -491,11 +468,11 @@ export function StoryboardBlockPlayer({
   }, [registerBlockSetLoopMode, setLoopModeAndNotify]);
 
   return (
-    <div className="space-y-2 rounded border border-monitor-border bg-monitor-bg/50 p-3">
-      <audio ref={audioRef} src={audioUrl} preload="metadata" />
+    <div id="storyboard-block-player" className="space-y-2 rounded border border-monitor-border bg-monitor-bg/50 p-3">
+      <audio id="storyboard-block-player-audio" ref={audioRef} src={audioUrl} preload="metadata" />
 
       <div className="relative pt-1">
-        <div
+        <div id="storyboard-block-player-waveform-bar"
           className="pointer-events-none absolute inset-x-0 top-1 h-1.5 overflow-hidden rounded-full bg-[#2a3038]"
           aria-hidden
         >
@@ -505,7 +482,7 @@ export function StoryboardBlockPlayer({
             const selected = slot.id === selectedSlotId;
             const color = slotColorForIndex(index);
             return (
-              <div
+              <div id={`storyboard-block-player-slot-${slot.id}`}
                 key={slot.id}
                 className="absolute inset-y-0 opacity-80"
                 style={{
@@ -516,13 +493,13 @@ export function StoryboardBlockPlayer({
               />
             );
           })}
-          <div
+          <div id="storyboard-block-player-playhead"
             ref={playheadMarkerRef}
             className="absolute inset-y-0 w-0.5 bg-monitor-text shadow-[0_0_6px_rgba(232,234,237,0.8)]"
             style={{ left: "0%" }}
           />
         </div>
-        <input
+        <input id="storyboard-block-player-scrubber"
           ref={sliderRef}
           type="range"
           className="field-range relative z-[1]"
@@ -538,7 +515,7 @@ export function StoryboardBlockPlayer({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button
+        <button id="storyboard-block-player-play-track-btn"
           type="button"
           className="btn-ghost px-2.5 py-1.5 font-mono text-xs"
           disabled={!transportReady}
@@ -550,7 +527,7 @@ export function StoryboardBlockPlayer({
           {transportPlaying && loopMode === "block" ? "Pause" : "Play track"}
         </button>
         {selectedSlot && (
-          <button
+          <button id="storyboard-block-player-play-slot-btn"
             type="button"
             className="btn-ghost px-2.5 py-1.5 font-mono text-xs"
             disabled={!transportReady}
@@ -564,20 +541,20 @@ export function StoryboardBlockPlayer({
         )}
       </div>
 
-      <p className="font-mono text-[10px] text-monitor-muted">
+      <p id="storyboard-block-player-info" className="font-mono text-[10px] text-monitor-muted">
         Highlight follows the selected slot&apos;s music window
         {onSelectSlot ? " · click waveform to switch slots" : ""}
       </p>
 
       <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-monitor-muted">
-        <span ref={timeDisplayRef} />
-        <span ref={activeSlotRef} />
+        <span id="storyboard-block-player-time-display" ref={timeDisplayRef} />
+        <span id="storyboard-block-player-active-slot" ref={activeSlotRef} />
         {transportPlaying && loopMode === "slot" && selectedSlot ? (
-          <span className="text-scope-dim">
+          <span id="storyboard-block-player-looping-label" className="text-scope-dim">
             looping {selectedSlot.label.toLowerCase()}
           </span>
         ) : transportPlaying && loopMode === "block" ? (
-          <span className="text-scope-dim">looping whole track</span>
+          <span id="storyboard-block-player-looping-label" className="text-scope-dim">looping whole track</span>
         ) : null}
       </div>
     </div>

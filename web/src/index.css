@@ -95,6 +95,25 @@
     @apply inline-flex items-center justify-center rounded-md bg-scope-trace px-4 py-2.5 text-sm font-semibold text-monitor-bg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40;
   }
 
+  .render-progress-track {
+    @apply h-1.5 w-full overflow-hidden rounded-full bg-monitor-border;
+  }
+
+  .render-progress-bar {
+    @apply h-full rounded-full bg-scope-trace;
+    width: 35%;
+    animation: render-progress-indeterminate 1.4s ease-in-out infinite;
+  }
+
+  @keyframes render-progress-indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(320%);
+    }
+  }
+
   .btn-ghost {
     @apply inline-flex items-center justify-center rounded-md border border-monitor-border px-3 py-2 text-sm text-monitor-text transition hover:border-scope-dim hover:text-scope-trace;
   }

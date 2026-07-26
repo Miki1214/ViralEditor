@@ -8,9 +8,10 @@ import numpy as np
 
 from viral_editor.utils.ffmpeg import run_ffmpeg
 
-DEFAULT_CROSSFADE_S = 0.04
+DEFAULT_CROSSFADE_S = 0.12
 DEFAULT_LOOP_PREVIEW_TOTAL_S = 4.0
 DEFAULT_LOOP_PREVIEW_CYCLE_GAP_S = 1.0
+EQUAL_POWER_CROSSFADE_CURVE = "c1=qsin:c2=qsin"
 
 
 def snap_to_zero_crossing(
@@ -31,13 +32,13 @@ def build_loop_audition_filter(
     *,
     crossfade_s: float = DEFAULT_CROSSFADE_S,
 ) -> str:
-    """FFmpeg filter graph: segment + equal-power crossfade loop audition."""
+    """FFmpeg filter graph: segment + equal-power (qsin) crossfade loop audition."""
     crossfade_s = min(crossfade_s, duration_s / 4.0)
     return (
         f"[0:a]atrim=start={start_s:.6f}:duration={duration_s:.6f},"
         f"asetpts=PTS-STARTPTS,aresample=44100[seg];"
         f"[seg]asplit=2[a][b];"
-        f"[a][b]acrossfade=d={crossfade_s:.4f}:c1=tri:c2=tri[out]"
+        f"[a][b]acrossfade=d={crossfade_s:.4f}:{EQUAL_POWER_CROSSFADE_CURVE}[out]"
     )
 
 
@@ -49,7 +50,7 @@ def build_loop_seam_only_filter(
     total_s: float = DEFAULT_LOOP_PREVIEW_TOTAL_S,
     cycle_gap_s: float = DEFAULT_LOOP_PREVIEW_CYCLE_GAP_S,
 ) -> str:
-    """FFmpeg filter: ~4s tail→crossfade→head, then silence before the next cycle."""
+    """FFmpeg filter: ~4s tail→equal-power crossfade→head, then silence before repeat."""
     duration_s = end_s - start_s
     crossfade_s = min(crossfade_s, duration_s / 4.0)
     lead_s = (total_s + crossfade_s) / 2.0
@@ -61,7 +62,7 @@ def build_loop_seam_only_filter(
         f"asetpts=PTS-STARTPTS,aresample=44100[tail];"
         f"[0:a]atrim=start={start_s:.6f}:end={head_end:.6f},"
         f"asetpts=PTS-STARTPTS,aresample=44100[head];"
-        f"[tail][head]acrossfade=d={crossfade_s:.4f}:c1=tri:c2=tri[seam]"
+        f"[tail][head]acrossfade=d={crossfade_s:.4f}:{EQUAL_POWER_CROSSFADE_CURVE}[seam]"
     )
     if cycle_gap_s > 0:
         return f"{seam};[seam]apad=pad_dur={cycle_gap_s:.4f}[out]"
@@ -110,7 +111,7 @@ def render_loop_preview(
     end_s: float,
     crossfade_s: float = DEFAULT_CROSSFADE_S,
 ) -> Path:
-    """Extract a loop audition clip with crossfade at the wrap point."""
+    """Extract a loop audition clip with equal-power crossfade at the wrap point."""
     if end_s <= start_s:
         raise ValueError("Preview end must be after start")
     duration_s = end_s - start_s

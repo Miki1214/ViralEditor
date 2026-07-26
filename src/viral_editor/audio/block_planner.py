@@ -748,6 +748,8 @@ def _full_track_plan(
     *,
     target_duration_s: float,
 ) -> MusicBlockPlan:
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
     duration = timeline.audio_duration_seconds
     drops = sum(1 for t in timeline.transients if t.type == "drop")
     block = MusicBlock(
@@ -760,6 +762,7 @@ def _full_track_plan(
         transient_count=len(timeline.transients),
         label="Full track",
         reason="Track is already shorter than the target short length",
+        expected_slot_count=_recommended_slot_count(duration),
     )
     return MusicBlockPlan(
         target_duration_s=target_duration_s,
@@ -783,6 +786,8 @@ def suggest_music_blocks(
     scope_lanes: dict[str, np.ndarray] | None = None,
 ) -> MusicBlockPlan:
     """Rank sliding windows for a target short duration."""
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
     track_duration = timeline.audio_duration_seconds
     if track_duration <= target_duration_s:
         return _full_track_plan(timeline, target_duration_s=target_duration_s)
@@ -878,6 +883,7 @@ def suggest_music_blocks(
             transient_count=item.transient_count,
             label=item.label,
             reason=item.reason,
+            expected_slot_count=_recommended_slot_count(item.end_s - item.start_s),
         )
         for index, item in enumerate(picked)
     ]

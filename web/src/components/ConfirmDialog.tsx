@@ -34,16 +34,19 @@ export function ConfirmDialog({
 
   return (
     <div
+      id="confirm-dialog-overlay"
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="presentation"
     >
       <button
+        id="confirm-dialog-close-btn"
         type="button"
         className="absolute inset-0 bg-monitor-bg/70 backdrop-blur-sm"
         aria-label="Close dialog"
         onClick={onCancel}
       />
       <div
+        id="confirm-dialog-container"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -62,10 +65,11 @@ export function ConfirmDialog({
           </p>
         </div>
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn-ghost text-xs" onClick={onCancel}>
+          <button id="confirm-dialog-cancel-btn" type="button" className="btn-ghost text-xs" onClick={onCancel}>
             {cancelLabel}
           </button>
           <button
+            id="confirm-dialog-confirm-btn"
             type="button"
             className="btn-primary text-xs"
             disabled={confirmDisabled}

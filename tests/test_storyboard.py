@@ -11,12 +11,15 @@ from viral_editor.audio.features import BeatFeaturesMeta, BeatSyncFeatures
 from viral_editor.audio.storyboard import (
     _compute_boundaries,
     _recommended_slot_count,
+    _salient_boundaries,
+    _soft_count_range,
     apply_hook_inversion_layout,
     hook_payoff_downbeats_s,
     plan_storyboard,
     relayout_beat_aligned_timeline,
     snap_hook_payoff_s,
     storyboard_filled_enough,
+    storyboard_slots_complete,
     storyboard_to_segments,
 )
 from viral_editor.models import MediaInfo, MusicBlock, MusicBlockPlan, Transient
@@ -131,7 +134,7 @@ def test_recommended_slot_count_respects_explicit_cap() -> None:
 def test_compute_boundaries_no_duplicate_endpoints() -> None:
     """Regression: sparse downbeats used to pad with repeated window_end (e.g. [0, 2, 5.5, 5.5])."""
     downbeats = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
-    bounds = _compute_boundaries(0.0, 5.5, downbeats, 3)
+    bounds = _compute_boundaries(0.0, 5.5, downbeats, 3).boundaries
     assert len(bounds) == 4
     assert bounds[0] == pytest.approx(0.0)
     assert bounds[-1] == pytest.approx(5.5)
@@ -496,6 +499,87 @@ def test_storyboard_to_segments_scales_speed_to_target() -> None:
     assert segments[0].speed_factor == pytest.approx(1.5)
 
 
+@pytest.mark.parametrize(
+    ("clip_duration_s", "expected_speed_factor"),
+    [
+        (12.0, 3.0),
+        (2.0, 0.5),
+    ],
+)
+def test_storyboard_to_segments_whole_clip_upload_speed_fits_slot(
+    clip_duration_s: float,
+    expected_speed_factor: float,
+) -> None:
+    """Whole-clip crop (upload default) should speed up or slow down to fill the slot."""
+    block = _block(16.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    clip_slot = next(slot for slot in storyboard.slots if slot.role == "clip")
+    clip_slot = clip_slot.model_copy(
+        update={
+            "assigned_clip_id": f"{clip_slot.id}_clip",
+            "crop_start_s": 0.0,
+            "crop_end_s": clip_duration_s,
+        }
+    )
+    slots = [
+        clip_slot if slot.id == clip_slot.id else slot
+        for slot in storyboard.slots
+    ]
+    storyboard = storyboard.model_copy(update={"slots": slots})
+    media = {
+        f"{clip_slot.id}_clip": MediaInfo(
+            path=__file__,
+            duration_s=clip_duration_s,
+            has_video=True,
+        )
+    }
+    segments, roles, slot_ids = storyboard_to_segments(storyboard, media)
+    assert len(segments) == 1
+    assert slot_ids == [clip_slot.id]
+    assert roles == ["clip"]
+    assert segments[0].src_start_s == pytest.approx(0.0)
+    assert segments[0].src_end_s == pytest.approx(clip_duration_s)
+    assert segments[0].speed_factor == pytest.approx(expected_speed_factor)
+
+
+def test_storyboard_to_segments_whole_clip_punch_applies_punch_multiplier() -> None:
+    """Whole-clip punch upload still stacks the punch speed multiplier."""
+    from viral_editor.audio.storyboard import _PUNCH_SPEED
+    from viral_editor.models import StorySlot, Storyboard
+
+    punch_slot = StorySlot(
+        id="slot_punch",
+        order=0,
+        label="Strongest punch",
+        role="punch",
+        out_start_s=0.0,
+        out_end_s=4.0,
+        target_duration_s=4.0,
+        transition_in="cut",
+        assigned_clip_id="punch_clip",
+        crop_start_s=0.0,
+        crop_end_s=12.0,
+    )
+    storyboard = Storyboard(
+        music_block_id="block_a",
+        music_start_s=0.0,
+        music_end_s=16.0,
+        total_duration_s=16.0,
+        slots=[punch_slot],
+    )
+    media = {
+        "punch_clip": MediaInfo(
+            path=__file__,
+            duration_s=12.0,
+            has_video=True,
+        )
+    }
+    segments, roles, _slot_ids = storyboard_to_segments(storyboard, media)
+    assert len(segments) == 1
+    assert roles == ["punch"]
+    assert segments[0].speed_factor == pytest.approx((12.0 / 4.0) * _PUNCH_SPEED)
+
+
 def test_apply_hook_inversion_preserves_crops_without_reshape() -> None:
     from viral_editor.models import Storyboard, StorySlot
 
@@ -701,6 +785,22 @@ def test_storyboard_filled_enough_requires_hook_clip() -> None:
     clip = storyboard.slots[1].model_copy(update={"assigned_clip_id": "b"})
     filled = storyboard.model_copy(update={"slots": [hook, clip, *storyboard.slots[2:]]})
     assert storyboard_filled_enough(filled) is True
+
+
+def test_storyboard_slots_complete_requires_every_slot() -> None:
+    block = _block(12.0)
+    storyboard = plan_storyboard(block, features=None, transients=[])
+    assert storyboard_slots_complete(storyboard) is False
+
+    assigned = [
+        slot.model_copy(update={"assigned_clip_id": f"clip_{index}"})
+        for index, slot in enumerate(storyboard.slots)
+    ]
+    assert storyboard_slots_complete(storyboard.model_copy(update={"slots": assigned})) is True
+
+    partial = assigned.copy()
+    partial[-1] = partial[-1].model_copy(update={"assigned_clip_id": None})
+    assert storyboard_slots_complete(storyboard.model_copy(update={"slots": partial})) is False
 
 
 def test_update_slot_transform_rotates_and_sets_cover() -> None:
@@ -1003,3 +1103,162 @@ def test_persist_storyboard_variant_restores_block_specific_assignments(tmp_path
 
     assert restored.slots[0].assigned_clip_id == "a_hook"
     assert restored.slots[0].crop_start_s == pytest.approx(8.0)
+
+
+_SALIENT_HOP = 512
+_SALIENT_SR = 22050
+
+
+def _frame_at(time_s: float) -> int:
+    return int(time_s * _SALIENT_SR / _SALIENT_HOP)
+
+
+def _scope_with_peaks(
+    peak_times_s: list[float],
+    *,
+    duration_s: float = 16.0,
+) -> dict[str, np.ndarray]:
+    """Synthetic scope lanes with local maxima at ``peak_times_s``."""
+    n = _frame_at(duration_s) + 20
+    rms = np.full(n, 0.15, dtype=np.float32)
+    drop_salience = np.zeros(n, dtype=np.float32)
+    surge = np.zeros(n, dtype=np.float32)
+    build = np.zeros(n, dtype=np.float32)
+    flux_low = np.zeros(n, dtype=np.float32)
+    for time_s in peak_times_s:
+        center = _frame_at(time_s)
+        for offset in range(-4, 5):
+            frame = center + offset
+            if 0 <= frame < n:
+                val = 0.55 + 0.45 * (1.0 - abs(offset) / 5.0)
+                rms[frame] = max(float(rms[frame]), 0.2 + 0.75 * val)
+                drop_salience[frame] = max(float(drop_salience[frame]), val)
+                surge[frame] = max(float(surge[frame]), val * 0.95)
+                build[frame] = max(float(build[frame]), val * 0.8)
+    return {
+        "rms": rms,
+        "drop_salience": drop_salience,
+        "surge": surge,
+        "build": build,
+        "flux_low": flux_low,
+    }
+
+
+def _downbeats_every(step_s: float, duration_s: float) -> list[float]:
+    count = int(duration_s / step_s) + 1
+    return [round(index * step_s, 6) for index in range(count)]
+
+
+def test_salient_boundaries_align_to_injected_peaks() -> None:
+    """Cycle A: cuts land near injected drop/surge peaks."""
+    duration_s = 16.0
+    scope = _scope_with_peaks([4.0, 8.5], duration_s=duration_s)
+    downbeats = _downbeats_every(2.0, duration_s)
+    plan = _salient_boundaries(
+        0.0,
+        duration_s,
+        downbeats=downbeats,
+        scope_lanes=scope,
+        absolute_downbeats=downbeats,
+        soft_count_range=(2, 6),
+    )
+    interior = plan.boundaries[1:-1]
+    assert any(abs(boundary - 4.0) <= 0.2 for boundary in interior)
+    assert any(abs(boundary - 8.5) <= 0.2 for boundary in interior)
+
+
+def test_salient_boundaries_enforce_cadence_limits() -> None:
+    """Cycle B: spans stay within viral floor/ceiling; large gaps subdivide."""
+    duration_s = 18.0
+    scope = _scope_with_peaks([3.1, 3.3, 15.5], duration_s=duration_s)
+    downbeats = _downbeats_every(1.0, duration_s)
+    plan = _salient_boundaries(
+        0.0,
+        duration_s,
+        downbeats=downbeats,
+        scope_lanes=scope,
+        absolute_downbeats=downbeats,
+        soft_count_range=(2, 8),
+    )
+    spans = [
+        plan.boundaries[index + 1] - plan.boundaries[index]
+        for index in range(len(plan.boundaries) - 1)
+    ]
+    assert all(span >= 1.5 - 1e-3 for span in spans)
+    assert all(span <= 6.5 + 1e-3 for span in spans)
+    assert len(plan.boundaries) >= 4
+
+
+def test_salient_boundaries_respect_soft_count_range() -> None:
+    """Cycle C: slot count stays inside chip soft band."""
+    duration_s = 16.0
+    scope = _scope_with_peaks([3.5, 7.0, 10.5, 13.5], duration_s=duration_s)
+    downbeats = _downbeats_every(1.0, duration_s)
+    lo, hi = _soft_count_range(duration_s, 4)
+    assert lo == 3
+    assert hi == 6
+    plan = _salient_boundaries(
+        0.0,
+        duration_s,
+        downbeats=downbeats,
+        scope_lanes=scope,
+        absolute_downbeats=downbeats,
+        soft_count_range=(lo, hi),
+    )
+    slot_count = len(plan.boundaries) - 1
+    assert lo <= slot_count <= hi
+
+
+def test_plan_storyboard_middle_slots_non_uniform_with_scope_lanes() -> None:
+    """Cycle D: salience-driven layout yields unequal slot durations."""
+    duration_s = 18.0
+    block = MusicBlock(
+        id="salient",
+        start_s=0.0,
+        end_s=duration_s,
+        duration_s=duration_s,
+        score=0.9,
+        drop_count=2,
+        transient_count=4,
+        label="Test",
+        reason="test",
+        loop_quality=0.8,
+        phrase_bars=4,
+    )
+    scope = _scope_with_peaks([3.2, 6.0, 12.5], duration_s=duration_s)
+    downbeats = _downbeats_every(1.0, duration_s)
+    features = _features(downbeats)
+    storyboard = plan_storyboard(
+        block,
+        features=features,
+        transients=[],
+        scope_lanes=scope,
+        target_slot_count=4,
+    )
+    durations = [slot.target_duration_s for slot in storyboard.slots]
+    assert len(durations) >= 3
+    assert max(durations) - min(durations) > 0.8
+
+
+def test_slot_rationales_describe_salient_events() -> None:
+    """Cycle E: rationales reference energy/surge events, not generic downbeats."""
+    duration_s = 16.0
+    scope = _scope_with_peaks([4.0, 8.5], duration_s=duration_s)
+    downbeats = _downbeats_every(2.0, duration_s)
+    storyboard = plan_storyboard(
+        _short_block(duration_s),
+        features=_features(downbeats),
+        transients=[],
+        scope_lanes=scope,
+        target_slot_count=4,
+    )
+    body_reasons = [
+        slot.rationale
+        for slot in storyboard.slots[1:]
+        if slot.rationale
+    ]
+    assert body_reasons
+    assert any(
+        "peak" in reason.lower() or "surge" in reason.lower() or "flux" in reason.lower()
+        for reason in body_reasons
+    )

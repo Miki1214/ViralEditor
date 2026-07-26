@@ -136,20 +136,20 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
   const enrichedEvents = enrichEvents(events);
 
   return (
-    <div className="space-y-3">
+    <div id="stage-telemetry-container" className="space-y-3">
       <div className="flex min-w-0 items-center gap-4">
         <div className="flex shrink-0 items-center gap-2">
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          <h2 id="stage-telemetry-title" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             Pipeline
           </h2>
           {statusLabel && (
-            <span className="rounded border border-scope-dim/50 bg-scope-dim/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-scope-trace">
+            <span id="stage-telemetry-status" className="rounded border border-scope-dim/50 bg-scope-dim/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-scope-trace">
               {statusLabel}
             </span>
           )}
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-0.5">
+        <div id="stage-telemetry-stages" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pb-0.5">
           {stages.map((stage, index) => {
             const state = stageState(stage.id, events);
             const last = [...events].reverse().find((e) => e.stage === stage.id);
@@ -164,7 +164,7 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
                 : `${stage.label}: ${stateLabels[state]}${durationHint}`;
 
             return (
-              <div key={stage.id} className="flex shrink-0 items-center gap-1">
+              <div id={`stage-telemetry-stage-${stage.id}`} key={stage.id} className="flex shrink-0 items-center gap-1">
                 {index > 0 && (
                   <span className="select-none px-0.5 font-mono text-[10px] text-monitor-muted/35">
                     ›
@@ -175,8 +175,8 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
                   className={`flex max-w-[11rem] flex-col gap-0.5 rounded border px-2.5 py-1 font-mono text-[11px] ${stateStyles[state]}`}
                 >
                   <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <span>{stage.label}</span>
-                    <span className="text-[9px] uppercase tracking-wide opacity-75">
+                    <span id={`stage-telemetry-state-${stage.id}`}>{stage.label}</span>
+                    <span id={`stage-telemetry-active-${stage.id}`} className="text-[9px] uppercase tracking-wide opacity-75">
                       {stateLabels[state]}
                     </span>
                   </div>
@@ -195,17 +195,18 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
       {events.length > 0 && (
         <div className="rounded border border-monitor-border bg-monitor-bg">
           <button
+            id="stage-telemetry-log-toggle"
             type="button"
             className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition hover:bg-monitor-surface/50"
             aria-expanded={logsOpen}
             onClick={() => setLogsOpen((open) => !open)}
           >
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+            <span id="stage-telemetry-log-count" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
               Event log
             </span>
             <span className="flex items-center gap-2 font-mono text-[10px] text-monitor-muted">
               <span>{events.length}</span>
-              <span
+              <span id="stage-telemetry-chevron"
                 className={`inline-block transition-transform ${logsOpen ? "rotate-180" : ""}`}
                 aria-hidden
               >
@@ -214,35 +215,36 @@ export function StageTelemetry({ stages, events, status, hasOutput = false }: St
             </span>
           </button>
           {logsOpen && (
-            <div className="max-h-56 overflow-y-auto border-t border-monitor-border p-2 font-mono text-[10px] leading-relaxed text-monitor-muted">
+            <div id="stage-telemetry-log-panel" className="max-h-56 overflow-y-auto border-t border-monitor-border p-2 font-mono text-[10px] leading-relaxed text-monitor-muted">
               {enrichedEvents.map(({ event, offsetMs, stageDurationMs: durationMs }, index) => {
                 const isInfo = event.action === "info";
                 return (
                   <p
+                    id={`stage-telemetry-log-${index}`}
                     key={`${event.timestamp}-${index}`}
                     className={`flex gap-2 ${isInfo ? "text-monitor-muted/90" : ""}`}
                   >
-                    <span className="w-[4.5rem] shrink-0 tabular-nums text-monitor-muted/70">
+                    <span id={`stage-telemetry-offset-${index}`} className="w-[4.5rem] shrink-0 tabular-nums text-monitor-muted/70">
                       {event.timestamp > 0 ? formatLogOffsetMs(offsetMs) : "—"}
                     </span>
                     <span className="min-w-0">
-                      <span className={isInfo ? "text-monitor-muted" : "text-scope-trace"}>
+                      <span id={`stage-telemetry-stage-name-${index}`} className={isInfo ? "text-monitor-muted" : "text-scope-trace"}>
                         {event.stage}
                       </span>
                       {" · "}
-                      <span className={isInfo ? "text-monitor-muted/70" : ""}>
+                      <span id={`stage-telemetry-action-${index}`} className={isInfo ? "text-monitor-muted/70" : ""}>
                         {formatEventAction(event.action)}
                       </span>
                       {!isInfo && durationMs != null && (
                         <>
                           {" · "}
-                          <span className="text-scope-dim">{formatElapsedMs(durationMs)}</span>
+                          <span id={`stage-telemetry-duration-${index}`} className="text-scope-dim">{formatElapsedMs(durationMs)}</span>
                         </>
                       )}
                       {event.message ? (
                         <>
                           {isInfo ? " " : " — "}
-                          <span className={isInfo ? "text-monitor-text/85" : ""}>
+                          <span id={`stage-telemetry-message-${index}`} className={isInfo ? "text-monitor-text/85" : ""}>
                             {event.message}
                           </span>
                         </>

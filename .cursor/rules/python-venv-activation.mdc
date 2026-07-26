@@ -1,0 +1,47 @@
+---
+description: Activate project venv before Python shell commands
+alwaysApply: true
+---
+
+# Python Virtual Environment
+
+This project uses a local venv at `.venv/`. Do **not** rely on system `PATH` or assume `python` resolves correctly.
+
+## Before Python Commands
+
+**MANDATORY:** Activate the venv before `python`, `pytest`, `pip`, `uv`, or any project script.
+
+```powershell
+& c:/Sources/ViralAutomation/.venv/Scripts/Activate.ps1
+```
+
+Then run commands normally:
+
+```powershell
+python -m pytest tests/
+pip install -r requirements.txt
+```
+
+## One-Off Commands
+
+Chain activation in the same shell invocation:
+
+```powershell
+& c:/Sources/ViralAutomation/.venv/Scripts/Activate.ps1; python -m pytest tests/test_transcribe.py
+```
+
+## Persistent Shell Sessions
+
+- Activate **once** at the start of a new terminal session.
+- Re-activate if the shell was reset or a new terminal was opened.
+- Do not skip activation because a prior command "probably" used the right Python.
+
+## Subagents
+
+Include this rule in every subagent prompt that runs Python, pytest, pip, or project CLI tools.
+
+## Avoid
+
+- Calling bare `python` without activating first
+- Using `py` launcher or system Python when project venv exists
+- Assuming `PYTHONPATH` or IDE settings initialized the environment

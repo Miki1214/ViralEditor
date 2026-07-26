@@ -13,11 +13,14 @@ T = TypeVar("T", bound=BaseModel)
 TransientType = Literal["percussive", "bass", "drop"]
 BudgetPolicy = Literal["scale", "loop", "trim"]
 FxKind = Literal["zoom", "rotate", "translate"]
-TeaserMask = Literal["vignette", "dir_blur"]
+TeaserMask = Literal["vignette", "dir_blur", "none"]
 ClipRole = Literal["clip", "hook", "filler"]
 SlotRole = Literal["hook", "hook_start", "hook_end", "clip", "punch"]
 SlotTransition = Literal["cut", "xfade"]
 SlotFitMode = Literal["contain", "cover"]
+CaptionPosition = Literal["top", "center", "bottom"]
+RotationStep = Literal["metadata", "aspect", "orientation"]
+RotationDirection = Literal["cw", "ccw"]
 
 
 class DomainModel(BaseModel):
@@ -49,6 +52,30 @@ class MediaInfo(DomainModel):
     codec_name: str | None = None
     sample_rate: int | None = Field(default=None, ge=1)
     channels: int | None = Field(default=None, ge=1)
+
+
+class RotationVote(DomainModel):
+    """One auto-rotation detector step recommendation."""
+
+    step: RotationStep
+    rotate: bool | None = None
+    direction: RotationDirection | None = None
+    suggested_deg: int | None = Field(default=None, ge=0, lt=360)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    detail: str = ""
+
+
+class AutoRotationLog(DomainModel):
+    """Per-clip auto-rotation decision log for fine-tuning."""
+
+    clip_id: str = ""
+    clip_path: str = ""
+    metadata_vote: RotationVote | None = None
+    aspect_vote: RotationVote | None = None
+    orientation_vote: RotationVote | None = None
+    final_rotation_deg: int = 0
+    reason: str = ""
+    decided_at: str = ""
 
 
 class Transient(DomainModel):
@@ -85,6 +112,8 @@ class MusicBlock(DomainModel):
     section_label: str | None = None
     key: str | None = None
     is_repeated_section: bool = False
+    expected_slot_count: int | None = None
+    preset_target_duration_s: float | None = None
 
 
 class MusicSection(DomainModel):
@@ -175,6 +204,7 @@ class WaveformPayload(DomainModel):
     lanes: list[ScopeLaneSeries] = Field(default_factory=list)
     chroma: ChromaGram | None = None
     blocks: list[MusicBlock] = Field(default_factory=list)
+    all_blocks: list[MusicBlock] = Field(default_factory=list)
     selected_block_id: str | None = None
     target_match_failed: bool = False
     suggested_target_duration_s: float | None = Field(default=None, gt=0)
@@ -242,6 +272,39 @@ class StorySlot(DomainModel):
     fit_mode: SlotFitMode = "contain"
     spatial_crop: SpatialCrop | None = None
     rationale: str | None = None
+
+
+class CaptionWord(DomainModel):
+    """One timed word within a caption phrase chunk."""
+
+    text: str = Field(min_length=1)
+    start_s: float = Field(ge=0)
+    end_s: float = Field(ge=0)
+    emphasis: bool = False
+
+
+class CaptionChunk(DomainModel):
+    """A short phrase (2–4 words) shown together on screen."""
+
+    words: list[CaptionWord] = Field(min_length=1)
+    start_s: float = Field(ge=0)
+    end_s: float = Field(ge=0)
+
+
+class CaptionStyle(DomainModel):
+    """Typography and overlay styling for title or body captions."""
+
+    font_family: str = "Montserrat Black"
+    fill_color: str = "#FFFFFF"
+    emphasis_color: str = "#FFD700"
+    outline_color: str = "#000000"
+    outline_enabled: bool = True
+    box_enabled: bool = True
+    box_color: str = "rgba(0,0,0,0.85)"
+    position: CaptionPosition = "bottom"
+    size_scale: float = Field(default=1.0, gt=0, le=3.0)
+    safe_padding_pct: int = Field(default=10, ge=0, le=50)
+    karaoke_enabled: bool = True
 
 
 class RetentionPlanScore(DomainModel):

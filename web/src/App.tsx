@@ -1,19 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JobSummary, MusicBlock, PipelineEvent, StageInfo, StoryboardPayload, WaveformPayload } from "./types";
+import { blockPoolFromWaveform } from "./components/audioScopeHelpers";
+import { filterBlocks } from "./utils/blockFilter";
+import { targetDurationForBlockSelection } from "./utils/appBlockSelection";
 import {
   assignSlotClip,
   clearSlotClip,
   compositePreviewUrl,
   createDraftJob,
+  fetchCaption,
   fetchCompositePreview,
   fetchHealth,
+  fetchJob,
   fetchJobs,
   fetchStages,
   fetchStoryboard,
   fetchWaveform,
+  patchCaption,
   patchEffects,
   patchStoryboard,
   subscribeJobEvents,
+  startFinalRender,
+  transcribeCaption,
   updateMusicSelection,
   updateSlotCrop,
   updateSlotTransform,
@@ -22,8 +30,9 @@ import { DEFAULT_HOOK_FONT } from "./constants/fonts";
 import { AudioScopePanel } from "./components/AudioScopePanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { blockPlayheadToCompositeVideoTime } from "./utils/compositePlayhead";
-import { HookOverlayPanel } from "./components/HookOverlayPanel";
+import { CaptionPanel } from "./components/CaptionPanel";
 import type { FormState } from "./components/JobForm";
+import type { CaptionPatchInput, CaptionPayload, TranscribeOptions, TranscribeSource } from "./types";
 import { JobForm } from "./components/JobForm";
 import { OutputPanel } from "./components/OutputPanel";
 import { DebugConsolePanel } from "./components/DebugConsolePanel";
@@ -69,11 +78,24 @@ export default function App() {
   const [audioName, setAudioName] = useState<string | null>(null);
   const [waveform, setWaveform] = useState<WaveformPayload | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedSlotCount, setSelectedSlotCount] = useState<number | null>(null);
+  const [targetDurationFilter, setTargetDurationFilter] = useState<number | null>(null);
+
+  const availableBlockCount = useMemo(() => {
+    if (!waveform) return 0;
+    const activeBlocks = waveform.blocks.length > 0 ? waveform.blocks : [];
+    const pool = blockPoolFromWaveform(waveform, activeBlocks);
+    return filterBlocks(pool, targetDurationFilter, selectedSlotCount).length;
+  }, [waveform, targetDurationFilter, selectedSlotCount]);
   const [musicStartS, setMusicStartS] = useState<number | null>(null);
   const [musicEndS, setMusicEndS] = useState<number | null>(null);
   const [storyboard, setStoryboard] = useState<StoryboardPayload | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [storyboardSaving, setStoryboardSaving] = useState(false);
+  const [captionData, setCaptionData] = useState<CaptionPayload | null>(null);
+  const [captionSaving, setCaptionSaving] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [showPlatformSafeZone, setShowPlatformSafeZone] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [previewReady, setPreviewReady] = useState(false);
   const [validatedPreviewUrl, setValidatedPreviewUrl] = useState<string | null>(null);
@@ -116,6 +138,8 @@ export default function App() {
   const playPreviewRef = useRef<(() => void) | null>(null);
   const previewRestoreRef = useRef<PreviewTransportRestore | null>(null);
   const activeJobIdRef = useRef<string | null>(null);
+  const renderSessionRef = useRef(0);
+  const renderSeenRunningRef = useRef(false);
   const eventsUnsubRef = useRef<(() => void) | null>(null);
 
   activeJobIdRef.current = activeJobId;
@@ -191,6 +215,9 @@ export default function App() {
     useFullTrack: boolean;
   } | null>(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [finalRendering, setFinalRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState<number | null>(null);
+  const [outputVersion, setOutputVersion] = useState(0);
 
   const patchForm = useCallback((partial: Partial<FormState>) => {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -218,6 +245,16 @@ export default function App() {
     }
   }, []);
 
+  const applyJobSummary = useCallback((job: JobSummary) => {
+    setJobStatus(job.status);
+    setJobArtifacts(job.artifacts);
+    if (job.has_output) {
+      setHasOutput(true);
+      setOutputVersion((version) => version + 1);
+      setRenderProgress(100);
+    }
+  }, []);
+
   const restoreJob = useCallback(
     async (job: JobSummary) => {
       eventsUnsubRef.current?.();
@@ -229,6 +266,8 @@ export default function App() {
       setRestoreMenuOpen(false);
       setEvents([]);
       setSelectedSlotId(null);
+      setSelectedSlotCount(null);
+      setTargetDurationFilter(null);
       setActiveJobId(job.id);
       setJobStatus(job.status);
       setJobArtifacts(job.artifacts);
@@ -350,17 +389,72 @@ export default function App() {
   };
 
   const loadStoryboard = (jobId: string) => {
-    return fetchStoryboard(jobId)
-      .then((payload) => {
+    return Promise.all([fetchStoryboard(jobId), fetchCaption(jobId).catch(() => null)])
+      .then(([payload, captionPayload]) => {
         if (activeJobIdRef.current !== jobId) return;
         setStoryboard(payload);
         setPreviewReady(payload.preview_ready);
         setSelectedSlotId((current) => current ?? payload.slots[0]?.id ?? null);
+        if (captionPayload) {
+          setCaptionData(captionPayload);
+          patchForm({
+            hookText: captionPayload.hook_text,
+            emphasisWords: captionPayload.emphasis_words.join(", "),
+            fontFamily: captionPayload.hook_style.font_family,
+            fillColor: captionPayload.hook_style.fill_color,
+            emphasisColor: captionPayload.hook_style.emphasis_color,
+            safePaddingPct: captionPayload.hook_style.safe_padding_pct,
+          });
+        }
       })
       .catch(() => {
         if (activeJobIdRef.current !== jobId) return;
         setStoryboard(null);
+        setCaptionData(null);
       });
+  };
+
+  const handlePatchCaption = async (payload: CaptionPatchInput): Promise<CaptionPayload> => {
+    if (!activeJobId) {
+      throw new Error("No active job");
+    }
+    setCaptionSaving(true);
+    try {
+      const updated = await patchCaption(activeJobId, payload);
+      setCaptionData(updated);
+      if (payload.hook_text !== undefined) {
+        patchForm({ hookText: payload.hook_text });
+      }
+      if (payload.emphasis_words !== undefined) {
+        patchForm({ emphasisWords: payload.emphasis_words.join(", ") });
+      }
+      refreshPreview();
+      return updated;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update captions");
+      throw err;
+    } finally {
+      setCaptionSaving(false);
+    }
+  };
+
+  const handleTranscribe = async (
+    source: TranscribeSource,
+    options: TranscribeOptions,
+    file?: File,
+  ) => {
+    if (!activeJobId) return;
+    setTranscribing(true);
+    try {
+      await transcribeCaption(activeJobId, source, options, file);
+      const updated = await fetchCaption(activeJobId);
+      setCaptionData(updated);
+      refreshPreview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Transcription failed");
+    } finally {
+      setTranscribing(false);
+    }
   };
 
   const handleAudioSelected = async (file: File) => {
@@ -369,6 +463,8 @@ export default function App() {
     setAudioName(file.name);
     setWaveform(null);
     setStoryboard(null);
+    setSelectedSlotCount(null);
+    setTargetDurationFilter(null);
     setEvents([]);
     setPreviewReady(false);
     setPreviewVersion(0);
@@ -522,6 +618,12 @@ export default function App() {
 
   const handleSelectBlock = async (block: MusicBlock) => {
     if (!activeJobId) return;
+    const newTarget = targetDurationForBlockSelection(block, form.targetDurationS);
+    if (newTarget != null && hasAssignedClip) {
+      requestTargetChange(newTarget, false);
+      return;
+    }
+
     setSelectedBlockId(block.id);
     setMusicStartS(block.start_s);
     setMusicEndS(block.end_s);
@@ -531,8 +633,16 @@ export default function App() {
     blockSeekRef.current?.(0);
     setCompositePreviewPlaying(false);
     setPreviewReady(false);
+    if (newTarget != null) {
+      patchForm({ targetDurationS: newTarget, useFullTrack: false });
+    }
     try {
-      await updateMusicSelection(activeJobId, { selected_block_id: block.id });
+      await updateMusicSelection(activeJobId, {
+        selected_block_id: block.id,
+        ...(newTarget != null
+          ? { target_duration_s: newTarget, use_full_track: false }
+          : {}),
+      });
       loadScope(activeJobId);
       loadStoryboard(activeJobId);
     } catch (err) {
@@ -563,8 +673,6 @@ export default function App() {
       const slot = payload.slots.find((item) => item.id === slotId);
       refreshPreview({
         playheadS: slot?.out_start_s ?? blockPlayheadS,
-        playing: true,
-        loopMode: "slot",
         selectedSlotId: slotId,
       });
     } catch (err) {
@@ -585,7 +693,7 @@ export default function App() {
       const payload = await updateSlotCrop(activeJobId, slotId, cropStartS, cropEndS);
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      refreshPreview();
+      refreshPreview({ selectedSlotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update crop");
     } finally {
@@ -607,7 +715,7 @@ export default function App() {
       const updated = await updateSlotTransform(activeJobId, slotId, payload);
       setStoryboard(updated);
       setPreviewReady(updated.preview_ready);
-      refreshPreview();
+      refreshPreview({ selectedSlotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update clip transform");
     } finally {
@@ -617,12 +725,14 @@ export default function App() {
 
   const handleClearClip = async (slotId: string) => {
     if (!activeJobId) return;
+    // Explicitly preserve the selected slot ID before the API call to prevent race conditions
+    setSelectedSlotId(slotId);
     setStoryboardSaving(true);
     try {
       const payload = await clearSlotClip(activeJobId, slotId);
       setStoryboard(payload);
       setPreviewReady(payload.preview_ready);
-      refreshPreview();
+      refreshPreview({ selectedSlotId: slotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not clear clip");
     } finally {
@@ -651,13 +761,157 @@ export default function App() {
     try {
       const updated = await patchEffects(activeJobId, payload);
       setStoryboard(updated);
-      refreshPreview();
+      refreshPreview({ selectedSlotId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update retention FX");
     } finally {
       setStoryboardSaving(false);
     }
   };
+
+  const handleFinalRender = async () => {
+    if (!activeJobId || !storyboard?.render_ready) return;
+    if (finalRendering) return;
+    setError(null);
+    setFinalRendering(true);
+    setRenderProgress(0);
+    renderSessionRef.current += 1;
+    renderSeenRunningRef.current = false;
+    eventsUnsubRef.current?.();
+    eventsUnsubRef.current = null;
+
+    const finishRenderUi = async () => {
+      try {
+        const job = await fetchJob(activeJobId);
+        if (job.status === "running") {
+          return;
+        }
+        applyJobSummary(job);
+        setFinalRendering(false);
+        if (!job.has_output) {
+          setRenderProgress(null);
+        }
+        void refreshJobsList();
+      } catch {
+        setRenderProgress(null);
+        setFinalRendering(false);
+      }
+    };
+
+    eventsUnsubRef.current = subscribeJobEvents(
+      activeJobId,
+      (event) => {
+        if (event.stage === "render" && event.action === "info") {
+          const message = event.message ?? "";
+          if (message.startsWith("progress:")) {
+            const pct = Number.parseFloat(message.slice("progress:".length));
+            if (Number.isFinite(pct)) {
+              setRenderProgress(pct);
+            }
+            return;
+          }
+        }
+        setEvents((prev) => [...prev, event]);
+        if (event.stage === "render" && event.action === "start") {
+          renderSeenRunningRef.current = true;
+          setRenderProgress(0);
+        }
+        if (event.stage === "render" && event.action === "complete") {
+          setRenderProgress(100);
+          void fetchJob(activeJobId)
+            .then((job) => {
+              applyJobSummary(job);
+              setFinalRendering(false);
+            })
+            .catch(() => undefined);
+        }
+        if (event.stage === "render" && event.action === "error") {
+          setFinalRendering(false);
+          setRenderProgress(null);
+          setJobStatus("failed");
+          if (event.message) {
+            setError(event.message);
+          }
+        }
+      },
+      () => {
+        void finishRenderUi();
+      },
+      (streamError) => {
+        void fetchJob(activeJobId)
+          .then((job) => {
+            if (job.status === "running") {
+              return;
+            }
+            setFinalRendering(false);
+            setRenderProgress(null);
+            setError(streamError.message);
+            setJobStatus("failed");
+          })
+          .catch(() => {
+            setFinalRendering(false);
+            setRenderProgress(null);
+            setError(streamError.message);
+            setJobStatus("failed");
+          });
+      },
+    );
+    try {
+      await startFinalRender(activeJobId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not start render";
+      if (message.includes("already running")) {
+        renderSeenRunningRef.current = true;
+        return;
+      }
+      eventsUnsubRef.current?.();
+      eventsUnsubRef.current = null;
+      setFinalRendering(false);
+      setRenderProgress(null);
+      setError(message);
+    }
+  };
+
+  useEffect(() => {
+    if (!finalRendering || !activeJobId) {
+      return;
+    }
+    const sessionAtStart = renderSessionRef.current;
+    const poll = window.setInterval(() => {
+      if (sessionAtStart !== renderSessionRef.current) {
+        return;
+      }
+      void fetchJob(activeJobId)
+        .then((job) => {
+          if (sessionAtStart !== renderSessionRef.current) {
+            return;
+          }
+          if (job.status === "running") {
+            renderSeenRunningRef.current = true;
+          }
+          if (
+            renderSeenRunningRef.current
+            && job.status === "completed"
+            && job.has_output
+          ) {
+            applyJobSummary(job);
+            setFinalRendering(false);
+            setRenderProgress(100);
+            eventsUnsubRef.current?.();
+            eventsUnsubRef.current = null;
+          } else if (job.status === "failed") {
+            setFinalRendering(false);
+            setRenderProgress(null);
+            setJobStatus("failed");
+            if (job.error) {
+              setError(job.error);
+            }
+          }
+        })
+        .catch(() => undefined);
+    }, 2500);
+    return () => window.clearInterval(poll);
+  }, [activeJobId, applyJobSummary, finalRendering]);
 
   const compositeUrl =
     activeJobId && previewReady
@@ -869,6 +1123,10 @@ export default function App() {
                   selectedBlockId={selectedBlockId}
                   onTargetChange={requestTargetChange}
                   onSelectBlock={handleSelectBlock}
+                  targetDurationFilter={targetDurationFilter}
+                  onTargetDurationFilterChange={setTargetDurationFilter}
+                  selectedSlotCount={selectedSlotCount}
+                  onSlotCountChange={setSelectedSlotCount}
                   switchingTarget={regenerating}
                 />
               ) : analyzing && activeJobId ? (
@@ -910,8 +1168,18 @@ export default function App() {
                 registerBlockPause={registerBlockPause}
                 registerBlockPlaySlot={registerBlockPlaySlot}
                 registerBlockSetLoopMode={registerBlockSetLoopMode}
+                availableBlockCount={availableBlockCount}
               />
-              <HookOverlayPanel form={form} onPatch={patchForm} />
+              <CaptionPanel
+                form={form}
+                caption={captionData}
+                selectedSlotId={selectedSlotId}
+                saving={captionSaving}
+                transcribing={transcribing}
+                onPatchForm={patchForm}
+                onPatchCaption={handlePatchCaption}
+                onTranscribe={handleTranscribe}
+              />
             </>
           )}
 
@@ -943,14 +1211,32 @@ export default function App() {
             hasOutput={hasOutput}
             artifacts={jobArtifacts}
             scopeReady={waveform !== null}
+            renderReady={storyboard?.render_ready ?? false}
+            rendering={finalRendering}
+            renderProgress={renderProgress}
+            outputVersion={outputVersion}
+            onRender={
+              storyboard?.render_ready ? handleFinalRender : undefined
+            }
+            renderBlockedReason={renderBlockedReason}
           />
         </section>
 
         <aside className="sticky top-6 flex max-h-[calc(100vh-1.5rem)] flex-col gap-5 self-start overflow-y-auto">
           <div className="panel flex flex-col items-center px-6 py-8">
-            <p className="mb-4 self-start font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
-              Composed preview
-            </p>
+            <div className="mb-4 flex w-full items-center justify-between gap-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+                Composed preview
+              </p>
+              <label className="flex items-center gap-1.5 font-mono text-[10px] text-monitor-muted">
+                <input
+                  type="checkbox"
+                  checked={showPlatformSafeZone}
+                  onChange={(e) => setShowPlatformSafeZone(e.target.checked)}
+                />
+                Safe zone
+              </label>
+            </div>
             <PhonePreview
               hookText={form.hookText}
               emphasisWords={form.emphasisWords}
@@ -971,6 +1257,7 @@ export default function App() {
               registerPreviewToggle={registerPreviewToggle}
               registerPreviewSeek={registerPreviewSeek}
               registerPreviewPlay={registerPreviewPlay}
+              showPlatformSafeZone={showPlatformSafeZone}
             />
             {musicStartS != null && musicEndS != null && (
               <dl className="mt-6 grid w-full grid-cols-2 gap-3 font-mono text-xs">

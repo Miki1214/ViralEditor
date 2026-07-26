@@ -41,6 +41,7 @@ export function MusicBlockCard({
 
   return (
     <div
+      id={`music-block-card-${block.id}`}
       className={`rounded border px-3 py-2 transition ${
         selected
           ? "border-hook-gold/70 bg-hook-gold/10 shadow-[0_0_0_1px_rgba(244,196,48,0.25)]"
@@ -49,38 +50,46 @@ export function MusicBlockCard({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
+          id={`music-block-card-select-${block.id}`}
           type="button"
           className="min-w-0 flex-1 text-left"
           onClick={onSelect}
         >
-          <p className="font-mono text-xs text-hook-gold">
+          <p id={`music-block-card-label-${block.id}`} className="font-mono text-xs text-hook-gold">
             {block.label} · {formatRange(block.start_s, block.end_s)}
           </p>
-          <p className="mt-0.5 text-sm text-monitor-text">
+          <p id={`music-block-card-info-${block.id}`} className="mt-0.5 text-sm text-monitor-text">
             {block.drop_count} drop{block.drop_count === 1 ? "" : "s"} ·{" "}
             {block.transient_count} hits
             {block.phrase_bars > 0 ? ` · ${block.phrase_bars}-bar phrase` : ""}
             {block.section_label ? ` · ${block.section_label}` : ""}
             {block.key ? ` · ${block.key}` : ""}
+            {block.expected_slot_count != null && (
+              <span id={`music-block-card-slot-badge-${block.id}`} className="ml-1 font-mono text-[10px] text-monitor-muted/70">
+                · {block.expected_slot_count} slot{block.expected_slot_count !== 1 ? "s" : ""}
+              </span>
+            )}
           </p>
           <div className="mt-2 flex items-center gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
+            <span id={`music-block-card-loop-label-${block.id}`} className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
               Loop
             </span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded bg-monitor-border">
+            <div id={`music-block-card-loop-bar-${block.id}`} className="h-1.5 flex-1 overflow-hidden rounded bg-monitor-border">
               <div
+                id={`music-block-card-loop-fill-${block.id}`}
                 className="h-full rounded bg-scope-trace transition-all"
                 style={{ width: `${qualityPct}%` }}
               />
             </div>
-            <span className="font-mono text-[10px] text-monitor-muted">
+            <span id={`music-block-card-loop-pct-${block.id}`} className="font-mono text-[10px] text-monitor-muted">
               {loopQualityLabel(block.loop_quality)} {qualityPct}%
             </span>
           </div>
-          <p className="mt-1 text-xs text-monitor-muted">{block.reason}</p>
+          <p id={`music-block-card-reason-${block.id}`} className="mt-1 text-xs text-monitor-muted">{block.reason}</p>
         </button>
-        <div className="flex shrink-0 flex-col items-stretch gap-1">
+        <div id={`music-block-card-play-btns-${block.id}`} className="flex shrink-0 flex-col items-stretch gap-1">
           <button
+            id={`music-block-card-audition-${block.id}`}
             type="button"
             className="btn-ghost font-mono text-xs"
             onClick={onAudition}
@@ -89,6 +98,7 @@ export function MusicBlockCard({
             {auditionPlaying ? "■ Stop" : "▶ Audition"}
           </button>
           <button
+            id={`music-block-card-loop-preview-${block.id}`}
             type="button"
             className="btn-ghost font-mono text-[10px] text-monitor-muted"
             onClick={onLoopPreview}

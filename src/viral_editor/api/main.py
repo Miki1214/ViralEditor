@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from viral_editor.api.routes import jobs as jobs_routes
 from viral_editor.api.schemas import HealthResponse
 from viral_editor.api.store import JobStore
+from viral_editor.audio.transcribe import resolve_whisper_runtime_config, transcribe_available
 from viral_editor.utils.ffmpeg import ffmpeg_available
 
 WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
@@ -41,9 +42,17 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
+        whisper_runtime: str | None = None
+        if transcribe_available():
+            try:
+                whisper_runtime = resolve_whisper_runtime_config().summary()
+            except Exception:
+                whisper_runtime = None
         return HealthResponse(
             status="ok",
             ffmpeg_available=ffmpeg_available(),
+            whisper_available=transcribe_available(),
+            whisper_runtime=whisper_runtime,
         )
 
     app.include_router(jobs_routes.router, prefix="/api")

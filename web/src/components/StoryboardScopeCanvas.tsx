@@ -23,6 +23,7 @@ interface StoryboardScopeCanvasProps {
   waveform: WaveformPayload;
   storyboard: StoryboardPayload;
   selectedSlotId: string | null;
+  availableBlockCount: number;
   spatialFx?: SpatialFxSettings;
   onSelectSlot?: (slotId: string) => void;
 }
@@ -46,6 +47,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
   waveform,
   storyboard,
   selectedSlotId,
+  availableBlockCount,
   spatialFx,
   onSelectSlot,
 }: StoryboardScopeCanvasProps) {
@@ -161,40 +163,30 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
       .join(" ");
   }, [points, blockDurationS, innerW, innerH]);
 
-  const slotAtX = (clientX: number, rect: DOMRect): string | null => {
-    if (blockDurationS <= 0) return null;
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left - PAD_X) / innerW));
-    const timeS = ratio * blockDurationS;
-    const hit = orderedSlots.find(
-      (slot) => timeS >= slot.out_start_s - 0.001 && timeS < slot.out_end_s - 0.001,
-    );
-    return hit?.id ?? null;
-  };
-
   return (
-    <div className="space-y-1.5">
+    <div id="storyboard-scope-container" className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-monitor-muted">
+        <p id="storyboard-scope-label" className="font-mono text-[10px] uppercase tracking-[0.16em] text-monitor-muted">
           Music block
         </p>
-        <p className="font-mono text-[10px] text-monitor-muted">
+        <p id="storyboard-scope-window-size" className="font-mono text-[10px] text-monitor-muted">
           {blockDurationS.toFixed(1)}s window
         </p>
       </div>
       {fxSettings.enabled && fxMarkers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-monitor-muted">
-          <span className="inline-flex items-center gap-1">
+        <div id="storyboard-scope-fx-legend" className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-monitor-muted">
+          <span id="storyboard-scope-fx-zoom" className="inline-flex items-center gap-1">
             <span className="inline-block h-2 w-0.5 rounded-full bg-[#F4C430]" aria-hidden />
             Zoom
           </span>
-          <span className="inline-flex items-center gap-1">
+          <span id="storyboard-scope-fx-rotate" className="inline-flex items-center gap-1">
             <span
               className="inline-block h-1.5 w-1.5 rounded-full bg-[#38BDF8]"
               aria-hidden
             />
             Rotate
           </span>
-          <span className="inline-flex items-center gap-1">
+          <span id="storyboard-scope-fx-pan" className="inline-flex items-center gap-1">
             <span
               className="inline-block h-1.5 w-1.5 rounded-full bg-[#A78BFA]"
               aria-hidden
@@ -204,18 +196,14 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
         </div>
       )}
       <svg
+        id="storyboard-scope-svg"
         viewBox={`0 0 ${viewWidth} ${totalHeight}`}
         width="100%"
         height={totalHeight}
         className="block rounded border border-monitor-border bg-[#141618] cursor-pointer"
         role="img"
         aria-label="Storyboard music block waveform"
-        onClick={(event) => {
-          if (!onSelectSlot) return;
-          const rect = event.currentTarget.getBoundingClientRect();
-          const slotId = slotAtX(event.clientX, rect);
-          if (slotId) onSelectSlot(slotId);
-        }}
+        style={{ pointerEvents: "none" }}
       >
         <SectionRibbon
           sections={waveform.sections}
@@ -225,6 +213,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
           layout={sectionLayout}
         />
         <rect
+          id="storyboard-scope-ruler-bg"
           x={0}
           y={rulerTop}
           width={viewWidth}
@@ -232,6 +221,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
           fill={RULER_BG}
         />
         <line
+          id="storyboard-scope-ruler-line"
           x1={PAD_X}
           x2={viewWidth - PAD_X}
           y1={rulerTop}
@@ -247,9 +237,29 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
             2,
             ((slot.out_end_s - slot.out_start_s) / blockDurationS) * innerW,
           );
+          const hasAvailableBlocks = availableBlockCount > 0;
           return (
-            <g key={slot.id}>
+            <g
+              id={`storyboard-scope-slot-${slot.id}`}
+              key={slot.id}
+              style={{ pointerEvents: hasAvailableBlocks ? "all" : "none", opacity: hasAvailableBlocks ? 1 : 0.4 }}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!hasAvailableBlocks) return;
+                if (onSelectSlot) onSelectSlot(slot.id);
+              }}
+              role="button"
+              tabIndex={hasAvailableBlocks ? 0 : -1}
+              onKeyDown={(event) => {
+                if (!hasAvailableBlocks) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  if (onSelectSlot) onSelectSlot(slot.id);
+                }
+              }}
+            >
               <rect
+                id={`storyboard-scope-slot-rect-${slot.id}`}
                 x={x}
                 y={waveformTop + PAD_Y}
                 width={w}
@@ -261,6 +271,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
               />
               {selected && (
                 <text
+                  id={`storyboard-scope-slot-text-${slot.id}`}
                   x={x + w / 2}
                   y={waveformTop + PAD_Y + 10}
                   textAnchor="middle"
@@ -278,6 +289,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
 
         {waveformPath && (
           <path
+            id="storyboard-scope-waveform"
             d={waveformPath}
             fill="none"
             stroke={TRACE}
@@ -312,11 +324,12 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
                 })
                 .join(" ");
               return (
-                <g key={`highlight-${slot.id}`}>
-                  <clipPath id={`slot-clip-${slot.id}`}>
+                <g id={`storyboard-scope-highlight-${slot.id}`} key={`highlight-${slot.id}`}>
+                  <clipPath id={`storyboard-scope-clip-${slot.id}`}>
                     <rect x={clipStart} y={waveformTop + PAD_Y} width={clipWidth} height={innerH} />
                   </clipPath>
                   <path
+                    id={`storyboard-scope-highlight-path-${slot.id}`}
                     d={highlightPath}
                     fill="none"
                     stroke={color.stroke}
@@ -344,6 +357,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
           const x = PAD_X + (slot.out_end_s / blockDurationS) * innerW;
           return (
             <line
+              id={`storyboard-scope-boundary-${slot.id}`}
               key={`boundary-${slot.id}`}
               x1={x}
               x2={x}
@@ -359,6 +373,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
 
         {blockDurationS > 0 && (
           <line
+            id="storyboard-scope-playhead"
             ref={playheadLineRef}
             x1={PAD_X}
             x2={PAD_X}
@@ -374,8 +389,9 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
           const x = timeToX(timeS, blockDurationS, PAD_X, innerW);
           const anchor = timeS <= 0 ? "start" : timeS >= blockDurationS - 0.5 ? "end" : "middle";
           return (
-            <g key={`tick-${timeS}`} style={{ pointerEvents: "none" }}>
+            <g id={`storyboard-scope-tick-${timeS}`} key={`tick-${timeS}`} style={{ pointerEvents: "none" }}>
               <line
+                id={`storyboard-scope-tick-mark-${timeS}`}
                 x1={x}
                 x2={x}
                 y1={rulerTop + 2}
@@ -384,6 +400,7 @@ export const StoryboardScopeCanvas = memo(function StoryboardScopeCanvas({
                 strokeWidth={1}
               />
               <text
+                id={`storyboard-scope-tick-label-${timeS}`}
                 x={x}
                 y={rulerTop + SCOPE_RULER_HEIGHT - 6}
                 fill={LABEL_COLOR}

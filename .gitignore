@@ -10,6 +10,13 @@ build/
 .mypy_cache/
 .ruff_cache/
 
+# Agent debug session logs (Cursor instrumentation)
+debug-*.log
+.cursor/debug-*.log
+
+# Graphify knowledge graph (generated)
+graphify-out/
+
 # Pipeline artifacts
 output/
 temp/

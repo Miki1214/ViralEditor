@@ -19,3 +19,8 @@ export const CUSTOM_DURATION_MAX_S = 120;
 export function isPresetTargetDuration(seconds: number): boolean {
   return (TARGET_DURATION_PRESET_VALUES as readonly number[]).includes(seconds);
 }
+
+export const SLOT_COUNT_PRESETS = Array.from({ length: 10 }, (_, i) => ({
+  label: `${i + 1} slot${i + 1 > 1 ? "s" : ""}`,
+  value: i + 1,
+})) as const;

@@ -1,0 +1,920 @@
+"""Caption script splitting and reading-speed presets."""
+
+from __future__ import annotations
+
+import math
+import re
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+
+from viral_editor.models import CaptionChunk, CaptionWord, StorySlot
+
+_TOKEN_RE = re.compile(r"\S+")
+
+
+@dataclass(frozen=True)
+class WpsPreset:
+    words_per_second: float
+    label: str
+
+
+WPS_PRESETS: tuple[WpsPreset, ...] = (
+    WpsPreset(3.0, "Accessible"),
+    WpsPreset(4.0, "Comfortable"),
+    WpsPreset(5.0, "Recommended"),
+    WpsPreset(6.0, "Energetic"),
+    WpsPreset(7.5, "Hype"),
+)
+
+DEFAULT_WORDS_PER_SECOND = 5.0
+PHRASE_MIN_WORDS = 2
+PHRASE_MAX_WORDS = 4
+PHRASE_TIMING_GAP_S = 1.0
+
+# Floor on per-chunk on-screen duration. Bounds how many drawtext overlays a
+# single slot can ever produce, independent of how the words got there
+# (auto-allocation overflow or a manual per-slot caption override with far
+# more text than the slot's duration can display). Without this, an oversized
+# script text turns into hundreds of chained drawtext filters for one slot,
+# which bloats the composite -filter_complex argument enough to break preview
+# rendering.
+MIN_CHUNK_DURATION_S = 0.25
+
+
+def suggested_word_count(duration_s: float, words_per_second: float) -> int:
+    """Return the suggested word budget for a slot at the given reading speed."""
+    return max(0, int(round(duration_s * words_per_second)))
+
+
+def tokenize_script(script_text: str) -> list[str]:
+    """Split script text into word tokens."""
+    return _TOKEN_RE.findall(script_text.strip())
+
+
+_SMART_QUOTES = str.maketrans({
+    "\u2018": "'",
+    "\u2019": "'",
+    "\u201c": '"',
+    "\u201d": '"',
+    "\u2013": "-",
+    "\u2014": "-",
+    "\u2026": "...",
+})
+_MULTI_SPACE_RE = re.compile(r"[ \t]+")
+_MULTI_BLANK_LINE_RE = re.compile(r"\n{3,}")
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,.!?;:])")
+
+
+def cleanup_script_text(script_text: str) -> str:
+    """Normalize a pasted/transcribed script before auto-allocating it to slots.
+
+    Straightens smart quotes/dashes, collapses stray whitespace, drops
+    leftover spaces before punctuation, and trims blank lines so the word
+    tokenizer used by :func:`distribute_script_to_slot_overrides` sees clean
+    tokens instead of formatting artifacts.
+    """
+    text = script_text.translate(_SMART_QUOTES)
+    lines = [_MULTI_SPACE_RE.sub(" ", line).strip() for line in text.splitlines()]
+    text = "\n".join(lines)
+    text = _MULTI_BLANK_LINE_RE.sub("\n\n", text)
+    text = _SPACE_BEFORE_PUNCT_RE.sub(r"\1", text)
+    return text.strip()
+
+
+def cleanup_slot_overrides(slot_overrides: dict[str, str]) -> dict[str, str]:
+    """Normalize per-slot caption override text."""
+    return {
+        slot_id: cleanup_script_text(text)
+        for slot_id, text in slot_overrides.items()
+        if text.strip()
+    }
+
+
+def cleanup_caption_texts(
+    *,
+    script_text: str,
+    slot_overrides: dict[str, str],
+    slots: list[StorySlot],
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] | None = None,
+    emphasis_words: list[str] | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Normalize the full script and each slot's effective caption text."""
+    cleaned_script = cleanup_script_text(script_text)
+
+    class _CaptionLike:
+        def __init__(self) -> None:
+            self.script_text = cleaned_script
+            self.words_per_second = words_per_second
+            self.slot_overrides = slot_overrides
+            self.word_timing_overrides = word_timing_overrides or {}
+
+    chunks_by_slot = build_caption_chunks_for_slots(
+        _CaptionLike(),
+        slots,
+        emphasis_words=emphasis_words,
+    )
+    resolved: dict[str, str] = {}
+    for slot in sorted(slots, key=lambda item: item.order):
+        override = slot_overrides.get(slot.id, "")
+        if override.strip():
+            resolved[slot.id] = override
+            continue
+        chunks = chunks_by_slot.get(slot.id, [])
+        words = [word.text for chunk in chunks for word in chunk.words]
+        if words:
+            resolved[slot.id] = " ".join(words)
+
+    return cleaned_script, cleanup_slot_overrides(resolved)
+
+
+def split_script_into_chunks(
+    script_text: str,
+    slots: list[StorySlot],
+    *,
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+    slot_overrides: dict[str, str] | None = None,
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] | None = None,
+    emphasis_words: set[str] | frozenset[str] | None = None,
+) -> dict[str, list[CaptionChunk]]:
+    """Distribute script words across storyboard slots and group into phrase chunks."""
+    overrides = slot_overrides or {}
+    timing_overrides = word_timing_overrides or {}
+    emphasis = {word.lower() for word in (emphasis_words or ())}
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    if not ordered:
+        return {}
+
+    override_slot_ids = {slot_id for slot_id, text in overrides.items() if text.strip()}
+    explicit_override_slot_ids = set(overrides.keys())
+    auto_slots = [slot for slot in ordered if slot.id not in explicit_override_slot_ids]
+    auto_budgets = {
+        slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
+        for slot in auto_slots
+    }
+    total_auto_budget = sum(auto_budgets.values())
+    tokens = tokenize_script(script_text)
+    auto_tokens = list(tokens)
+    result: dict[str, list[CaptionChunk]] = {}
+
+    if total_auto_budget > 0 and auto_tokens:
+        allocations = _allocate_tokens(auto_tokens, auto_slots, auto_budgets)
+        for slot in auto_slots:
+            slot_tokens = allocations.get(slot.id, [])
+            result[slot.id] = _tokens_to_chunks(
+                slot_tokens,
+                slot.target_duration_s,
+                emphasis,
+            )
+    elif auto_slots:
+        for slot in auto_slots:
+            result[slot.id] = []
+
+    for slot in ordered:
+        if slot.id not in explicit_override_slot_ids:
+            continue
+        override_text = overrides[slot.id]
+        if not override_text.strip():
+            result[slot.id] = []
+            continue
+        if slot.id in override_slot_ids:
+            stored_timing = timing_overrides.get(slot.id)
+            if stored_timing and _timing_override_matches_text(stored_timing, override_text):
+                timed_words = _words_from_timing_override(stored_timing, emphasis)
+                result[slot.id] = _words_to_chunks_with_timing(timed_words)
+            else:
+                override_tokens = tokenize_script(override_text)
+                result[slot.id] = _tokens_to_chunks(
+                    override_tokens,
+                    slot.target_duration_s,
+                    emphasis,
+                )
+
+    return result
+
+
+def _distribute_by_budget(
+    items: list,
+    slots: list[StorySlot],
+    budgets: dict[str, int],
+) -> dict[str, list]:
+    """Split a list across slots proportionally to per-slot word budgets.
+
+    Every item is placed somewhere — none are dropped for exceeding a slot's
+    reading-speed budget. Budgets only steer the *proportions*; a script far
+    longer than the storyboard's total reading-speed budget still lands in
+    full across the slots (weighted toward the ones with more room), instead
+    of being silently truncated at the sum of the budgets. The actual
+    duration-safe cap per slot is enforced later, per slot, by
+    `_tokens_to_chunks` (bounded by `MIN_CHUNK_DURATION_S`), which is the
+    real constraint on how much text a single clip can render.
+    """
+    if not items:
+        return {slot.id: [] for slot in slots}
+    if not slots:
+        return {}
+
+    total_budget = sum(budgets.values())
+    allocations: dict[str, list] = {slot.id: [] for slot in slots}
+    cursor = 0
+    remaining_items = len(items)
+    remaining_budget = total_budget
+
+    for index, slot in enumerate(slots):
+        budget = budgets.get(slot.id, 0)
+        is_last = index == len(slots) - 1
+        if is_last or remaining_budget <= 0:
+            take = remaining_items
+        else:
+            share = round(remaining_items * (budget / remaining_budget))
+            take = max(0, min(remaining_items, share))
+        allocations[slot.id] = items[cursor : cursor + take]
+        cursor += take
+        remaining_items -= take
+        remaining_budget -= budget
+
+    return allocations
+
+
+def _allocate_tokens(
+    tokens: list[str],
+    slots: list[StorySlot],
+    budgets: dict[str, int],
+) -> dict[str, list[str]]:
+    """Split tokens proportionally to per-slot word budgets."""
+    return _distribute_by_budget(tokens, slots, budgets)
+
+
+def _allocate_items(
+    items: list,
+    slots: list[StorySlot],
+    budgets: dict[str, int],
+) -> dict[str, list]:
+    """Split a list proportionally to per-slot word budgets."""
+    return _distribute_by_budget(items, slots, budgets)
+
+
+def transcribed_script_in_window(
+    words: list[CaptionWord],
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> str:
+    """Join transcribed words whose midpoint falls inside the selected music window."""
+    parts: list[str] = []
+    for word in words:
+        midpoint_s = (word.start_s + word.end_s) / 2.0
+        if music_start_s <= midpoint_s < music_end_s:
+            parts.append(word.text)
+    return " ".join(parts)
+
+
+def assign_transcribed_words_to_slot_overrides(
+    words: list[CaptionWord],
+    slots: list[StorySlot],
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> dict[str, str]:
+    """Map word-level ASR timestamps into per-slot override text."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    if not ordered:
+        return {}
+
+    buckets: dict[str, list[str]] = {slot.id: [] for slot in ordered}
+    for word in words:
+        midpoint_s = (word.start_s + word.end_s) / 2.0
+        if midpoint_s < music_start_s or midpoint_s >= music_end_s:
+            continue
+        storyboard_t = midpoint_s - music_start_s
+        matched_slot = _match_word_to_slot(storyboard_t, ordered)
+        if matched_slot is not None:
+            buckets[matched_slot.id].append(word.text)
+
+    return {slot.id: " ".join(buckets[slot.id]) for slot in ordered}
+
+
+def _match_word_to_slot(
+    storyboard_t: float,
+    ordered: list[StorySlot],
+) -> StorySlot | None:
+    matched_slot: StorySlot | None = None
+    for slot in ordered:
+        if slot.out_start_s <= storyboard_t + 1e-6 and storyboard_t < slot.out_end_s - 1e-6:
+            matched_slot = slot
+            break
+    if matched_slot is None and ordered and storyboard_t >= ordered[-1].out_start_s - 1e-6:
+        matched_slot = ordered[-1]
+    return matched_slot
+
+
+def _rebase_word_to_slot_local(
+    word: CaptionWord,
+    *,
+    slot: StorySlot,
+    time_offset_s: float,
+) -> CaptionWord:
+    raw_start = word.start_s - time_offset_s
+    raw_end = word.end_s - time_offset_s
+    start_s = max(0.0, min(slot.target_duration_s, raw_start))
+    end_s = max(0.0, min(slot.target_duration_s, raw_end))
+    if end_s <= start_s and slot.target_duration_s > 0:
+        room = slot.target_duration_s - start_s
+        if room > 0:
+            end_s = start_s + min(0.05, room)
+        else:
+            start_s = max(0.0, slot.target_duration_s - 0.05)
+            end_s = slot.target_duration_s
+    return CaptionWord(
+        text=word.text,
+        start_s=round(start_s, 4),
+        end_s=round(end_s, 4),
+        emphasis=word.emphasis,
+    )
+
+
+def _synthesize_timed_words(
+    tokens: list[str],
+    slot: StorySlot,
+    emphasis: set[str],
+) -> list[CaptionWord]:
+    chunks = _tokens_to_chunks(tokens, slot.target_duration_s, emphasis)
+    words: list[CaptionWord] = []
+    for chunk in chunks:
+        words.extend(chunk.words)
+    return words
+
+
+def _word_midpoint_in_slot(word: CaptionWord, slot: StorySlot) -> bool:
+    midpoint_s = (word.start_s + word.end_s) / 2.0
+    return slot.out_start_s - 1e-6 <= midpoint_s < slot.out_end_s - 1e-6
+
+
+def _rebase_allocated_words_to_slot(
+    words: list[CaptionWord],
+    *,
+    slot: StorySlot,
+) -> list[CaptionWord]:
+    """Map budget-allocated ASR words onto a slot's local caption timeline."""
+    if not words:
+        return []
+
+    emphasis = {word.text.lower().strip(".,!?") for word in words if word.emphasis}
+    tokens = [word.text for word in words]
+    outside_count = sum(1 for word in words if not _word_midpoint_in_slot(word, slot))
+
+    if outside_count == len(words):
+        return _synthesize_timed_words(tokens, slot, emphasis)
+
+    rebased = [
+        _rebase_word_to_slot_local(word, slot=slot, time_offset_s=slot.out_start_s)
+        for word in words
+    ]
+    return rebased
+
+
+def sync_captions_to_asr(
+    asr_words: list[CaptionWord],
+    slots: list[StorySlot],
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> tuple[str, dict[str, str], dict[str, list[dict[str, float | str]]]]:
+    """Assign caption text and karaoke timing by ASR word timestamps (transcribe layout)."""
+    script_text = transcribed_script_in_window(
+        asr_words,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    slot_overrides = assign_transcribed_words_to_slot_overrides(
+        asr_words,
+        slots,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    timed_by_slot = assign_transcribed_words_with_timing_to_slots(
+        asr_words,
+        slots,
+        music_start_s=music_start_s,
+        music_end_s=music_end_s,
+    )
+    word_timing_overrides = {
+        slot_id: serialize_word_timing(slot_words)
+        for slot_id, slot_words in timed_by_slot.items()
+    }
+    return script_text, slot_overrides, word_timing_overrides
+
+
+def asr_words_from_serialized(entries: list[dict[str, float | str]]) -> list[CaptionWord]:
+    return [
+        CaptionWord(
+            text=str(entry["text"]),
+            start_s=float(entry["start_s"]),
+            end_s=float(entry["end_s"]),
+        )
+        for entry in entries
+    ]
+
+
+def assign_transcribed_words_with_timing_to_slots(
+    words: list[CaptionWord],
+    slots: list[StorySlot],
+    *,
+    music_start_s: float,
+    music_end_s: float,
+) -> dict[str, list[CaptionWord]]:
+    """Map ASR words into per-slot timed word lists in slot-local coordinates."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    if not ordered:
+        return {}
+
+    buckets: dict[str, list[CaptionWord]] = {slot.id: [] for slot in ordered}
+    for word in words:
+        midpoint_s = (word.start_s + word.end_s) / 2.0
+        if midpoint_s < music_start_s or midpoint_s >= music_end_s:
+            continue
+        storyboard_t = midpoint_s - music_start_s
+        matched_slot = _match_word_to_slot(storyboard_t, ordered)
+        if matched_slot is None:
+            continue
+        offset = music_start_s + matched_slot.out_start_s
+        buckets[matched_slot.id].append(
+            _rebase_word_to_slot_local(word, slot=matched_slot, time_offset_s=offset)
+        )
+
+    return {slot_id: bucket for slot_id, bucket in buckets.items() if bucket}
+
+
+def serialize_word_timing(words: list[CaptionWord]) -> list[dict[str, float | str]]:
+    return [
+        {"text": word.text, "start_s": word.start_s, "end_s": word.end_s}
+        for word in words
+    ]
+
+
+def distribute_words_with_timing_to_slots(
+    words: list[CaptionWord],
+    slots: list[StorySlot],
+    *,
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+) -> tuple[dict[str, str], dict[str, list[dict[str, float | str]]]]:
+    """Allocate transcribed words across slots preserving per-word timing."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    if not ordered or not words:
+        return {}, {}
+
+    budgets = {
+        slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
+        for slot in ordered
+    }
+    allocations = _allocate_items(words, ordered, budgets)
+
+    slot_overrides: dict[str, str] = {}
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] = {}
+    for slot in ordered:
+        slot_words = allocations.get(slot.id, [])
+        if not slot_words:
+            continue
+        base_start = slot_words[0].start_s
+        rebased = [
+            _rebase_word_to_slot_local(
+                word,
+                slot=slot,
+                time_offset_s=base_start,
+            )
+            for word in slot_words
+        ]
+        slot_overrides[slot.id] = " ".join(word.text for word in rebased)
+        word_timing_overrides[slot.id] = serialize_word_timing(rebased)
+
+    return slot_overrides, word_timing_overrides
+
+
+def rebase_clip_words_to_slot_local(
+    words: list[CaptionWord],
+    *,
+    slot: StorySlot,
+    speed_factor: float,
+) -> list[CaptionWord]:
+    """Convert extraction-relative ASR timing into slot-local output time."""
+    if speed_factor <= 0:
+        speed_factor = 1.0
+    rebased: list[CaptionWord] = []
+    for word in words:
+        rebased.append(
+            CaptionWord(
+                text=word.text,
+                start_s=round(
+                    max(0.0, min(slot.target_duration_s, word.start_s / speed_factor)),
+                    4,
+                ),
+                end_s=round(
+                    max(0.0, min(slot.target_duration_s, word.end_s / speed_factor)),
+                    4,
+                ),
+                emphasis=word.emphasis,
+            )
+        )
+    return rebased
+
+
+def distribute_script_to_slot_overrides(
+    script_text: str,
+    slots: list[StorySlot],
+    *,
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+) -> dict[str, str]:
+    """Allocate a full script across slots using each slot's reading-speed budget."""
+    slot_overrides, _ = distribute_script_with_timing_to_slots(
+        script_text,
+        slots,
+        words_per_second=words_per_second,
+    )
+    return slot_overrides
+
+
+def flatten_word_timing_to_storyboard_words(
+    slots: list[StorySlot],
+    word_timing_overrides: dict[str, list[dict[str, float | str]]],
+) -> list[CaptionWord]:
+    """Lift per-slot local ASR timings onto the storyboard (audio) timeline."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    words: list[CaptionWord] = []
+    for slot in ordered:
+        timing = word_timing_overrides.get(slot.id)
+        if not timing:
+            continue
+        for entry in timing:
+            text = str(entry["text"])
+            words.append(
+                CaptionWord(
+                    text=text,
+                    start_s=round(float(entry["start_s"]) + slot.out_start_s, 4),
+                    end_s=round(float(entry["end_s"]) + slot.out_start_s, 4),
+                )
+            )
+    return words
+
+
+def _count_zero_duration_words(
+    timing: dict[str, list[dict[str, float | str]]],
+) -> int:
+    return sum(
+        1
+        for words in timing.values()
+        for word in words
+        if float(word["end_s"]) <= float(word["start_s"])
+    )
+
+
+def distribute_script_with_timing_to_slots(
+    script_text: str,
+    slots: list[StorySlot],
+    *,
+    words_per_second: float = DEFAULT_WORDS_PER_SECOND,
+    word_timing_overrides: dict[str, list[dict[str, float | str]]] | None = None,
+) -> tuple[dict[str, str], dict[str, list[dict[str, float | str]]]]:
+    """Allocate script text across slots, preserving ASR word timing when still valid."""
+    ordered = sorted(slots, key=lambda slot: slot.order)
+    if not ordered:
+        return {}, {}
+
+    tokens = tokenize_script(script_text)
+    if not tokens:
+        return {}, {}
+
+    timing_overrides = word_timing_overrides or {}
+    if timing_overrides:
+        flattened = flatten_word_timing_to_storyboard_words(slots, timing_overrides)
+        flattened_tokens = [word.text for word in flattened]
+        if flattened_tokens == tokens:
+            budgets = {
+                slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
+                for slot in ordered
+            }
+            allocations = _allocate_items(flattened, ordered, budgets)
+            slot_overrides: dict[str, str] = {}
+            rebased_timing: dict[str, list[dict[str, float | str]]] = {}
+            for slot in ordered:
+                slot_words = allocations.get(slot.id, [])
+                if not slot_words:
+                    continue
+                rebased = _rebase_allocated_words_to_slot(slot_words, slot=slot)
+                slot_overrides[slot.id] = " ".join(word.text for word in rebased)
+                rebased_timing[slot.id] = serialize_word_timing(rebased)
+            zero_count = _count_zero_duration_words(rebased_timing)
+            if zero_count:
+                raise ValueError(
+                    f"Caption auto-allocate produced {zero_count} zero-duration word(s); "
+                    "ASR timing could not be rebased onto the reallocated slots."
+                )
+            return slot_overrides, rebased_timing
+
+    budgets = {
+        slot.id: suggested_word_count(slot.target_duration_s, words_per_second)
+        for slot in ordered
+    }
+    allocations = _allocate_tokens(tokens, ordered, budgets)
+    return (
+        {
+            slot_id: " ".join(slot_tokens)
+            for slot_id, slot_tokens in allocations.items()
+            if slot_tokens
+        },
+        {},
+    )
+
+
+def _tokens_to_chunks(
+    tokens: list[str],
+    slot_duration_s: float,
+    emphasis: set[str],
+) -> list[CaptionChunk]:
+    """Group tokens into 2–4 word phrase chunks with even sub-timing."""
+    if not tokens:
+        return []
+
+    max_chunks = max(1, int(slot_duration_s / MIN_CHUNK_DURATION_S))
+    max_tokens = max_chunks * PHRASE_MAX_WORDS
+    if len(tokens) > max_tokens:
+        tokens = tokens[:max_tokens]
+
+    phrase_groups = _group_into_phrases(tokens)
+    chunk_count = len(phrase_groups)
+    chunk_duration = slot_duration_s / chunk_count if chunk_count else slot_duration_s
+    chunks: list[CaptionChunk] = []
+
+    for index, group in enumerate(phrase_groups):
+        chunk_start = index * chunk_duration
+        chunk_end = (index + 1) * chunk_duration if index < chunk_count - 1 else slot_duration_s
+        word_count = len(group)
+        word_duration = (chunk_end - chunk_start) / word_count if word_count else 0.0
+        words: list[CaptionWord] = []
+        for word_index, text in enumerate(group):
+            word_start = chunk_start + word_index * word_duration
+            word_end = chunk_start + (word_index + 1) * word_duration
+            if word_index == word_count - 1:
+                word_end = chunk_end
+            words.append(
+                CaptionWord(
+                    text=text,
+                    start_s=round(word_start, 4),
+                    end_s=round(word_end, 4),
+                    emphasis=text.lower().strip(".,!?") in emphasis,
+                )
+            )
+        chunks.append(
+            CaptionChunk(
+                words=words,
+                start_s=round(chunk_start, 4),
+                end_s=round(chunk_end, 4),
+            )
+        )
+
+    return chunks
+
+
+def _timing_override_matches_text(
+    timing: list[dict[str, float | str]],
+    override_text: str,
+) -> bool:
+    stored_text = " ".join(str(word["text"]) for word in timing)
+    return stored_text.strip() == override_text.strip()
+
+
+def reconcile_word_timing_override(
+    old_timing: list[dict[str, float | str]] | None,
+    old_text: str,
+    new_text: str,
+    *,
+    min_match_ratio: float = 0.5,
+) -> list[dict[str, float | str]] | None:
+    """Align stored ASR word timings with edited override text.
+
+  Returns updated timing entries when the edit is a minor change (typo fix,
+  small insert/delete). Returns ``None`` when the rewrite is too large to
+  preserve timings safely.
+    """
+    if not old_timing:
+        return None
+
+    old_tokens = [str(word["text"]) for word in old_timing]
+    new_tokens = tokenize_script(new_text)
+    if not new_tokens:
+        return None
+
+    text_tokens = tokenize_script(old_text)
+    if text_tokens == old_tokens:
+        source_tokens = old_tokens
+    else:
+        source_tokens = text_tokens if text_tokens else old_tokens
+
+    matcher = SequenceMatcher(None, source_tokens, new_tokens)
+    if matcher.ratio() < min_match_ratio:
+        return None
+
+    if len(source_tokens) == len(new_tokens) == len(old_timing):
+        return [
+            {
+                "text": new_token,
+                "start_s": old_timing[index]["start_s"],
+                "end_s": old_timing[index]["end_s"],
+            }
+            for index, new_token in enumerate(new_tokens)
+        ]
+
+    result: list[dict[str, float | str]] = []
+    timing_index = 0
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(i2 - i1):
+                entry = dict(old_timing[timing_index + offset])
+                entry["text"] = new_tokens[j1 + offset]
+                result.append(entry)
+            timing_index = i2
+        elif tag == "replace":
+            old_len = i2 - i1
+            new_len = j2 - j1
+            if old_len != new_len:
+                return None
+            for offset in range(old_len):
+                entry = dict(old_timing[timing_index + offset])
+                entry["text"] = new_tokens[j1 + offset]
+                result.append(entry)
+            timing_index = i2
+        elif tag == "delete":
+            timing_index = i2
+        elif tag == "insert":
+            prev_end = float(result[-1]["end_s"]) if result else 0.0
+            next_start = (
+                float(old_timing[timing_index]["start_s"])
+                if timing_index < len(old_timing)
+                else prev_end + 0.1
+            )
+            gap = max(0.05, next_start - prev_end)
+            insert_count = j2 - j1
+            slot_duration = gap / insert_count if insert_count else 0.05
+            cursor = prev_end
+            for offset in range(insert_count):
+                start_s = round(cursor, 4)
+                end_s = round(min(next_start, cursor + slot_duration), 4)
+                result.append(
+                    {
+                        "text": new_tokens[j1 + offset],
+                        "start_s": start_s,
+                        "end_s": end_s,
+                    }
+                )
+                cursor = end_s
+
+    if not result:
+        return None
+
+    for index, entry in enumerate(result):
+        if float(entry["end_s"]) <= float(entry["start_s"]):
+            result[index] = {
+                **entry,
+                "end_s": round(float(entry["start_s"]) + 0.05, 4),
+            }
+
+    return result
+
+
+def _words_from_timing_override(
+    timing: list[dict[str, float | str]],
+    emphasis: set[str],
+) -> list[CaptionWord]:
+    words: list[CaptionWord] = []
+    for entry in timing:
+        text = str(entry["text"])
+        words.append(
+            CaptionWord(
+                text=text,
+                start_s=round(float(entry["start_s"]), 4),
+                end_s=round(float(entry["end_s"]), 4),
+                emphasis=text.lower().strip(".,!?") in emphasis,
+            )
+        )
+    return words
+
+
+def _split_words_at_timing_gaps(
+    words: list[CaptionWord],
+    *,
+    max_gap_s: float = PHRASE_TIMING_GAP_S,
+) -> list[list[CaptionWord]]:
+    """Split timed words when silence between consecutive words exceeds max_gap_s."""
+    if not words:
+        return []
+
+    segments: list[list[CaptionWord]] = [[words[0]]]
+    for previous, current in zip(words, words[1:]):
+        gap_s = current.start_s - previous.end_s
+        if gap_s > max_gap_s:
+            segments.append([current])
+        else:
+            segments[-1].append(current)
+    return segments
+
+
+def _words_to_chunks_with_timing(words: list[CaptionWord]) -> list[CaptionChunk]:
+    if not words:
+        return []
+
+    chunks: list[CaptionChunk] = []
+    for segment in _split_words_at_timing_gaps(words):
+        if len(segment) <= PHRASE_MAX_WORDS:
+            chunks.append(
+                CaptionChunk(
+                    words=segment,
+                    start_s=segment[0].start_s,
+                    end_s=segment[-1].end_s,
+                )
+            )
+            continue
+
+        texts = [word.text for word in segment]
+        phrase_groups = _group_into_phrases(texts)
+        cursor = 0
+        for group in phrase_groups:
+            group_words = segment[cursor : cursor + len(group)]
+            cursor += len(group)
+            if not group_words:
+                continue
+            chunks.append(
+                CaptionChunk(
+                    words=group_words,
+                    start_s=group_words[0].start_s,
+                    end_s=group_words[-1].end_s,
+                )
+            )
+    return chunks
+
+
+def _group_into_phrases(tokens: list[str]) -> list[list[str]]:
+    """Split tokens into groups of PHRASE_MIN_WORDS..PHRASE_MAX_WORDS words."""
+    if not tokens:
+        return []
+
+    group_count = max(1, math.ceil(len(tokens) / PHRASE_MAX_WORDS))
+    base_size = len(tokens) // group_count
+    remainder = len(tokens) % group_count
+
+    groups: list[list[str]] = []
+    cursor = 0
+    for group_index in range(group_count):
+        size = base_size + (1 if group_index < remainder else 0)
+        size = max(PHRASE_MIN_WORDS, min(PHRASE_MAX_WORDS, size))
+        if group_index == group_count - 1:
+            group = tokens[cursor:]
+        else:
+            group = tokens[cursor : cursor + size]
+            cursor += size
+        if group:
+            groups.append(group)
+
+    if groups and sum(len(group) for group in groups) < len(tokens):
+        leftover = tokens[cursor:]
+        if leftover:
+            groups[-1].extend(leftover)
+
+    # Re-balance any group outside 2–4 words by merging/splitting.
+    balanced: list[list[str]] = []
+    pending: list[str] = []
+    for token in tokens:
+        pending.append(token)
+        if len(pending) >= PHRASE_MAX_WORDS:
+            balanced.append(pending[:PHRASE_MAX_WORDS])
+            pending = pending[PHRASE_MAX_WORDS:]
+        elif len(pending) >= PHRASE_MIN_WORDS and len(tokens) - sum(
+            len(group) for group in balanced
+        ) - len(pending) <= PHRASE_MIN_WORDS:
+            balanced.append(pending)
+            pending = []
+
+    if pending:
+        if balanced and len(pending) < PHRASE_MIN_WORDS:
+            balanced[-1].extend(pending)
+        else:
+            balanced.append(pending)
+
+    return balanced or groups
+
+
+def build_caption_chunks_for_slots(
+    caption_config,
+    slots: list[StorySlot],
+    *,
+    emphasis_words: list[str] | None = None,
+) -> dict[str, list[CaptionChunk]]:
+    """Build per-slot caption chunks from a caption config and ordered slots."""
+    emphasis = {word.lower() for word in (emphasis_words or ())}
+    return split_script_into_chunks(
+        caption_config.script_text,
+        slots,
+        words_per_second=caption_config.words_per_second,
+        slot_overrides=caption_config.slot_overrides,
+        word_timing_overrides=caption_config.word_timing_overrides,
+        emphasis_words=emphasis,
+    )

@@ -67,6 +67,8 @@ export interface MusicBlock {
   section_label: string | null;
   key: string | null;
   is_repeated_section: boolean;
+  expected_slot_count?: number | null;
+  preset_target_duration_s?: number | null;
 }
 
 export interface MusicSection {
@@ -128,6 +130,7 @@ export interface WaveformPayload {
   lanes: ScopeLaneSeries[];
   chroma: ChromaGram | null;
   blocks: MusicBlock[];
+  all_blocks?: MusicBlock[];
   selected_block_id: string | null;
   target_match_failed?: boolean;
   suggested_target_duration_s?: number | null;
@@ -207,6 +210,7 @@ export interface StoryboardPayload {
   total_duration_s: number;
   loop_to_hook: boolean;
   preview_ready: boolean;
+  render_ready: boolean;
   teaser: TeaserSettings;
   spatial_fx: SpatialFxSettings;
   retention: RetentionSettings;
@@ -234,7 +238,7 @@ export interface StoryboardSegmentsDebugPayload {
   };
 }
 
-export type TeaserMask = "vignette" | "dir_blur";
+export type TeaserMask = "vignette" | "dir_blur" | "none";
 
 export interface TeaserSettings {
   enabled: boolean;
@@ -316,4 +320,87 @@ export interface AudioTimeline {
   audio_duration_seconds: number;
   sample_rate: number;
   transients: Transient[];
+}
+
+export type CaptionPosition = "top" | "center" | "bottom";
+
+export interface CaptionStylePayload {
+  font_family: string;
+  fill_color: string;
+  emphasis_color: string;
+  outline_color: string;
+  outline_enabled: boolean;
+  box_enabled: boolean;
+  box_color: string;
+  position: CaptionPosition;
+  size_scale: number;
+  safe_padding_pct: number;
+  karaoke_enabled: boolean;
+}
+
+export interface CaptionWordPayload {
+  text: string;
+  start_s: number;
+  end_s: number;
+  emphasis: boolean;
+}
+
+export interface CaptionChunkPayload {
+  words: CaptionWordPayload[];
+  start_s: number;
+  end_s: number;
+}
+
+export interface SlotCaptionBudget {
+  slot_id: string;
+  label: string;
+  duration_s: number;
+  suggested_words: number;
+  actual_words: number;
+  has_asr_timing: boolean;
+  chunks: CaptionChunkPayload[];
+}
+
+export interface WpsPresetPayload {
+  words_per_second: number;
+  label: string;
+}
+
+export interface CaptionPayload {
+  script_text: string;
+  words_per_second: number;
+  hook_text: string;
+  emphasis_words: string[];
+  hook_style: CaptionStylePayload;
+  caption_style: CaptionStylePayload;
+  slot_overrides: Record<string, string>;
+  slot_budgets: SlotCaptionBudget[];
+  wps_presets: WpsPresetPayload[];
+  transcribe_available: boolean;
+  audio_sync_available: boolean;
+}
+
+export interface CaptionPatchInput {
+  script_text?: string;
+  words_per_second?: number;
+  hook_text?: string;
+  emphasis_words?: string[];
+  hook_style?: Partial<CaptionStylePayload>;
+  caption_style?: Partial<CaptionStylePayload>;
+  slot_overrides?: Record<string, string>;
+  word_timing_overrides?: Record<
+    string,
+    Array<{ text: string; start_s: number; end_s: number }>
+  >;
+  karaoke_enabled?: boolean;
+  cleanup?: boolean;
+  auto_allocate?: boolean;
+  audio_sync?: boolean;
+}
+
+export type TranscribeSource = "audio_track" | "clips" | "custom";
+
+export interface TranscribeOptions {
+  language: string;
+  translate: boolean;
 }

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import librosa
 import numpy as np
+import soundfile as sf
 import torch
 from demucs.apply import apply_model
 from demucs.audio import convert_audio
@@ -542,3 +543,51 @@ def compute_vocal_activity(
         float(activity.mean()) if activity.size else 0.0,
     )
     return activity
+
+
+ASR_VOCAL_SAMPLE_RATE = 16_000
+
+
+def export_vocal_stem_wav_for_asr(
+    audio_path: Path,
+    dest_wav: Path,
+    *,
+    job_cache_path: Path | None = None,
+) -> tuple[Path, float] | None:
+    """Write an isolated vocal stem WAV for Whisper when vocals are present in the mix."""
+    vocals, sr, shares = separate_vocal_stem(
+        audio_path,
+        cache_path=job_cache_path,
+        cache_enabled=True,
+    )
+    vocal_share = float(shares.get("vocals", 0.0))
+    if vocal_share < VOCAL_STEM_SHARE_MIN:
+        logger.info(
+            "Skipping vocal-stem ASR for %s — vocal share %.3f below %.2f",
+            audio_path.name,
+            vocal_share,
+            VOCAL_STEM_SHARE_MIN,
+        )
+        return None
+
+    samples = vocals.astype(np.float32)
+    if sr != ASR_VOCAL_SAMPLE_RATE:
+        samples = librosa.resample(
+            samples,
+            orig_sr=sr,
+            target_sr=ASR_VOCAL_SAMPLE_RATE,
+        ).astype(np.float32)
+
+    peak = float(np.max(np.abs(samples))) if samples.size else 0.0
+    if peak > 1e-6:
+        samples = (samples / peak * 0.95).astype(np.float32)
+
+    dest_wav.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(str(dest_wav), samples, ASR_VOCAL_SAMPLE_RATE, subtype="PCM_16")
+    logger.info(
+        "Exported vocal stem for ASR — %.1fs @ %d Hz (vocal share %.3f)",
+        samples.size / ASR_VOCAL_SAMPLE_RATE,
+        ASR_VOCAL_SAMPLE_RATE,
+        vocal_share,
+    )
+    return dest_wav, vocal_share

@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { loopSeamPreviewUrl, previewAudioUrl } from "../api/client";
-import { TARGET_DURATION_PRESETS } from "../constants/durations";
+import { SLOT_COUNT_PRESETS, TARGET_DURATION_PRESETS } from "../constants/durations";
+import { filterBlocks } from "../utils/blockFilter";
 import type { MusicBlock, WaveformPayload } from "../types";
+import {
+  SLOT_ANY_CHIP_ID,
+  TARGET_ANY_CHIP_ID,
+  blockInstanceKey,
+  blockPoolFromWaveform,
+  durationPresetsWithBlocks,
+  isBlockInstanceSelected,
+  slotBlockCountsFromPool,
+} from "./audioScopeHelpers";
 import { MusicBlockCard, type PreviewMode } from "./MusicBlockCard";
 import { ScopeCanvas, blockPixelRange, scopeWidth } from "./ScopeCanvas";
 import {
@@ -20,6 +30,10 @@ interface AudioScopePanelProps {
   selectedBlockId: string | null;
   onTargetChange: (targetDurationS: number, useFullTrack: boolean) => void;
   onSelectBlock: (block: MusicBlock) => void;
+  targetDurationFilter: number | null;
+  onTargetDurationFilterChange: (value: number | null) => void;
+  selectedSlotCount: number | null;
+  onSlotCountChange: (count: number | null) => void;
   embedded?: boolean;
   switchingTarget?: boolean;
 }
@@ -56,6 +70,7 @@ function ChipSwitchOverlay({
 }
 
 function fallbackFullTrackBlock(waveform: WaveformPayload): MusicBlock {
+  const slotCount = Math.max(1, Math.min(8, Math.round(waveform.duration_s / 4)));
   return {
     id: "block_full",
     start_s: 0,
@@ -71,6 +86,7 @@ function fallbackFullTrackBlock(waveform: WaveformPayload): MusicBlock {
     section_label: null,
     key: waveform.key,
     is_repeated_section: false,
+    expected_slot_count: slotCount,
   };
 }
 
@@ -105,6 +121,10 @@ export function AudioScopePanel({
   selectedBlockId,
   onTargetChange,
   onSelectBlock,
+  targetDurationFilter,
+  onTargetDurationFilterChange,
+  selectedSlotCount,
+  onSlotCountChange,
   embedded = false,
   switchingTarget = false,
 }: AudioScopePanelProps) {
@@ -113,7 +133,7 @@ export function AudioScopePanel({
   const detailScrollRef = useRef<HTMLDivElement>(null);
   const detailPanelId = useId();
   const [detailOpen, setDetailOpen] = useState(false);
-  const [playingBlockId, setPlayingBlockId] = useState<string | null>(null);
+  const [playingBlockKey, setPlayingBlockKey] = useState<string | null>(null);
   const [playingMode, setPlayingMode] = useState<PreviewMode | null>(null);
 
   useEffect(() => {
@@ -124,7 +144,7 @@ export function AudioScopePanel({
 
   const stopPreview = () => {
     audioRef.current?.pause();
-    setPlayingBlockId(null);
+    setPlayingBlockKey(null);
     setPlayingMode(null);
   };
 
@@ -134,7 +154,8 @@ export function AudioScopePanel({
   }, [switchingTarget]);
 
   const handlePreview = (block: MusicBlock, mode: PreviewMode) => {
-    if (playingBlockId === block.id && playingMode === mode) {
+    const instanceKey = blockInstanceKey(block);
+    if (playingBlockKey === instanceKey && playingMode === mode) {
       stopPreview();
       return;
     }
@@ -152,12 +173,39 @@ export function AudioScopePanel({
         : previewAudioUrl(jobId, block.start_s, block.end_s);
     audio.currentTime = 0;
     void audio.play();
-    setPlayingBlockId(block.id);
+    setPlayingBlockKey(instanceKey);
     setPlayingMode(mode);
   };
 
   const blocks =
     waveform.blocks.length > 0 ? waveform.blocks : [fallbackFullTrackBlock(waveform)];
+
+  const blockPool = useMemo(
+    () => blockPoolFromWaveform(waveform, blocks),
+    [waveform, blocks],
+  );
+
+  const filteredBlocks = useMemo(
+    () => filterBlocks(blockPool, targetDurationFilter, selectedSlotCount),
+    [blockPool, targetDurationFilter, selectedSlotCount],
+  );
+
+  const slotBlockCounts = useMemo(() => {
+    const targetScopedPool = filterBlocks(blockPool, targetDurationFilter, null);
+    return slotBlockCountsFromPool(
+      targetScopedPool,
+      SLOT_COUNT_PRESETS.map((preset) => preset.value),
+    );
+  }, [blockPool, targetDurationFilter]);
+
+  const durationPresetsInPool = useMemo(
+    () =>
+      durationPresetsWithBlocks(
+        filterBlocks(blockPool, null, selectedSlotCount),
+        TARGET_DURATION_PRESETS.map((preset) => preset.value),
+      ),
+    [blockPool, selectedSlotCount],
+  );
 
   const scrollBlockIntoView = useCallback(
     (block: MusicBlock) => {
@@ -258,6 +306,7 @@ export function AudioScopePanel({
 
   return (
     <section
+      id="audio-scope-panel"
       className={
         embedded
           ? "space-y-4 pt-4"
@@ -266,10 +315,10 @@ export function AudioScopePanel({
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          <h2 id="audio-scope-panel-title" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             Audio scope
           </h2>
-          <p className="mt-1 font-mono text-sm text-scope-trace">
+          <p id="audio-scope-panel-track-info" className="mt-1 font-mono text-sm text-scope-trace">
             {waveform.global_bpm.toFixed(1)} BPM · {waveform.duration_s.toFixed(1)}s track
             {waveform.key ? ` · ${waveform.key}` : ""}
             {waveform.beat_engine ? ` · ${waveform.beat_engine}` : ""}
@@ -279,11 +328,25 @@ export function AudioScopePanel({
           <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
             Target short length
           </span>
+          <button
+            id={TARGET_ANY_CHIP_ID}
+            type="button"
+            disabled={switchingTarget}
+            className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
+              targetDurationFilter === null
+                ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+                : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+            }`}
+            onClick={() => onTargetDurationFilterChange(null)}
+          >
+            Any
+          </button>
           {TARGET_DURATION_PRESETS.map((preset) => {
             const matchable = isPresetMatchable(preset.value);
-            const active = !useFullTrack && targetDurationS === preset.value;
+            const active = targetDurationFilter === preset.value;
             const switching = switchingTarget && active;
-            const unavailable = !matchable && !active;
+            const hasBlocks = durationPresetsInPool.has(preset.value);
+            const unavailable = (!matchable || !hasBlocks) && !active;
             const loopQualityPct = loopQualityByPreset.get(preset.value);
             const isBestLoop =
               bestLoopPresets.has(preset.value) && !active && matchable;
@@ -301,18 +364,20 @@ export function AudioScopePanel({
                   : undefined;
             return (
             <button
+              id={`audio-scope-panel-target-${preset.value}`}
               key={preset.value}
               type="button"
               disabled={unavailable || switchingTarget}
               title={qualityTitle}
               className={durationChipClass(active, unavailable, isBestLoop)}
-              onClick={() => onTargetChange(preset.value, false)}
+              onClick={() =>
+                onTargetDurationFilterChange(active ? null : preset.value)
+              }
             >
               <ChipSwitchOverlay switching={switching}>
-                <span>{preset.label}</span>
+                <span id={`audio-scope-panel-target-label-${preset.value}`}>{preset.label}</span>
                 {loopQualityPct != null && (
-                  <span
-                    className={`ml-1 text-[10px] ${
+                  <span id={`audio-scope-panel-target-pct-${preset.value}`} className={`ml-1 text-[10px] ${
                       active
                         ? "text-hook-gold/75"
                         : isBestLoop
@@ -328,6 +393,7 @@ export function AudioScopePanel({
             );
           })}
           <button
+            id="audio-scope-panel-full-btn"
             type="button"
             disabled={switchingTarget}
             className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
@@ -340,24 +406,74 @@ export function AudioScopePanel({
             <ChipSwitchOverlay
               switching={switchingTarget && (useFullTrack || trackShorterThanTarget)}
             >
-              <span>Full</span>
+              <span id="audio-scope-panel-full-label">Full</span>
             </ChipSwitchOverlay>
           </button>
         </div>
       </div>
 
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div />
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-monitor-muted">
+            Slots
+          </span>
+          <button
+            id={SLOT_ANY_CHIP_ID}
+            type="button"
+            className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
+              selectedSlotCount === null
+                ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+                : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+            }`}
+            onClick={() => onSlotCountChange(null)}
+          >
+            Any
+          </button>
+          {SLOT_COUNT_PRESETS.map((preset) => {
+            const maxSlots = waveform.duration_s > 0 ? Math.floor(waveform.duration_s / 0.5) : 0;
+            const unavailable = preset.value > Math.min(maxSlots, 10);
+            const availableCount = slotBlockCounts.get(preset.value) ?? 0;
+            const disabled = unavailable || availableCount === 0;
+            const active = selectedSlotCount === preset.value;
+            return (
+              <button
+                id={`audio-scope-panel-slot-${preset.value}`}
+                key={preset.value}
+                type="button"
+                disabled={disabled}
+                className={`rounded border px-2.5 py-1 font-mono text-xs transition ${
+                  active
+                    ? "border-hook-gold bg-hook-gold/15 text-hook-gold"
+                    : unavailable
+                      ? "cursor-not-allowed border border-monitor-border/50 text-monitor-muted/40"
+                      : availableCount === 0
+                        ? "cursor-not-allowed border border-monitor-border/50 text-monitor-muted/40"
+                        : "border-monitor-border text-monitor-muted hover:border-scope-dim"
+                }`}
+                onClick={() => onSlotCountChange(active ? null : preset.value)}
+              >
+                <span id={`audio-scope-panel-slot-label-${preset.value}`}>slots {preset.value}:{availableCount}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="space-y-1">
         {scopeContentWidth > 960 && (
-          <p className="font-mono text-[10px] text-monitor-muted">
+          <p id="audio-scope-panel-scroll-hint" className="font-mono text-[10px] text-monitor-muted">
             Scroll horizontally to inspect the full track
           </p>
         )}
         <div
+          id="audio-scope-panel-scroll-container"
           ref={scopeScrollRef}
           className="overflow-x-auto pb-1"
           onScroll={detailOpen ? syncHorizontalScroll("scope") : undefined}
         >
           <div
+            id="audio-scope-panel-waveform-container"
             className="overflow-hidden rounded border border-monitor-border bg-[#141618]"
             style={{ width: scopeContentWidth }}
           >
@@ -368,14 +484,18 @@ export function AudioScopePanel({
               sections={waveform.sections}
               beats={waveform.beats ?? []}
               downbeats={waveform.downbeats}
-              blocks={blocks}
+              blocks={filteredBlocks}
               selectedBlockId={selectedBlockId}
-              playingBlockId={playingBlockId}
+              playingBlockId={
+                playingBlockKey
+                  ? filteredBlocks.find((entry) => blockInstanceKey(entry) === playingBlockKey)?.id ?? null
+                  : null
+              }
               onSelectBlock={switchingTarget ? undefined : onSelectBlock}
             />
           </div>
         </div>
-        <ScopeLegend />
+        <section id="audio-scope-panel-legend"><ScopeLegend /></section>
         {showDetailRack && (
           <MusicDetailRackToggle
             open={detailOpen}
@@ -386,6 +506,7 @@ export function AudioScopePanel({
         )}
         {showDetailRack && detailOpen && (
           <div
+            id="audio-scope-panel-detail-scroll"
             ref={detailScrollRef}
             className="overflow-x-auto pb-1"
             onScroll={syncHorizontalScroll("detail")}
@@ -403,7 +524,7 @@ export function AudioScopePanel({
 
       <div className="space-y-2">
         {(trackShorterThanTarget || targetMismatch) && !switchingTarget && (
-          <p className="text-sm text-monitor-muted">
+          <p id="audio-scope-panel-mismatch-msg" className="text-sm text-monitor-muted">
             {trackShorterThanTarget
               ? "Track is shorter than the target — the full track will drive the render."
               : suggestedTarget != null
@@ -412,8 +533,12 @@ export function AudioScopePanel({
           </p>
         )}
         <div className="flex items-center gap-2">
-          {switchingTarget && <TargetSwitchSpinner />}
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
+          {switchingTarget && (
+            <span id="audio-scope-panel-spinner">
+              <TargetSwitchSpinner />
+            </span>
+          )}
+          <p id="audio-scope-panel-blocks-label" className="font-mono text-[10px] uppercase tracking-[0.2em] text-monitor-muted">
             {switchingTarget
               ? "Updating blocks…"
               : onlyFullTrack
@@ -422,16 +547,19 @@ export function AudioScopePanel({
           </p>
         </div>
         <div
+          id="audio-scope-panel-block-list"
           className={`space-y-2 ${
             switchingTarget ? "pointer-events-none opacity-45" : ""
           }`}
         >
-          {blocks.map((block) => (
+          {filteredBlocks.map((block) => (
             <MusicBlockCard
-              key={block.id}
+              key={blockInstanceKey(block)}
               block={block}
-              selected={block.id === selectedBlockId}
-              playingMode={playingBlockId === block.id ? playingMode : null}
+              selected={isBlockInstanceSelected(block, selectedBlockId, targetDurationS)}
+              playingMode={
+                playingBlockKey === blockInstanceKey(block) ? playingMode : null
+              }
               onSelect={() => onSelectBlock(block)}
               onAudition={() => handlePreview(block, "audition")}
               onLoopPreview={() => handlePreview(block, "loop")}

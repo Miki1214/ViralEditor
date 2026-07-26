@@ -4,6 +4,11 @@ export function isHookFamilyRole(role: StorySlot["role"]): boolean {
   return role === "hook" || role === "hook_start" || role === "hook_end";
 }
 
+/** Default crop-end applied right after a clip is uploaded/dropped onto a slot. */
+export function defaultAssignCropEndS(_role: StorySlot["role"], clipDurationS: number): number {
+  return clipDurationS;
+}
+
 /** Hook output budget (seconds) — sum of hook_start + hook_end targets, or single hook slot. */
 export function hookSourceBudgetS(storyboard: StoryboardPayload, slot: StorySlot): number {
   if (slot.role === "hook") {

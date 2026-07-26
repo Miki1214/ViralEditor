@@ -12,9 +12,11 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse, StreamingResponse
 
 from viral_editor.api.music import (
+    collect_all_blocks_from_catalog,
     load_audio_timeline,
     load_beat_features,
     target_loop_qualities_from_artifacts,
+    load_music_block_catalog,
     load_music_blocks,
     load_music_structure,
     load_onset_envelope,
@@ -31,7 +33,9 @@ from viral_editor.api.clips import (
     speed_planning_context,
 )
 from viral_editor.video.clip_reel import clip_paths_by_id
+from viral_editor.api.caption import apply_caption_style_patch, build_caption_response
 from viral_editor.api.runner import build_job_config, start_job
+from viral_editor.api.render_job import start_final_render
 from viral_editor.api.storyboard import (
     apply_storyboard_patch,
     assign_slot_clip,
@@ -75,6 +79,9 @@ from viral_editor.api.schemas import (
     StoryboardSegmentDebugRow,
     StorySlotResponse,
     TeaserSettingsResponse,
+    CaptionPatchRequest,
+    CaptionResponse,
+    TranscribeCaptionResponse,
 )
 from viral_editor.api.effects import (
     apply_effects_patch,
@@ -89,17 +96,67 @@ from viral_editor.api.speed import (
 from viral_editor.api.store import JobStore, job_workspace, save_upload, write_job_config
 from viral_editor.audio.preview import ensure_audio_preview
 from viral_editor.audio.waveform import build_waveform_payload
-from viral_editor.config import ConfigError
-from viral_editor.models import ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
+from viral_editor.auto_rotate_settings import load_auto_rotate_settings
+from viral_editor.config import ConfigError, RenderConfig
+from viral_editor.ingest.loader import probe_media
+from viral_editor.video.auto_rotate import run_auto_rotation
+from viral_editor.utils.ffmpeg import FFmpegError
+from viral_editor.models import CaptionStyle, ClipInput, SpeedRampOptionSet, StorySlot, WaveformPayload
+from viral_editor.audio.captions import build_caption_chunks_for_slots
 from viral_editor.audio.storyboard import (
     assigned_storyboard_slots,
     remap_fx_events_for_composite,
     storyboard_filled_enough,
+    storyboard_slots_complete,
     storyboard_to_segments,
 )
 from viral_editor.pipeline import PIPELINE_STAGES
-from viral_editor.utils.ffmpeg import FFmpegError
+from viral_editor.audio.transcribe import (
+    TranscribeOptions,
+    normalize_transcribe_language,
+    transcribe_available,
+)
+from viral_editor.audio.transcribe_sources import (
+    transcribe_from_audio_track,
+    transcribe_from_clips,
+    transcribe_from_custom_upload,
+)
 from viral_editor.video.proxy_render import render_composite, render_speed_proxy
+
+
+def _target_aspect_ratio(
+    *,
+    render_width: int | None = None,
+    render_height: int | None = None,
+) -> float:
+    defaults = RenderConfig()
+    width = render_width or defaults.width
+    height = render_height or defaults.height
+    return width / height
+
+
+def _detect_upload_rotation_deg(
+    clip_path: Path,
+    media,
+    *,
+    workspace: Path,
+    clip_id: str,
+    target_aspect: float | None = None,
+) -> int:
+    settings = load_auto_rotate_settings()
+    if not settings.enabled:
+        return 0
+    aspect = target_aspect if target_aspect is not None else _target_aspect_ratio()
+    return run_auto_rotation(
+        clip_path,
+        media,
+        clip_id=clip_id,
+        target_aspect=aspect,
+        settings=settings,
+        log_dir=workspace / "temp" / "rotation_log",
+        scratch_dir=workspace / "temp" / "auto_rotate_scratch" / clip_id,
+    )
+
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -197,15 +254,24 @@ async def create_job(
         clip_id = str(meta.get("id", default_id))
         video_name = Path(upload.filename or f"{clip_id}.mp4").name
         save_upload(video_bytes, input_dir / video_name)
+        clip_path = (input_dir / video_name).resolve()
+        media = probe_media(clip_path)
+        detected_rotation = _detect_upload_rotation_deg(
+            clip_path,
+            media,
+            workspace=workspace,
+            clip_id=clip_id,
+        )
         clip_inputs.append(
             ClipInput(
                 id=clip_id,
-                path=(input_dir / video_name).resolve(),
+                path=clip_path,
                 order=int(meta.get("order", index)),
                 included=bool(meta.get("included", True)),
                 role=meta.get("role", "clip"),
                 crop_start_s=meta.get("crop_start_s"),
                 crop_end_s=meta.get("crop_end_s"),
+                rotation_deg=detected_rotation,
             )
         )
 
@@ -346,6 +412,30 @@ def get_output(job_id: str, request: Request) -> FileResponse:
     return FileResponse(output_path, media_type="video/mp4", filename="result.mp4")
 
 
+@router.post("/{job_id}/render", status_code=202)
+def start_job_render(job_id: str, request: Request) -> dict[str, str]:
+    """Encode the final 1080p MP4 when all storyboard slots have clips assigned."""
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status == "running":
+        raise HTTPException(status_code=409, detail="Job is already running")
+
+    temp_dir = job.workspace / "temp"
+    storyboard = load_storyboard(temp_dir)
+    if storyboard is None:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    if not storyboard_slots_complete(storyboard):
+        raise HTTPException(
+            status_code=400,
+            detail="Assign clips to all storyboard slots before rendering",
+        )
+
+    start_final_render(store, job_id)
+    return {"status": "rendering"}
+
+
 @router.get("/{job_id}/audio/waveform", response_model=WaveformPayload)
 def get_waveform(job_id: str, request: Request) -> WaveformPayload:
     job = _store(request).get(job_id)
@@ -369,6 +459,25 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
             selected_block_id=job.config.music.selected_block_id,
         )
 
+    # Normalize expected_slot_count on any blocks that are missing it.
+    # This handles cached music_blocks.json / catalog entries written before this field existed.
+    from viral_editor.audio.storyboard import _recommended_slot_count
+
+    if block_plan.blocks:
+        updated_blocks = [
+            block.model_copy(
+                update={
+                    "expected_slot_count": (
+                        block.expected_slot_count
+                        if block.expected_slot_count is not None
+                        else _recommended_slot_count(block.duration_s)
+                    )
+                }
+            )
+            for block in block_plan.blocks
+        ]
+        block_plan = block_plan.model_copy(update={"blocks": updated_blocks})
+
     features = load_beat_features(temp_dir)
     loop_qualities = (
         target_loop_qualities_from_artifacts(temp_dir, timeline, features)
@@ -376,7 +485,10 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
         else None
     )
 
-    return build_waveform_payload(
+    catalog = load_music_block_catalog(temp_dir)
+    all_blocks = collect_all_blocks_from_catalog(catalog)
+
+    payload = build_waveform_payload(
         timeline,
         envelope,
         block_plan,
@@ -385,6 +497,7 @@ def get_waveform(job_id: str, request: Request) -> WaveformPayload:
         scope_lanes=load_scope_lanes(temp_dir),
         loop_qualities=loop_qualities,
     )
+    return payload.model_copy(update={"all_blocks": all_blocks})
 
 
 @router.get("/{job_id}/audio/preview")
@@ -697,6 +810,7 @@ def _storyboard_response(
         total_duration_s=storyboard.total_duration_s,
         loop_to_hook=storyboard.loop_to_hook,
         preview_ready=preview_ready,
+        render_ready=storyboard_slots_complete(storyboard),
         teaser=TeaserSettingsResponse(
             **teaser_settings_response(config, storyboard, temp_dir),
         ),
@@ -826,11 +940,16 @@ def patch_effects(
         raise HTTPException(status_code=404, detail="Storyboard not found")
 
     updated_config = apply_effects_patch(job.config, payload)
+    teaser_layout_fields: set[str] = set()
+    if payload.teaser is not None:
+        teaser_layout_fields = set(payload.teaser.model_dump(exclude_unset=True))
     updated_storyboard = refresh_hook_inversion_layout(
         storyboard,
         updated_config,
         temp_dir=temp_dir,
-        reshape_crops=payload.teaser is not None,
+        reshape_crops=bool(
+            teaser_layout_fields & {"enabled", "duration_s", "tail_fraction"}
+        ),
     )
     updated_config = sync_teaser_duration_from_layout(updated_config, updated_storyboard)
     updated_config = sync_config_clips_from_storyboard(updated_config, updated_storyboard)
@@ -938,8 +1057,6 @@ async def assign_slot_video(
     input_dir = job.workspace / "input"
     save_upload(video_bytes, input_dir / video_name)
     clip_path = (input_dir / video_name).resolve()
-    from viral_editor.ingest.loader import probe_media
-
     media = probe_media(clip_path)
 
     spatial_crop = None
@@ -951,6 +1068,20 @@ async def assign_slot_video(
         except (json.JSONDecodeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail="Invalid spatial_crop_json") from exc
 
+    if rotation_deg is None:
+        effective_rotation = _detect_upload_rotation_deg(
+            clip_path,
+            media,
+            workspace=job.workspace,
+            clip_id=clip_id,
+            target_aspect=_target_aspect_ratio(
+                render_width=job.config.render.width,
+                render_height=job.config.render.height,
+            ),
+        )
+    else:
+        effective_rotation = int(rotation_deg) % 360
+
     updated_storyboard = assign_slot_clip(
         storyboard,
         slot_id,
@@ -959,7 +1090,7 @@ async def assign_slot_video(
         crop_start_s=crop_start_s,
         crop_end_s=crop_end_s,
         media=media,
-        rotation_deg=rotation_deg or 0,
+        rotation_deg=effective_rotation,
         spatial_crop=spatial_crop,
     )
     updated_storyboard = refresh_hook_inversion_layout(
@@ -1166,6 +1297,293 @@ def _segment_transform_for_slot(slot: StorySlot) -> tuple[int, str, tuple[float,
     return (slot.rotation_deg, slot.fit_mode, spatial)
 
 
+@router.get("/{job_id}/caption", response_model=CaptionResponse)
+def get_caption(job_id: str, request: Request) -> CaptionResponse:
+    job = _store(request).get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    storyboard = load_storyboard(job.workspace / "temp")
+    return build_caption_response(job.config, storyboard)
+
+
+@router.patch("/{job_id}/caption", response_model=CaptionResponse)
+def patch_caption(
+    job_id: str,
+    payload: CaptionPatchRequest,
+    request: Request,
+) -> CaptionResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    config = job.config
+    caption = config.caption
+    hook = config.hook
+    hook_style = config.hook_style
+    storyboard = load_storyboard(job.workspace / "temp")
+
+    if payload.cleanup:
+        from viral_editor.audio.captions import cleanup_caption_texts, cleanup_script_text, cleanup_slot_overrides
+
+        script_source = (
+            payload.script_text if payload.script_text is not None else caption.script_text
+        )
+        overrides_source = (
+            payload.slot_overrides
+            if payload.slot_overrides is not None
+            else caption.slot_overrides
+        )
+        if storyboard and storyboard.slots:
+            script_text, slot_overrides = cleanup_caption_texts(
+                script_text=script_source,
+                slot_overrides=overrides_source,
+                slots=storyboard.slots,
+                words_per_second=caption.words_per_second,
+                word_timing_overrides=caption.word_timing_overrides,
+                emphasis_words=hook.emphasis_words,
+            )
+        else:
+            script_text = cleanup_script_text(script_source)
+            slot_overrides = cleanup_slot_overrides(overrides_source)
+        caption = caption.model_copy(
+            update={"script_text": script_text, "slot_overrides": slot_overrides}
+        )
+    elif payload.script_text is not None:
+        caption = caption.model_copy(update={"script_text": payload.script_text})
+    if payload.words_per_second is not None:
+        caption = caption.model_copy(update={"words_per_second": payload.words_per_second})
+    if (
+        (payload.slot_overrides is not None or payload.word_timing_overrides is not None)
+        and not payload.cleanup
+        and not payload.auto_allocate
+        and not payload.audio_sync
+    ):
+        from viral_editor.audio.captions import reconcile_word_timing_override
+
+        new_slot_overrides = dict(caption.slot_overrides)
+        new_timing = dict(caption.word_timing_overrides)
+        explicit_timing_slots: set[str] = set()
+
+        if payload.word_timing_overrides is not None:
+            for slot_id, timing in payload.word_timing_overrides.items():
+                if timing:
+                    new_timing[slot_id] = timing
+                else:
+                    new_timing.pop(slot_id, None)
+                    new_slot_overrides[slot_id] = ""
+            explicit_timing_slots = set(payload.word_timing_overrides.keys())
+
+        if payload.slot_overrides is not None:
+            for slot_id, new_text in payload.slot_overrides.items():
+                if new_text.strip():
+                    new_slot_overrides[slot_id] = new_text
+                else:
+                    new_slot_overrides[slot_id] = ""
+                    new_timing.pop(slot_id, None)
+                    continue
+                if slot_id in explicit_timing_slots:
+                    continue
+                old_text = caption.slot_overrides.get(slot_id, "")
+                if new_text.strip() == old_text.strip():
+                    continue
+                old_timing = caption.word_timing_overrides.get(slot_id)
+                if not old_timing:
+                    continue
+                reconciled = reconcile_word_timing_override(old_timing, old_text, new_text)
+                if reconciled is not None:
+                    new_timing[slot_id] = reconciled
+                else:
+                    new_timing.pop(slot_id, None)
+
+        caption = caption.model_copy(
+            update={
+                "slot_overrides": new_slot_overrides,
+                "word_timing_overrides": new_timing,
+            }
+        )
+
+    if payload.auto_allocate:
+        from viral_editor.audio.captions import distribute_script_to_slot_overrides
+
+        if storyboard and storyboard.slots:
+            slot_overrides = distribute_script_to_slot_overrides(
+                caption.script_text,
+                storyboard.slots,
+                words_per_second=caption.words_per_second,
+            )
+            caption = caption.model_copy(
+                update={
+                    "slot_overrides": slot_overrides,
+                    "word_timing_overrides": {},
+                }
+            )
+
+    if payload.audio_sync:
+        from viral_editor.audio.captions import asr_words_from_serialized, sync_captions_to_asr
+
+        if not caption.asr_words:
+            raise HTTPException(
+                status_code=400,
+                detail="No transcription data stored. Run Auto-transcribe first.",
+            )
+        if storyboard is None or not storyboard.slots:
+            raise HTTPException(status_code=400, detail="Storyboard with slots required")
+        asr_words = asr_words_from_serialized(caption.asr_words)
+        script_text, slot_overrides, word_timing_overrides = sync_captions_to_asr(
+            asr_words,
+            storyboard.slots,
+            music_start_s=storyboard.music_start_s,
+            music_end_s=storyboard.music_end_s,
+        )
+        caption = caption.model_copy(
+            update={
+                "script_text": script_text,
+                "slot_overrides": slot_overrides,
+                "word_timing_overrides": word_timing_overrides,
+            }
+        )
+    if payload.caption_style is not None:
+        caption = caption.model_copy(
+            update={"style": apply_caption_style_patch(caption.style, payload.caption_style)}
+        )
+    if payload.karaoke_enabled is not None:
+        caption = caption.model_copy(
+            update={"style": caption.style.model_copy(update={"karaoke_enabled": payload.karaoke_enabled})}
+        )
+    if payload.hook_style is not None:
+        hook_style = apply_caption_style_patch(hook_style, payload.hook_style)
+    if payload.hook_text is not None:
+        if not payload.hook_text.strip():
+            raise HTTPException(status_code=400, detail="hook_text cannot be empty")
+        hook = hook.model_copy(update={"text": payload.hook_text.strip()})
+    if payload.emphasis_words is not None:
+        hook = hook.model_copy(update={"emphasis_words": payload.emphasis_words})
+
+    updated_config = config.model_copy(
+        update={"caption": caption, "hook": hook, "hook_style": hook_style}
+    )
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    _invalidate_composite_previews(job.workspace / "temp")
+
+    return build_caption_response(updated_config, storyboard)
+
+
+@router.post("/{job_id}/caption/transcribe", response_model=TranscribeCaptionResponse)
+async def transcribe_caption(
+    job_id: str,
+    request: Request,
+    source: str = Form("audio_track"),
+    language: str = Form("auto"),
+    translate: bool = Form(False),
+    media: UploadFile | None = File(default=None),
+) -> TranscribeCaptionResponse:
+    store = _store(request)
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not transcribe_available():
+        raise HTTPException(
+            status_code=503,
+            detail="Auto-transcribe requires faster-whisper. Install with: pip install faster-whisper",
+        )
+
+    normalized_source = source.strip().lower()
+    if normalized_source not in {"audio_track", "clips", "custom"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported transcribe source: {source}")
+
+    try:
+        transcribe_options = TranscribeOptions(
+            language=normalize_transcribe_language(language),
+            translate=translate,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    storyboard = load_storyboard(job.workspace / "temp")
+
+    try:
+        if normalized_source == "audio_track":
+            if not job.config.audio_path.is_file():
+                raise HTTPException(status_code=400, detail="Job audio file not found")
+            result = transcribe_from_audio_track(
+                job.config,
+                storyboard,
+                workspace=job.workspace,
+                options=transcribe_options,
+            )
+        elif normalized_source == "clips":
+            if storyboard is None or not storyboard.slots:
+                raise HTTPException(status_code=400, detail="Storyboard with assigned clips required")
+            clip_media = clip_media_for_storyboard(job.config, storyboard)
+            result = transcribe_from_clips(
+                job.config,
+                storyboard,
+                clip_media,
+                workspace=job.workspace,
+                options=transcribe_options,
+            )
+        else:
+            if media is None:
+                raise HTTPException(status_code=400, detail="Custom transcribe requires a media upload")
+            media_bytes = await media.read()
+            if not media_bytes:
+                raise HTTPException(status_code=400, detail="Uploaded media file is empty")
+            scratch = job.workspace / "temp" / "transcribe_scratch"
+            scratch.mkdir(parents=True, exist_ok=True)
+            media_name = Path(media.filename or "custom_media").name
+            media_path = save_upload(media_bytes, scratch / media_name)
+            result = transcribe_from_custom_upload(
+                job.config,
+                storyboard,
+                media_path,
+                workspace=job.workspace,
+                options=transcribe_options,
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    from viral_editor.api.schemas import CaptionWordResponse
+
+    from viral_editor.audio.captions import serialize_word_timing
+
+    caption = job.config.caption.model_copy(
+        update={
+            "script_text": result.script_text,
+            "slot_overrides": result.slot_overrides,
+            "word_timing_overrides": result.word_timing_overrides,
+            "asr_words": serialize_word_timing(result.words),
+        }
+    )
+    updated_config = job.config.model_copy(update={"caption": caption})
+    store.update_config(job_id, updated_config)
+    write_job_config(updated_config, job.workspace)
+    _invalidate_composite_previews(job.workspace / "temp")
+
+    return TranscribeCaptionResponse(
+        script_text=result.script_text,
+        words=[
+            CaptionWordResponse(
+                text=word.text,
+                start_s=word.start_s,
+                end_s=word.end_s,
+                emphasis=word.emphasis,
+            )
+            for word in result.words
+        ],
+        slot_overrides=result.slot_overrides,
+        word_timing_overrides=result.word_timing_overrides,
+        source=normalized_source,
+        language=transcribe_options.language,
+        translate=transcribe_options.translate,
+        skipped_clip_ids=result.skipped_clip_ids,
+        transcribe_available=True,
+    )
+
+
 @router.get("/{job_id}/preview")
 def get_composite_preview(
     job_id: str,
@@ -1224,12 +1642,22 @@ def get_composite_preview(
     )
     fx_events = remap_fx_events_for_composite(fx_events, storyboard)
 
+    caption_chunks = build_caption_chunks_for_slots(
+        job.config.caption,
+        ordered_slots,
+        emphasis_words=job.config.hook.emphasis_words,
+    )
+    slot_offsets = {slot.id: slot.out_start_s for slot in ordered_slots}
+
     import hashlib
     import json
 
     cache_payload = {
         "storyboard": storyboard.model_dump(mode="json"),
         "hook": job.config.hook.text,
+        "hook_emphasis_words": job.config.hook.emphasis_words,
+        "hook_style": job.config.hook_style.model_dump(mode="json"),
+        "caption": job.config.caption.model_dump(mode="json"),
         "teaser": job.config.teaser.model_dump(mode="json"),
         "spatial_fx": job.config.spatial_fx.model_dump(mode="json"),
         "seed": job.config.seed,
@@ -1253,10 +1681,18 @@ def get_composite_preview(
                 music_end_s=job.config.music.end_s,
                 out_path=preview_path,
                 hook_text=job.config.hook.text,
+                hook_style=job.config.hook_style,
+                hook_emphasis_words=job.config.hook.emphasis_words,
+                caption_chunks_by_slot=caption_chunks,
+                caption_style=job.config.caption.style,
+                slot_ids=segment_slot_ids,
+                slot_offsets=slot_offsets,
                 temp_dir=temp_dir,
                 segment_roles=segment_roles,
                 hook_start_mask=(
-                    job.config.teaser.mask if job.config.teaser.enabled else None
+                    job.config.teaser.mask
+                    if job.config.teaser.enabled and job.config.teaser.mask != "none"
+                    else None
                 ),
                 fx_events=fx_events,
                 fx_seed=job.config.seed,

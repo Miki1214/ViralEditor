@@ -1,0 +1,125 @@
+---
+alwaysApply: true
+---
+
+# Component ID Enforcement Rule
+
+## MANDATORY: Every new React component MUST have granular element-level `id` attributes.
+
+When creating or modifying any React component (`.tsx` / `.jsx`), you MUST add unique `id` attributes to ALL visible DOM elements at the finest practical detail level.
+
+## Naming Convention
+
+Use kebab-case with the pattern: `component-name-element-description`
+
+For dynamic/repeated elements, include a unique key: `component-name-element-{variable}`
+
+Examples:
+- `phone-preview-video-player` — single element
+- `music-block-card-{block.id}` — per-item in a list
+- `audio-scope-panel-target-full` — specific preset/state
+- `storyboard-panel-slot-btn-{slot.id}` — dynamic slot button
+
+## Granularity Requirements
+
+### Component-Level ID (Required)
+Every component root MUST have a component-level ID:
+```tsx
+<div id="component-name" className="...">
+```
+
+### Section IDs (Required)
+Every logical section/region within the component:
+```tsx
+<section id="component-name-section-name">
+<div id="component-name-region-name">
+```
+
+### Form Element IDs (Required)
+Every form control, label, and interactive element:
+```tsx
+<label id="component-name-field-name">
+<input id="component-name-input-name" />
+<button id="component-name-action-btn">
+<select id="component-name-select-name">
+```
+
+### List/Repeated Element IDs (Required)
+Every item in a mapped list AND its children:
+```tsx
+{items.map((item) => (
+  <div id={`component-name-item-${item.id}`}>
+    <span id={`component-name-item-label-${item.id}`}>
+    <button id={`component-name-item-action-${item.id}`}>
+  </div>
+))}
+```
+
+### SVG Element IDs (Required)
+Every meaningful SVG element:
+```tsx
+<rect id="component-name-shape-{id}" />
+<line id="component-name-line-{id}" />
+<text id="component-name-label-{id}" />
+<path id="component-name-path-main" />
+```
+
+### Media Element IDs (Required)
+Video, audio, canvas elements:
+```tsx
+<video id="component-name-video-player" />
+<audio id="component-name-audio-preview" />
+<canvas id="component-name-canvas-render" />
+```
+
+## Checklist Before Committing Component Code
+
+- [ ] Component root has `id="component-name"`
+- [ ] Every section/region has a descriptive ID
+- [ ] Every button has an action-descriptive ID
+- [ ] Every input/select/textarea has a field-descriptive ID
+- [ ] Every mapped item has a dynamic ID with unique key
+- [ ] Every SVG shape/line/text has an ID
+- [ ] Every media element (video/audio/canvas) has an ID
+- [ ] No duplicate IDs within the same component
+- [ ] IDs follow kebab-case convention
+- [ ] IDs are descriptive enough to identify purpose without context
+
+## Anti-Patterns (DO NOT DO)
+
+```tsx
+// BAD: No IDs at all
+<div className="my-component">
+
+// BAD: Only component-level, no granular IDs
+<div id="my-component">
+  <button>Click</button>  {/* Missing ID */}
+  <input />              {/* Missing ID */}
+</div>
+
+// BAD: Non-descriptive IDs
+<div id="div1">       {/* What is this? */}
+<button id="btn">     {/* Which button? */}
+```
+
+## Correct Pattern
+
+```tsx
+<div id="media-player-panel" className="my-component">
+  <video id="media-player-video" src={url} />
+  <div id="media-player-controls">
+    <button id="media-player-play-btn">Play</button>
+    <input id="media-player-scrubber" type="range" />
+  </div>
+  {tracks.map((track) => (
+    <div key={track.id} id={`media-player-track-${track.id}`}>
+      <span id={`media-player-track-label-${track.id}`}>{track.name}</span>
+      <button id={`media-player-track-mute-${track.id}`}>Mute</button>
+    </div>
+  ))}
+</div>
+```
+
+## Enforcement
+
+This rule is MANDATORY. Do NOT skip adding IDs. Do NOT create components without granular element-level identification. Every visible DOM element that users or automation might target MUST have a unique, descriptive `id` attribute.

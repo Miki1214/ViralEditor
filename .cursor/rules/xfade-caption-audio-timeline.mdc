@@ -1,0 +1,35 @@
+---
+description: Prevent xfade-induced caption/audio timeline drift in composite render
+globs: src/viral_editor/video/**/*,src/viral_editor/api/render_job.py,src/viral_editor/api/routes/jobs.py
+alwaysApply: false
+---
+
+# Xfade vs storyboard timeline (caption/audio sync)
+
+## The bug we fixed
+
+Xfade overlaps **compress** composited video length but **do not** shrink the storyboard/music clock:
+
+```
+storyboard + captions + muxed audio  ──► segments[-1].out_end_s  (e.g. 13.49s)
+xfade-compressed video body          ──► composite_output_duration_s (e.g. 12.49s, −0.25s per xfade)
+```
+
+Using compressed duration for mux `-t` or burning captions on the compressed video clock causes progressive caption↔audio drift (early captions, late/missing captions at end).
+
+## Invariants (do not break)
+
+1. **Mux duration** (`-t`, `RenderPlan.output_duration_s`, preview encode): use `storyboard_mux_duration_s(segments)` (= packed `segments[-1].out_end_s`), **not** xfade-subtracted length.
+2. **Caption enable times**: stay on the **storyboard/audio** clock (`slot.out_start_s` + slot-local word/chunk times via `slot_offsets`). Do **not** remap to `storyboard_time_to_composite_time` for drawtext — that timeline is for spatial FX on packed video only.
+3. **Video pad before captions**: after spatial FX, if `storyboard_mux_duration_s > composite_output_duration_s`, `tpad=stop_mode=clone` to fill the gap **before** `build_caption_filter_chain` so drawtext `t` spans the full storyboard window.
+4. **`composite_output_duration_s`**: only estimates the xfade-compressed **body** length (for padding math), never the mux/caption clock.
+
+## When changing transitions or render
+
+- Adding a new mux path? Mux to `storyboard_mux_duration_s`, not compressed duration.
+- Moving caption overlay earlier in the filtergraph? Ensure padding happens first.
+- New overlay timed to music? Use storyboard `out_start_s`, not packed segment cursor unless slots are intentionally unassigned gaps.
+
+## Quick check
+
+For N assigned segments with `xfade` transitions: expect `pad_s ≈ (N−1) × xfade_s` when all transitions are xfade, and `storyboard_mux_duration_s − composite_output_duration_s == pad_s`.

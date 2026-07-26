@@ -135,6 +135,7 @@ export function ScopeCanvas({
 
   return (
     <svg
+      id="scope-canvas-svg"
       viewBox={`0 0 ${width} ${totalHeight}`}
       width={width}
       height={totalHeight}
@@ -150,7 +151,7 @@ export function ScopeCanvas({
         layout={sectionLayout}
       />
 
-      {blocks.map((block) => {
+      {blocks.map((block, blockIndex) => {
         const geometry = blockWaveformRect(
           block,
           scopeWindow,
@@ -165,7 +166,8 @@ export function ScopeCanvas({
         const selected = block.id === activeId;
         return (
           <rect
-            key={block.id}
+            id={`scope-canvas-block-${block.id}`}
+            key={`block-bg-${blockIndex}-${block.id}`}
             x={geometry.x}
             y={geometry.y}
             width={geometry.w}
@@ -180,6 +182,7 @@ export function ScopeCanvas({
 
       {path && (
         <path
+          id="scope-canvas-waveform-path"
           d={path}
           fill="none"
           stroke={TRACE}
@@ -191,7 +194,7 @@ export function ScopeCanvas({
       )}
 
       {onSelectBlock &&
-        blocks.map((block) => {
+        blocks.map((block, blockIndex) => {
           const geometry = blockWaveformRect(
             block,
             scopeWindow,
@@ -206,7 +209,8 @@ export function ScopeCanvas({
           const selected = block.id === activeId;
           return (
             <rect
-              key={`hit-${block.id}`}
+              id={`scope-canvas-block-hit-${block.id}`}
+              key={`hit-${blockIndex}-${block.id}`}
               x={geometry.x}
               y={geometry.y}
               width={geometry.w}
@@ -230,8 +234,9 @@ export function ScopeCanvas({
           );
         })}
 
-      <rect x={0} y={rulerTop} width={width} height={SCOPE_RULER_HEIGHT} fill={RULER_BG} />
+      <rect id="scope-canvas-ruler-bg" x={0} y={rulerTop} width={width} height={SCOPE_RULER_HEIGHT} fill={RULER_BG} />
       <line
+        id="scope-canvas-ruler-line"
         x1={padX}
         x2={width - padX}
         y1={rulerTop}
@@ -244,8 +249,9 @@ export function ScopeCanvas({
         const x = timeToX(timeS, windowDurationS, padX, innerW);
         const anchor = timeS <= 0 ? "start" : timeS >= windowDurationS - 0.5 ? "end" : "middle";
         return (
-          <g key={`tick-${timeS}`}>
+          <g id={`scope-canvas-tick-${timeS}`} key={`tick-${timeS}`}>
             <line
+              id={`scope-canvas-tick-mark-${timeS}`}
               x1={x}
               x2={x}
               y1={rulerTop + 2}
@@ -254,6 +260,7 @@ export function ScopeCanvas({
               strokeWidth={1}
             />
             <text
+              id={`scope-canvas-tick-label-${timeS}`}
               x={x}
               y={rulerTop + SCOPE_RULER_HEIGHT - 6}
               fill={LABEL_COLOR}

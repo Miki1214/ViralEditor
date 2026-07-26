@@ -39,19 +39,17 @@ Place sample assets under `assets/` (see `assets/README.md`). Job configs live i
 
 Local web dashboard for configuring jobs, watching pipeline telemetry, and previewing output.
 
-### Development (two terminals)
+### Development (one terminal)
 
 ```powershell
-# Terminal 1 — API (with venv activated)
-python -m viral_editor serve
-
-# Terminal 2 — UI with hot reload
-cd web
-npm install
-npm run dev
+# API + Vite hot reload (with venv activated)
+cd web && npm install && cd ..
+python -m viral_editor dev
 ```
 
 Open http://localhost:5173 (Vite proxies `/api` to the API on port 8765).
+
+To run API and UI separately (two terminals): `python -m viral_editor serve` and `cd web && npm run dev`.
 
 ### Production-style (single server)
 
@@ -147,6 +145,23 @@ Defined in `viral_editor.models` and serialized to `temp/*.json` between stages:
 ```powershell
 pytest
 ```
+
+### Auto-rotation on upload
+
+Clip uploads run a 3-step detector (container metadata → aspect ratio → orientation classifier) and silently set `rotation_deg`. **When the classifier returns a vote, it always wins** — metadata and aspect are only used as fallback if the classifier abstains. Manual 90° rotate buttons in the storyboard still override detection.
+
+The keyframe step uses [DuarteBarbosa/deep-image-orientation-detection](https://huggingface.co/DuarteBarbosa/deep-image-orientation-detection) (EfficientNet ONNX) — not an LLM.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AUTO_ROTATE_ENABLED` | `true` | Master switch |
+| `AUTO_ROTATE_ORIENTATION_ENABLED` | `true` | Enable/disable the classifier step only |
+| `ORIENTATION_MODEL_REPO` | `DuarteBarbosa/deep-image-orientation-detection` | Hugging Face model repo |
+| `ORIENTATION_MODEL_FILE` | `orientation_model_v2_0.9882.onnx` | ONNX weights filename in the repo |
+| `AUTO_ROTATE_KEYFRAME_COUNT` | `3` | Keyframes analyzed per clip |
+| `AUTO_ROTATE_MIN_ORIENTATION_CONFIDENCE` | `0.55` | Minimum softmax confidence to accept a classifier vote |
+
+Per-clip decision logs are written to `temp/rotation_log/<clip_id>.json` inside each job workspace for later tuning.
 
 ## Phased implementation
 

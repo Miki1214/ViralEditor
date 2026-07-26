@@ -5,6 +5,7 @@ import {
   compositeVideoTimeToBlockPlayhead,
 } from "../utils/compositePlayhead";
 import type { StoryboardLoopMode, BlockPlayheadChangeHandler } from "./StoryboardBlockPlayer";
+import { SafeZoneOverlay } from "./SafeZoneOverlay";
 
 export interface PreviewTransportRestore {
   playheadS: number;
@@ -35,6 +36,7 @@ interface PhonePreviewProps {
   registerPreviewToggle?: (handler: (() => void) | null) => void;
   registerPreviewSeek?: (handler: ((videoTimeS: number) => void) | null) => void;
   registerPreviewPlay?: (handler: (() => void) | null) => void;
+  showPlatformSafeZone?: boolean;
 }
 
 function renderHookLine(
@@ -82,6 +84,7 @@ export function PhonePreview({
   registerPreviewToggle,
   registerPreviewSeek,
   registerPreviewPlay,
+  showPlatformSafeZone = false,
 }: PhonePreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const storyboardRef = useRef(storyboard);
@@ -268,14 +271,16 @@ export function PhonePreview({
   const videoLoop = compositeMode && loopMode === "block";
 
   return (
-    <div className="relative w-[min(100%,280px)]">
+    <div id="phone-preview-container" className="relative w-[min(100%,280px)]">
       <div
+        id="phone-preview-frame"
         className="relative aspect-[9/16] w-full overflow-hidden rounded-[1.75rem] shadow-phone"
         style={{ background: "#0a0b0d" }}
       >
         {videoPreviewUrl ? (
           <>
             <video
+              id="phone-preview-video"
               ref={videoRef}
               className={`monitor-video absolute inset-0 h-full w-full object-cover ${compositeMode ? "" : "opacity-70"}`}
               playsInline
@@ -289,10 +294,11 @@ export function PhonePreview({
               onError={() => setLoadFailed(true)}
             />
             {showPreviewError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-monitor-bg/90 px-4 text-center font-mono text-[10px] text-hook-gold">
-                {previewErrorText}
+              <div id="phone-preview-error-overlay" className="absolute inset-0 flex items-center justify-center bg-monitor-bg/90 px-4 text-center font-mono text-[10px] text-hook-gold">
+                <p id="phone-preview-error-msg">{previewErrorText}</p>
               </div>
             )}
+            {compositeMode && showPlatformSafeZone && <SafeZoneOverlay visible />}
           </>
         ) : (
           <div className="absolute inset-0 bg-gradient-to-b from-monitor-surface to-monitor-bg" />
@@ -301,17 +307,18 @@ export function PhonePreview({
         {!compositeMode && (
           <>
             <div
+              id="phone-preview-safe-zone"
               className="pointer-events-none absolute border border-dashed border-scope-trace/35"
               style={{
                 inset: `${safePaddingPct}%`,
               }}
             >
-              <span className="absolute left-1 top-1 font-mono text-[8px] uppercase tracking-widest text-scope-trace/70">
+              <span id="phone-preview-safe-label" className="absolute left-1 top-1 font-mono text-[8px] uppercase tracking-widest text-scope-trace/70">
                 safe
               </span>
             </div>
 
-            <div className="absolute inset-x-0 bottom-[18%] px-6 text-center">
+            <div id="phone-preview-hook-text" className="absolute inset-x-0 bottom-[18%] px-6 text-center">
               <div
                 className="mx-auto inline-block rounded-2xl px-4 py-3"
                 style={{
@@ -329,9 +336,11 @@ export function PhonePreview({
           </>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
+        <div id="phone-preview-safe-border" className="pointer-events-none absolute border border-dashed border-scope-trace/35" style={{ inset: `${safePaddingPct}%` }} />
+        <span id="phone-preview-safe-tag" className="sr-only">Safe zone</span>
+        <div id="phone-preview-top-gradient" className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/50 to-transparent" />
       </div>
-      <p className="mt-3 text-center font-mono text-[10px] text-monitor-muted">
+      <p id="phone-preview-info" className="mt-3 text-center font-mono text-[10px] text-monitor-muted">
         {compositeMode
           ? storyboard?.teaser.enabled
             ? "Composited preview · hook inversion + spatial FX"
