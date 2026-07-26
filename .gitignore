@@ -17,6 +17,10 @@ debug-*.log
 # Graphify knowledge graph (generated)
 graphify-out/
 
+# Local agent / Engram state (machine-specific)
+.claude/settings.local.json
+.engram/
+
 # Pipeline artifacts
 output/
 temp/
