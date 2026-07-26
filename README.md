@@ -2,7 +2,7 @@
 
 Turn raw footage and a music track into a high-retention vertical short — timed to the beat, hooked in the first seconds, ready for Shorts, Reels, and TikTok.
 
-<img src="documentation/images/final-output.jpg" alt="Final rendered short ready to download" width="900" />
+<img src="documentation/images/final-output.webp" alt="Final rendered short ready to download" width="900" />
 
 ## The problem
 
@@ -22,31 +22,31 @@ Nothing leaves your workstation unless you choose to publish the output.
 
 Upload a track. The Control Room maps energy, drops, bass hits, and harmonic structure so edits follow the song — not a fixed template.
 
-<img src="documentation/images/music-details.jpg" alt="Music analysis with energy lanes and markers" width="900" />
+<img src="documentation/images/music-details.webp" alt="Music analysis with energy lanes and markers" width="900" />
 
 ### 2. Pick a loop that holds
 
 Suggested blocks score hooks by length, loudness, drop density, and loop smoothness. Audition candidates and lock the window that carries the short.
 
-<img src="documentation/images/audio-loop-blocks.jpg" alt="Suggested audio loop blocks" width="900" />
+<img src="documentation/images/audio-loop-blocks.webp" alt="Suggested audio loop blocks" width="900" />
 
 ### 3. Set the target length
 
 Choose a short duration and the slots that fill it. The music window becomes the timeline every clip must fit.
 
-<img src="documentation/images/slot-selection.jpg" alt="Target length and slot selection" width="900" />
+<img src="documentation/images/slot-selection.webp" alt="Target length and slot selection" width="900" />
 
 ### 4. Drop clips into the storyboard
 
 Assign footage to hook and body slots. The storyboard speed-fits each clip into its music window and shows a composed vertical preview as you work.
 
-<img src="documentation/images/storyboard-clips.jpg" alt="Storyboard clip slots and composed preview" width="900" />
+<img src="documentation/images/storyboard-clips.webp" alt="Storyboard clip slots and composed preview" width="900" />
 
 ### 5. Write the hook title
 
 Set the on-screen line, emphasize the words that should pop, and keep safe padding clear of platform UI chrome.
 
-<img src="documentation/images/title-section.jpg" alt="Hook title and emphasis styling" width="900" />
+<img src="documentation/images/title-section.webp" alt="Hook title and emphasis styling" width="900" />
 
 ### 6. Add captions
 
@@ -54,21 +54,21 @@ Configure caption style and auto-transcribe when you want spoken lines locked to
 
 This is not plain transcription of the mixed track. A vocal-separation model (Demucs) first pulls the singing/spoken voice out of the music; the speech model then reads that clean vocal track — so captions land with pinpoint timing and stay reliable even when the beat is loud.
 
-<img src="documentation/images/caption-config.jpg" alt="Caption configuration with auto-transcribe" width="900" />
+<img src="documentation/images/caption-config.webp" alt="Caption configuration with auto-transcribe" width="900" />
 
-<img src="documentation/images/caption-preview.jpg" alt="Caption preview on composed video" width="900" />
+<img src="documentation/images/caption-preview.webp" alt="Caption preview on composed video" width="900" />
 
 ### 7. Layer beat-synced SFX
 
 Place impact sounds on the moments the music already marked — drops, hits, and accents — so audio and picture land together.
 
-<img src="documentation/images/sfx-section.jpg" alt="SFX section with beat-aligned cues" width="900" />
+<img src="documentation/images/sfx-section.webp" alt="SFX section with beat-aligned cues" width="900" />
 
 ### 8. Download the MP4
 
 Bake the storyboard into a final vertical file. Re-render when clips, titles, or FX change.
 
-<img src="documentation/images/final-output.jpg" alt="Final output download" width="900" />
+<img src="documentation/images/final-output.webp" alt="Final output download" width="900" />
 
 ## Why this approach
 
